@@ -2,7 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { db } from './store.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicPath = path.resolve(__dirname, 'public');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -21,17 +28,13 @@ const healthHandler = (req, res) => {
     timestamp: new Date().toISOString()
   });
 };
-app.get('/', (req, res) => {
-  res.json({
-    name: 'SadiSocial Zero-Knowledge E2EE Engine',
-    status: 'online',
-    version: '1.0.0',
-    health: '/health',
-    api: '/api'
-  });
-});
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+
+// Serve Web UI directly from the server if public/ exists
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+}
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
@@ -433,6 +436,14 @@ wss.on('connection', (ws, req) => {
     }
   });
 });
+
+// SPA Fallback: serve index.html for any client navigation
+if (fs.existsSync(publicPath)) {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health') return next();
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+}
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`===================================================`);
