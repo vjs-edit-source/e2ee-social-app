@@ -4,7 +4,7 @@
  */
 
 const STORAGE_KEY = 'ciphersocial_engine_url';
-export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://ciphersocial-e2ee-engine.onrender.com';
+export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://sadisocial-engine.onrender.com';
 export const DEFAULT_USB_ENGINE_URL = 'http://localhost:4000';
 export const DEFAULT_LAN_ENGINE_URL = 'http://192.168.31.232:4000';
 
