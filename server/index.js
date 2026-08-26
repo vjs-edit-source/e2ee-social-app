@@ -21,6 +21,15 @@ const healthHandler = (req, res) => {
     timestamp: new Date().toISOString()
   });
 };
+app.get('/', (req, res) => {
+  res.json({
+    name: 'SadiSocial Zero-Knowledge E2EE Engine',
+    status: 'online',
+    version: '1.0.0',
+    health: '/health',
+    api: '/api'
+  });
+});
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
@@ -425,10 +434,10 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`===================================================`);
-  console.log(`🔒 Zero-Knowledge E2EE Server running on port ${PORT}`);
-  console.log(`   REST API: http://localhost:${PORT}/api`);
-  console.log(`   WebSocket: ws://localhost:${PORT}`);
+  console.log(`🔒 Zero-Knowledge E2EE Server running on 0.0.0.0:${PORT}`);
+  console.log(`   REST API: http://0.0.0.0:${PORT}/api`);
+  console.log(`   WebSocket: ws://0.0.0.0:${PORT}`);
   console.log(`===================================================`);
 });
