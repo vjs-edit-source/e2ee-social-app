@@ -1,6 +1,6 @@
 {
   "appId": "com.ciphersocial.app",
-  "appName": "CipherSocial",
+  "appName": "SadiSocial",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",

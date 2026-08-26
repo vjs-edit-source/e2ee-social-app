@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ciphersocial-e2ee-engine
+    name: sadisocial-e2ee-engine
     runtime: node
     plan: free
     region: oregon

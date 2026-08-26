@@ -35,7 +35,7 @@ export default function Navigation({ activeTab, setActiveTab, user, onSwitchUser
           <ShieldCheck size={20} color="#f43f5e" />
         </div>
         <div className="brand-titles">
-          <h1>CipherSocial</h1>
+          <h1>SadiSocial</h1>
           <span className="subtitle">E2EE Architecture</span>
         </div>
       </div>

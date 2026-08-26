@@ -15,7 +15,7 @@ app.use(express.json({ limit: '200mb' })); // Support encrypted 100MB file paylo
 const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
-    service: 'ciphersocial-e2ee-engine',
+    service: 'sadisocial-e2ee-engine',
     version: '1.0.0',
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()

@@ -71,7 +71,7 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
           <div className="shield-icon-wrapper">
             <ShieldCheck size={36} color="#3b82f6" />
           </div>
-          <h2>Zero-Knowledge E2EE Social App</h2>
+          <h2>SadiSocial E2EE Engine</h2>
           <p>Local WebCrypto Key Generation & PBKDF2 Cloud Vault Recovery</p>
         </div>
 

@@ -71,7 +71,7 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
               <Server size={18} color="#ee7882" />
             </div>
             <div>
-              <h3>CipherSocial Engine</h3>
+              <h3>SadiSocial Engine</h3>
               <p>Full-Stack Backend Connection Config</p>
             </div>
           </div>

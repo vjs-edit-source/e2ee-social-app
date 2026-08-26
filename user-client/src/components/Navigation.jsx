@@ -16,7 +16,7 @@ export default function Navigation({
       {/* ── Minimal Transparent Top Header (Name in Left Corner) ── */}
       <header className="app-top-header">
         <div className="top-brand">
-          <span className="brand-name">CipherSocial</span>
+          <span className="brand-name">SadiSocial</span>
         </div>
 
         <div className="top-header-right">

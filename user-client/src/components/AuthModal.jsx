@@ -95,7 +95,7 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
           <div className="shield-icon-wrapper">
             <ShieldCheck size={36} color="#3b82f6" />
           </div>
-          <h2>Welcome to CipherSocial</h2>
+          <h2>Welcome to SadiSocial</h2>
           <p>Your posts and messages are always encrypted — only you and your friends can read them.</p>
         </div>
 

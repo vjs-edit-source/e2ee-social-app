@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">CipherSocial</string>
-    <string name="title_activity_main">CipherSocial</string>
+    <string name="app_name">SadiSocial</string>
+    <string name="title_activity_main">SadiSocial</string>
     <string name="package_name">com.ciphersocial.app</string>
     <string name="custom_url_scheme">com.ciphersocial.app</string>
 </resources>
