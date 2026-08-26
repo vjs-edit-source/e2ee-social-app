@@ -27,6 +27,11 @@ android {
         checkReleaseBuilds false
         abortOnError false
     }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "SadiSocial.apk"
+        }
+    }
 }
 
 repositories {
