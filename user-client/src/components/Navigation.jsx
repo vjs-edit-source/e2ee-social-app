@@ -1,0 +1,100 @@
+import React from 'react';
+import { RefreshCw, Rss, MessageSquare, Users, Sparkles, Search, Server, Zap } from 'lucide-react';
+
+export default function Navigation({
+  activeTab,
+  setActiveTab,
+  user,
+  onSwitchUser,
+  onOpenSearch,
+  onOpenEngineSettings,
+  engineOnline = true,
+  hideBottomNav = false
+}) {
+  return (
+    <>
+      {/* ── Minimal Transparent Top Header (Name in Left Corner) ── */}
+      <header className="app-top-header">
+        <div className="top-brand">
+          <span className="brand-name">CipherSocial</span>
+        </div>
+
+        <div className="top-header-right">
+          {/* Engine Connectivity Pill */}
+          <button
+            className={`engine-status-pill ${engineOnline ? 'online' : 'offline'}`}
+            onClick={onOpenEngineSettings}
+            title="Configure Backend Engine"
+            type="button"
+          >
+            <span className="engine-pulse-dot" />
+            <Server size={12} />
+            <span className="engine-pill-label">Engine</span>
+          </button>
+
+          {user && (
+            <div className="user-profile-pill" onClick={onSwitchUser} title="Switch account">
+              <div className="user-avatar" style={{ backgroundColor: user.avatarColor }}>
+                {user.username[0].toUpperCase()}
+              </div>
+              <span className="user-name">{user.username}</span>
+              <button className="switch-user-btn" onClick={(e) => { e.stopPropagation(); onSwitchUser(); }} title="Switch account">
+                <RefreshCw size={11} />
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ── Floating Low-Opacity Rounded Bottom Navigation Bar (Hidden in Active Chat) ── */}
+      {!hideBottomNav && (
+        <nav className="bottom-nav-container" aria-label="Main Navigation">
+          <button
+            className={`bottom-nav-item ${activeTab === 'feed' ? 'active' : ''}`}
+            onClick={() => setActiveTab('feed')}
+            type="button"
+          >
+            <Rss size={18} />
+            <span>Feed</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'messages' ? 'active' : ''}`}
+            onClick={() => setActiveTab('messages')}
+            type="button"
+          >
+            <MessageSquare size={18} />
+            <span>Chats</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'groups' ? 'active' : ''}`}
+            onClick={() => setActiveTab('groups')}
+            type="button"
+          >
+            <Users size={18} />
+            <span>Groups</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'status' ? 'active' : ''}`}
+            onClick={() => setActiveTab('status')}
+            type="button"
+          >
+            <Sparkles size={18} />
+            <span>Status</span>
+          </button>
+
+          <button
+            className="bottom-nav-item search-item"
+            onClick={onOpenSearch}
+            type="button"
+          >
+            <Search size={18} />
+            <span>Search</span>
+          </button>
+        </nav>
+      )}
+    </>
+  );
+}

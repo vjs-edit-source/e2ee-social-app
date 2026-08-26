@@ -1,0 +1,11 @@
+{
+  "name": "e2ee-social-app",
+  "version": "1.0.0",
+  "description": "End-to-End Encrypted Social Networking App",
+  "type": "module",
+  "scripts": {
+    "start": "node start.js",
+    "start:user": "node start-user.js",
+    "start:all": "node -e \"const {spawn}=require('child_process');const s=spawn('node',['start.js'],{stdio:'inherit',shell:true});const u=spawn('node',['start-user.js'],{stdio:'inherit',shell:true});process.on('SIGINT',()=>{s.kill();u.kill();process.exit();})\""
+  }
+}

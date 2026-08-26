@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ciphersocial-e2ee-engine
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    disk:
+      name: zk-database-disk
+      mountPath: /var/data
+      sizeGB: 1
