@@ -39,15 +39,31 @@ if (fs.existsSync(publicPath)) {
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Map of username -> WebSocket client connection
+// Map of username -> Set of active WebSocket connections (supports multiple devices/tabs per user)
 const connectedClients = new Map();
+
+// Helper to send real-time message to all active devices of a user
+function sendToUser(username, data) {
+  const sockets = connectedClients.get(username);
+  if (!sockets) return;
+  const payload = JSON.stringify(data);
+  for (const ws of sockets) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    }
+  }
+}
 
 // Helper to broadcast WS messages
 function broadcast(data, excludeUsername = null) {
   const payload = JSON.stringify(data);
-  for (const [username, client] of connectedClients.entries()) {
-    if (username !== excludeUsername && client.readyState === WebSocket.OPEN) {
-      client.send(payload);
+  for (const [username, sockets] of connectedClients.entries()) {
+    if (username !== excludeUsername) {
+      for (const ws of sockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
     }
   }
 }
@@ -109,11 +125,9 @@ app.post('/api/messages', (req, res) => {
 
   const msg = db.addMessage(sender, recipient, ciphertext, iv, ratchetSeq, dhKeyB64);
 
-  // Direct delivery if recipient is online
-  const recipientWs = connectedClients.get(recipient);
-  if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-    recipientWs.send(JSON.stringify({ type: 'DIRECT_MESSAGE', message: msg }));
-  }
+  // Real-time delivery to all active devices of recipient & sender
+  sendToUser(recipient, { type: 'DIRECT_MESSAGE', message: msg });
+  sendToUser(sender, { type: 'DIRECT_MESSAGE', message: msg });
 
   notifyInspector();
   res.json({ success: true, message: msg });
@@ -414,9 +428,17 @@ wss.on('connection', (ws, req) => {
   const username = urlParams.get('user');
 
   if (username) {
-    connectedClients.set(username, ws);
-    console.log(`[WS] Client connected: ${username}`);
+    if (!connectedClients.has(username)) {
+      connectedClients.set(username, new Set());
+    }
+    connectedClients.get(username).add(ws);
+    console.log(`[WS] Client connected: ${username} (Active sockets for user: ${connectedClients.get(username).size})`);
   }
+
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   ws.on('message', (message) => {
     try {
@@ -430,12 +452,26 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    if (username) {
-      connectedClients.delete(username);
+    if (username && connectedClients.has(username)) {
+      connectedClients.get(username).delete(ws);
+      if (connectedClients.get(username).size === 0) {
+        connectedClients.delete(username);
+      }
       console.log(`[WS] Client disconnected: ${username}`);
     }
   });
 });
+
+// Server-side heartbeat ping every 25 seconds to keep Render / cellular connections alive
+const pingInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 25000);
+
+wss.on('close', () => clearInterval(pingInterval));
 
 // SPA Fallback: serve index.html for any client navigation
 if (fs.existsSync(publicPath)) {

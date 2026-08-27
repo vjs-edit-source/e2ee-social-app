@@ -141,7 +141,12 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages`);
       if (res.ok) {
         const history = await res.json();
-        setMessages(history);
+        setMessages(prev => {
+          if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
+            return prev;
+          }
+          return history;
+        });
       }
     } catch (err) {
       console.error('Failed to load group messages:', err);
@@ -150,7 +155,15 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
   useEffect(() => {
     loadGroupMessages();
-  }, [selectedGroup]);
+    if (!selectedGroup) return;
+
+    // Fast 2.5s live polling sync fallback
+    const syncInterval = setInterval(() => {
+      loadGroupMessages();
+    }, 2500);
+
+    return () => clearInterval(syncInterval);
+  }, [selectedGroup, serverUrl]);
 
   // Real-time WebSocket event handling
   useEffect(() => {

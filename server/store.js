@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { MongoClient } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,8 +26,89 @@ class ZeroKnowledgeStore {
     this.statuses = [];             // Array of { id, author, ciphertext, iv, keyEnvelopes, mediaId, backgroundGradient, likes, comments, timestamp, expiresAt }
 
     this.saveTimeout = null;
+    this.mongoClient = null;
+    this.mongoDb = null;
 
     this.initStorage();
+    this.initMongo();
+  }
+
+  async initMongo() {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) return;
+
+    try {
+      this.mongoClient = new MongoClient(mongoUri, { serverSelectionTimeoutMS: 5000 });
+      await this.mongoClient.connect();
+      this.mongoDb = this.mongoClient.db('sadisocial_e2ee');
+      console.log('🍃 [MongoDB Atlas] Connected to Cloud Database successfully! Data will persist permanently.');
+      await this.loadFromMongo();
+    } catch (err) {
+      console.warn('🍃 [MongoDB Atlas] Connection failed (using disk cache):', err.message);
+    }
+  }
+
+  async loadFromMongo() {
+    if (!this.mongoDb) return;
+    try {
+      const [uDocs, pDocs, mDocs, medDocs, vDocs, gDocs, gmDocs, sDocs] = await Promise.all([
+        this.mongoDb.collection('users').find({}).toArray(),
+        this.mongoDb.collection('posts').find({}).toArray(),
+        this.mongoDb.collection('messages').find({}).toArray(),
+        this.mongoDb.collection('media').find({}).toArray(),
+        this.mongoDb.collection('vaults').find({}).toArray(),
+        this.mongoDb.collection('groups').find({}).toArray(),
+        this.mongoDb.collection('groupMessages').find({}).toArray(),
+        this.mongoDb.collection('statuses').find({}).toArray()
+      ]);
+
+      if (uDocs.length > 0) {
+        for (const u of uDocs) this.users.set(u.username, u);
+      }
+      if (pDocs.length > 0) {
+        this.posts = pDocs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      }
+      if (mDocs.length > 0) {
+        this.messages = mDocs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      }
+      if (medDocs.length > 0) {
+        for (const m of medDocs) this.media.set(m.id, m);
+      }
+      if (vDocs.length > 0) {
+        for (const v of vDocs) this.vaults.set(v.username, v);
+      }
+      if (gDocs.length > 0) {
+        for (const g of gDocs) this.groups.set(g.id, g);
+      }
+      if (gmDocs.length > 0) {
+        for (const gm of gmDocs) {
+          if (!this.groupMessages.has(gm.groupId)) this.groupMessages.set(gm.groupId, []);
+          this.groupMessages.get(gm.groupId).push(gm);
+        }
+      }
+      if (sDocs.length > 0) {
+        this.statuses = sDocs;
+      }
+
+      console.log(`🍃 [MongoDB Atlas] Loaded ${this.users.size} users, ${this.posts.length} posts, ${this.messages.length} messages, ${this.groups.size} groups from Cloud DB.`);
+      this.saveSync();
+    } catch (err) {
+      console.error('🍃 [MongoDB Atlas] Failed to load data from Cloud DB:', err);
+    }
+  }
+
+  syncDocToMongo(collectionName, query, doc) {
+    if (!this.mongoDb) return;
+    this.mongoDb.collection(collectionName).updateOne(query, { $set: doc }, { upsert: true }).catch(err => {
+      console.error(`🍃 [MongoDB Atlas] Error syncing to ${collectionName}:`, err.message);
+    });
+  }
+
+  deleteDocFromMongo(collectionName, query) {
+    if (!this.mongoDb) return;
+    this.mongoDb.collection(collectionName).deleteOne(query).catch(err => {
+      console.error(`🍃 [MongoDB Atlas] Error deleting from ${collectionName}:`, err.message);
+    });
   }
 
   initStorage() {
@@ -158,6 +240,7 @@ class ZeroKnowledgeStore {
     };
     this.users.set(username, userData);
     this.scheduleSave();
+    this.syncDocToMongo('users', { username }, userData);
     return userData;
   }
 
@@ -171,6 +254,7 @@ class ZeroKnowledgeStore {
     };
     this.vaults.set(username, vault);
     this.scheduleSave();
+    this.syncDocToMongo('vaults', { username }, vault);
     return vault;
   }
 
@@ -207,6 +291,7 @@ class ZeroKnowledgeStore {
     };
     this.posts.unshift(post);
     this.scheduleSave();
+    this.syncDocToMongo('posts', { id: post.id }, post);
     return post;
   }
 
@@ -228,6 +313,7 @@ class ZeroKnowledgeStore {
     };
     this.messages.push(msg);
     this.scheduleSave();
+    this.syncDocToMongo('messages', { id: msg.id }, msg);
     return msg;
   }
 

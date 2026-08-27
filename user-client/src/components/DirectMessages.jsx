@@ -84,7 +84,13 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
       const res = await fetch(`${serverUrl}/api/messages/${currentUser.username}/${selectedPeer.username}`);
       if (res.ok) {
         const history = await res.json();
-        setMessages(history);
+        setMessages(prev => {
+          // Only update state if message count or last message ID changed to prevent unnecessary re-renders
+          if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
+            return prev;
+          }
+          return history;
+        });
       }
     } catch (err) {
       console.error('Failed to load chat history:', err);
@@ -93,7 +99,15 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
 
   useEffect(() => {
     loadChatHistory();
-  }, [selectedPeer, currentUser]);
+    if (!selectedPeer) return;
+
+    // Fast 2.5s live polling sync fallback to guarantee simultaneous message display
+    const syncInterval = setInterval(() => {
+      loadChatHistory();
+    }, 2500);
+
+    return () => clearInterval(syncInterval);
+  }, [selectedPeer, currentUser, serverUrl]);
 
   // Decrypt messages and attached media automatically
   useEffect(() => {
@@ -230,10 +244,13 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
         if (data.type === 'DIRECT_MESSAGE') {
           const msg = data.message;
           if (
-            (msg.sender === selectedPeer?.username && msg.recipient === currentUser.username) ||
-            (msg.sender === currentUser.username && msg.recipient === selectedPeer?.username)
+            (msg.sender === selectedPeer?.username && msg.recipient === currentUser?.username) ||
+            (msg.sender === currentUser?.username && msg.recipient === selectedPeer?.username)
           ) {
-            setMessages(prev => [...prev, msg]);
+            setMessages(prev => {
+              if (prev.some(existing => existing.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
           }
         }
       } catch (e) {

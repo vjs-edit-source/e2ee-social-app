@@ -142,40 +142,74 @@ export default function App() {
     }
   }, [serverUrl]);
 
-  // Connect to real-time WebSocket when user is ready
+  // Connect to real-time WebSocket with auto-reconnect and heartbeat
   useEffect(() => {
     if (!currentUser) return;
 
     let ws = null;
-    try {
-      ws = new WebSocket(`${wsUrl}?user=${currentUser.username}`);
-      ws.onopen = () => {
-        setWsClient(ws);
-        setEngineOnline(true);
-      };
+    let pingTimer = null;
+    let reconnectTimer = null;
+    let isCancelled = false;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'USER_JOINED') {
-            loadUsersDirectory();
+    function connectWS() {
+      if (isCancelled) return;
+      try {
+        ws = new WebSocket(`${wsUrl}?user=${encodeURIComponent(currentUser.username)}`);
+
+        ws.onopen = () => {
+          if (isCancelled) { ws.close(); return; }
+          setWsClient(ws);
+          setEngineOnline(true);
+          console.log(`[WS] Connected in real-time as ${currentUser.username}`);
+
+          // Send heartbeat ping every 15s to keep cloud & cellular sockets open
+          clearInterval(pingTimer);
+          pingTimer = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(JSON.stringify({ type: 'PING' }));
+              } catch (err) {}
+            }
+          }, 15000);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'USER_JOINED') {
+              loadUsersDirectory();
+            }
+          } catch (e) {
+            console.error('WS event error:', e);
           }
-        } catch (e) {
-          console.error('WS event error:', e);
-        }
-      };
+        };
 
-      ws.onerror = () => {
+        ws.onerror = () => {
+          setEngineOnline(false);
+        };
+
+        ws.onclose = () => {
+          clearInterval(pingTimer);
+          if (!isCancelled) {
+            console.log('[WS] Connection lost. Reconnecting in 2.5s...');
+            reconnectTimer = setTimeout(connectWS, 2500);
+          }
+        };
+      } catch (e) {
+        console.error('WebSocket connection error:', e);
         setEngineOnline(false);
-      };
-
-      ws.onclose = () => {};
-    } catch (e) {
-      console.error('WebSocket connection error:', e);
-      setEngineOnline(false);
+        if (!isCancelled) {
+          reconnectTimer = setTimeout(connectWS, 3000);
+        }
+      }
     }
 
+    connectWS();
+
     return () => {
+      isCancelled = true;
+      clearInterval(pingTimer);
+      clearTimeout(reconnectTimer);
       if (ws) ws.close();
     };
   }, [currentUser, wsUrl]);
