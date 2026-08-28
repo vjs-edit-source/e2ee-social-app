@@ -25,6 +25,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [decryptedPostMap, setDecryptedPostMap] = useState({});
   const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
   const [publishing, setPublishing] = useState(false);
+  const [uploaderKey, setUploaderKey] = useState(0);
 
   const decryptedPostsCache = useRef({});
   const decryptedMediaCache = useRef({});
@@ -49,9 +50,27 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
   useEffect(() => {
     loadPosts();
-    const interval = setInterval(loadPosts, 4000);
+    const interval = setInterval(loadPosts, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [serverUrl]);
+
+  // Real-time WebSocket new post reception
+  useEffect(() => {
+    if (!wsClient) return;
+    const handleWSEvent = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'NEW_POST' && data.post) {
+          setPosts(prev => {
+            if (prev.some(p => p.id === data.post.id)) return prev;
+            return [data.post, ...prev];
+          });
+        }
+      } catch (e) {}
+    };
+    wsClient.addEventListener('message', handleWSEvent);
+    return () => wsClient.removeEventListener('message', handleWSEvent);
+  }, [wsClient]);
 
   useEffect(() => {
     if (!currentUser || !currentUser.keyPair) return;
@@ -263,6 +282,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       if (data.success) {
         setNewPostText('');
         setAttachedMedia(null);
+        setUploaderKey(k => k + 1);
         await loadPosts();
       }
     } catch (err) {
@@ -310,6 +330,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
           <div className="post-actions-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MediaUploader
+                key={uploaderKey}
                 sharedKey={null}
                 onMediaEncrypted={setAttachedMedia}
                 onUploadStateChange={setMediaUploading}
