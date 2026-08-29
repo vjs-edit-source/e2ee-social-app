@@ -24,6 +24,7 @@ class ZeroKnowledgeStore {
     this.groups = new Map();         // groupId -> { id, name, description, isCommunity, creator, members, avatarColor, createdAt }
     this.groupMessages = new Map();  // groupId -> Array of { id, groupId, sender, ciphertext, iv, keyEnvelopes, mediaId, timestamp }
     this.statuses = [];             // Array of { id, author, ciphertext, iv, keyEnvelopes, mediaId, backgroundGradient, likes, comments, timestamp, expiresAt }
+    this.otps = new Map();         // phone -> { otp, expiresAt, username }
 
     this.saveTimeout = null;
     this.mongoClient = null;
@@ -230,18 +231,43 @@ class ZeroKnowledgeStore {
   }
 
   // ── USER DIRECTORY & VAULT ─────────────────────────────────
-  registerUser(username, publicIdentityKey, publicPrekey, avatarColor) {
+  registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber = null) {
     const userData = {
       username,
       publicIdentityKey,
       publicPrekey,
       avatarColor: avatarColor || '#3b82f6',
+      phoneNumber: phoneNumber || null,
       registeredAt: new Date().toISOString()
     };
     this.users.set(username, userData);
     this.scheduleSave();
     this.syncDocToMongo('users', { username }, userData);
     return userData;
+  }
+
+  // ── OTP VERIFICATION STORE ─────────────────────────────────
+  saveOtp(phone, otp, username = null) {
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+    this.otps.set(cleanPhone, { otp: String(otp), expiresAt, username });
+    return { phone: cleanPhone, expiresAt };
+  }
+
+  verifyOtp(phone, enteredOtp) {
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    const record = this.otps.get(cleanPhone);
+    if (!record) return { valid: false, reason: 'No OTP requested for this phone number.' };
+    if (Date.now() > record.expiresAt) {
+      this.otps.delete(cleanPhone);
+      return { valid: false, reason: 'OTP has expired. Please request a new code.' };
+    }
+    if (record.otp !== String(enteredOtp).trim()) {
+      return { valid: false, reason: 'Incorrect 6-digit OTP code. Please check and try again.' };
+    }
+    // Valid OTP - consume after use
+    this.otps.delete(cleanPhone);
+    return { valid: true, username: record.username };
   }
 
   saveVault(username, encryptedVaultBlob, salt, iv) {

@@ -80,16 +80,67 @@ function notifyInspector() {
 
 // 1. User Registration / Prekey Directory
 app.post('/api/register', (req, res) => {
-  const { username, publicIdentityKey, publicPrekey, avatarColor } = req.body;
+  const { username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber } = req.body;
   if (!username || !publicIdentityKey) {
     return res.status(400).json({ error: 'Username and public identity key are required' });
   }
 
-  const user = db.registerUser(username, publicIdentityKey, publicPrekey, avatarColor);
+  const user = db.registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber);
   broadcast({ type: 'USER_JOINED', user });
   notifyInspector();
 
   res.json({ success: true, user });
+});
+
+// 1b. Send OTP for Phone Authentication
+app.post('/api/auth/send-otp', (req, res) => {
+  const { phone, username } = req.body;
+  if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+    return res.status(400).json({ error: 'Valid phone number with country code is required (e.g. +91 9876543210)' });
+  }
+
+  // Generate 6-digit numeric OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const cleanPhone = phone.trim();
+  db.saveOtp(cleanPhone, otp, username ? username.trim() : null);
+
+  console.log(`📱 [SMS/OTP Gateway] OTP for ${cleanPhone}: [${otp}]`);
+
+  res.json({
+    success: true,
+    message: `Verification code generated for ${cleanPhone}`,
+    testOtp: otp, // Passed for testing/development mode
+    expiresInSeconds: 300
+  });
+});
+
+// 1c. Verify OTP & Authenticate
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { phone, otp, username, publicIdentityKey, publicPrekey, avatarColor } = req.body;
+  if (!phone || !otp) {
+    return res.status(400).json({ error: 'Phone number and 6-digit OTP code are required' });
+  }
+
+  const result = db.verifyOtp(phone, otp);
+  if (!result.valid) {
+    return res.status(400).json({ error: result.reason || 'Invalid OTP code' });
+  }
+
+  let user = null;
+  const finalUsername = (username || result.username || `user_${phone.replace(/\D/g, '').slice(-4)}`).trim();
+
+  if (publicIdentityKey) {
+    user = db.registerUser(finalUsername, publicIdentityKey, publicPrekey, avatarColor, phone);
+    broadcast({ type: 'USER_JOINED', user });
+    notifyInspector();
+  }
+
+  res.json({
+    success: true,
+    verified: true,
+    username: finalUsername,
+    user
+  });
 });
 
 // 2. Fetch Directory of Public Keys
