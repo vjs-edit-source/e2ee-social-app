@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, User, Key, Lock, DownloadCloud, CheckCircle2, Sparkles, Server, AlertTriangle, Phone, ArrowRight, RefreshCw, Smartphone, Zap } from 'lucide-react';
 import { backupKeyVaultToServer, restoreAccountFromBackup } from '../crypto/vault';
+import { sendRealFirebaseOtp } from '../utils/firebaseAuth';
 
 const COUNTRY_CODES = [
   { code: '+91', country: 'IN', name: 'India (+91)' },
@@ -31,6 +32,7 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
   const [otpInput, setOtpInput] = useState('');
   const [devOtpHint, setDevOtpHint] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [confirmationResult, setConfirmationResult] = useState(null);
 
   // Restore state
   const [restoreUser, setRestoreUser] = useState('');
@@ -95,9 +97,21 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
     const fullPhone = `${countryCode}${cleanNum}`;
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Sending secure 6-digit verification code...');
+    setStatusMsg('Sending SMS verification code to your phone...');
 
     try {
+      let sentViaFirebase = false;
+      try {
+        const confirmation = await sendRealFirebaseOtp(fullPhone);
+        if (confirmation && confirmation.confirm) {
+          setConfirmationResult(confirmation);
+          sentViaFirebase = true;
+        }
+      } catch (fbErr) {
+        console.warn('Firebase SMS info:', fbErr.message);
+      }
+
+      // Also trigger server session record
       const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,7 +119,7 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send verification code.');
+      if (!res.ok && !sentViaFirebase) throw new Error(data.error || 'Failed to send verification code.');
 
       setOtpStep(2);
       setResendCooldown(30);
@@ -115,7 +129,7 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
       setStatusMsg('');
     } catch (err) {
       console.error('Send OTP error:', err);
-      setAuthError(err.message || 'Failed to send OTP code.');
+      setAuthError(err.message || 'Failed to send SMS OTP. Please check the phone number.');
     } finally {
       setLoading(false);
     }
@@ -134,20 +148,23 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
     setStatusMsg('Verifying code & generating Zero-Knowledge keys...');
 
     try {
-      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone, otp: otpInput.trim(), username: phoneUsername.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invalid OTP code.');
+      if (confirmationResult && confirmationResult.confirm) {
+        await confirmationResult.confirm(otpInput.trim());
+      } else {
+        const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: fullPhone, otp: otpInput.trim(), username: phoneUsername.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invalid OTP code.');
+      }
 
       // Proceed with E2EE registration and local key generation
-      await onLogin(data.username || phoneUsername.trim());
+      await onLogin(phoneUsername.trim());
     } catch (err) {
       console.error('Verify OTP error:', err);
-      setAuthError(err.message || 'OTP verification failed.');
+      setAuthError(err.message || 'OTP verification failed. Please check the code.');
     } finally {
       setLoading(false);
     }
@@ -607,6 +624,9 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
           <Sparkles size={14} color="#10b981" />
           <span>Your keys are generated on your device and never sent to the server</span>
         </div>
+
+        {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );
