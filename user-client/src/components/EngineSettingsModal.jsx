@@ -13,7 +13,9 @@ import {
   Radio,
   Sliders,
   Check,
-  Cloud
+  Cloud,
+  Key,
+  MessageSquare
 } from 'lucide-react';
 import {
   getEngineUrl,
@@ -26,6 +28,8 @@ import {
 
 export default function EngineSettingsModal({ onClose, onEngineChanged }) {
   const [customUrl, setCustomUrl] = useState('');
+  const [twoFactorKey, setTwoFactorKey] = useState('');
+  const [smsStatus, setSmsStatus] = useState({ twoFactorConfigured: false });
   const [healthStatus, setHealthStatus] = useState({ loading: true, online: false, statusText: 'Testing connection...' });
   const [testing, setTesting] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -35,7 +39,19 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
     const current = getEngineUrl();
     setCustomUrl(current || (isNative ? DEFAULT_LAN_ENGINE_URL : ''));
     runDiagnostics(current);
+    fetchSmsConfig(current);
   }, []);
+
+  const fetchSmsConfig = async (targetUrl) => {
+    try {
+      const baseUrl = targetUrl || getEngineUrl();
+      const res = await fetch(`${baseUrl}/api/auth/sms-config`);
+      if (res.ok) {
+        const data = await res.json();
+        setSmsStatus(data);
+      }
+    } catch (e) {}
+  };
 
   const runDiagnostics = async (targetUrl) => {
     setTesting(true);
@@ -45,9 +61,23 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
     setTesting(false);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     setEngineUrl(customUrl);
+
+    if (twoFactorKey.trim()) {
+      try {
+        await fetch(`${customUrl}/api/auth/sms-config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ twoFactorKey: twoFactorKey.trim() })
+        });
+        fetchSmsConfig(customUrl);
+      } catch (err) {
+        console.error('SMS key save error:', err);
+      }
+    }
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
     if (onEngineChanged) onEngineChanged();
@@ -63,7 +93,7 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
 
   return (
     <div className="engine-modal-overlay" onClick={onClose}>
-      <div className="engine-modal-card" onClick={e => e.stopPropagation()}>
+      <div className="engine-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
         {/* Header */}
         <div className="engine-modal-header">
           <div className="engine-modal-title">
@@ -72,7 +102,7 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
             </div>
             <div>
               <h3>SadiSocial Engine</h3>
-              <p>Full-Stack Backend Connection Config</p>
+              <p>Full-Stack Backend & Cellular Gateway</p>
             </div>
           </div>
           <button className="engine-close-btn" onClick={onClose}>
@@ -129,8 +159,34 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
             </span>
           </div>
 
+          {/* 2Factor.in SMS Gateway Key Section */}
+          <div className="engine-input-group" style={{ marginTop: '12px', background: 'rgba(238, 120, 130, 0.04)', border: '1px solid rgba(238, 120, 130, 0.2)', padding: '12px', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <label style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#ee7882', fontWeight: '600', fontSize: '0.84rem' }}>
+                <MessageSquare size={14} />
+                <span>2Factor.in SMS Gateway API Key</span>
+              </label>
+              {smsStatus.twoFactorConfigured && (
+                <span style={{ fontSize: '0.7rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '2px 8px', borderRadius: '10px' }}>
+                  ✓ Connected
+                </span>
+              )}
+            </div>
+            <input
+              type="password"
+              placeholder={smsStatus.twoFactorConfigured ? "Connected (Paste new key to change)" : "Paste your 2Factor API Key here..."}
+              value={twoFactorKey}
+              onChange={e => setTwoFactorKey(e.target.value)}
+              className="engine-url-input"
+              style={{ fontSize: '0.84rem' }}
+            />
+            <span className="engine-input-hint" style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+              Transmits 6-digit verification codes to Indian mobile SIM cards via cellular SMS (bypassing DND).
+            </span>
+          </div>
+
           {/* Quick Presets */}
-          <div className="engine-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div className="engine-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
             <button
               type="button"
               className="preset-btn"
@@ -143,20 +199,6 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
             >
               <Zap size={13} />
               <span>Direct Engine (Port 4000)</span>
-            </button>
-
-            <button
-              type="button"
-              className="preset-btn"
-              onClick={() => {
-                setCustomUrl('http://localhost:5000');
-                setEngineUrl('http://localhost:5000');
-                if (onEngineChanged) onEngineChanged();
-                runDiagnostics('http://localhost:5000');
-              }}
-            >
-              <Smartphone size={13} />
-              <span>Dev Proxy (Port 5000)</span>
             </button>
 
             <button
@@ -183,16 +225,8 @@ export default function EngineSettingsModal({ onClose, onEngineChanged }) {
             </button>
           </div>
 
-          {/* Platform Info Pill */}
-          <div className="engine-platform-info">
-            <ShieldCheck size={14} color="#ee7882" />
-            <span>
-              Running on <strong>{isNative ? 'Android Native Container (Capacitor)' : 'Mobile Web Browser'}</strong> with WebCrypto zero-knowledge envelope isolation.
-            </span>
-          </div>
-
           {/* Modal Actions */}
-          <div className="engine-modal-actions">
+          <div className="engine-modal-actions" style={{ marginTop: '16px' }}>
             <button type="button" className="engine-btn-secondary" onClick={onClose}>
               Close
             </button>
