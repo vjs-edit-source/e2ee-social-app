@@ -38,10 +38,13 @@ function playNotificationChime() {
 export default function App() {
   const [serverUrl, setServerUrl] = useState(getEngineUrl());
   const [wsUrl, setWsUrl] = useState(getEngineWsUrl());
-  const [engineOnline, setEngineOnline] = useState(true);
-
   const [currentUser, setCurrentUser] = useState(null);
+  const [engineOnline, setEngineOnline] = useState(true);
   const [allUsers, setAllUsers] = useState([]);
+  const allUsersRef = useRef(allUsers);
+  useEffect(() => {
+    allUsersRef.current = allUsers;
+  }, [allUsers]);
   const [activeTab, setActiveTab] = useState('feed'); // 'feed' | 'messages' | 'groups' | 'status'
   const [wsClient, setWsClient] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -248,11 +251,19 @@ export default function App() {
                 }));
               }
             } else if (data.type === 'USER_PRESENCE') {
-              setAllUsers(prev => prev.map(u => u.username === data.username ? { ...u, isOnline: data.isOnline, lastSeen: data.lastSeen } : u));
+              setAllUsers(prev => {
+                const exists = prev.some(u => u.username === data.username);
+                if (exists) {
+                  return prev.map(u => u.username === data.username ? { ...u, isOnline: !!data.isOnline, lastSeen: data.lastSeen || new Date().toISOString() } : u);
+                } else {
+                  loadUsersDirectory();
+                  return prev;
+                }
+              });
             } else if (data.type === 'DIRECT_MESSAGE') {
               const msg = data.message;
               if (msg && msg.recipient === currentUser?.username && msg.sender !== currentUser?.username) {
-                const authorUser = allUsers.find(u => u.username === msg.sender) || { username: msg.sender };
+                const authorUser = allUsersRef.current.find(u => u.username === msg.sender) || { username: msg.sender };
                 playNotificationChime();
                 setUnreadChatsCount(prev => prev + 1);
 
@@ -310,7 +321,7 @@ export default function App() {
       clearTimeout(reconnectTimer);
       if (ws) ws.close();
     };
-  }, [currentUser, wsUrl, allUsers]);
+  }, [currentUser?.username, wsUrl]);
 
   // Reset chat states when switching tabs
   useEffect(() => {

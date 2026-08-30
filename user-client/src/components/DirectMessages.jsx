@@ -33,7 +33,7 @@ function formatLastSeen(lastSeenDateStr, isOnline) {
   const diffMs = Date.now() - new Date(lastSeenDateStr).getTime();
   if (isNaN(diffMs)) return 'Offline';
   const diffMins = Math.floor(diffMs / (1000 * 60));
-  if (diffMins < 1) return 'Active just now';
+  if (diffMins <= 2) return 'Active now';
   if (diffMins < 60) return `Last seen ${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `Last seen ${diffHours}h ago`;
