@@ -231,14 +231,18 @@ class ZeroKnowledgeStore {
   }
 
   // ── USER DIRECTORY & VAULT ─────────────────────────────────
-  registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber = null) {
+  registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber = null, avatarUrl = null, displayName = null, bio = null) {
+    const existing = this.users.get(username) || {};
     const userData = {
       username,
+      displayName: displayName || existing.displayName || username,
+      bio: bio !== null && bio !== undefined ? bio : (existing.bio || ''),
+      avatarUrl: avatarUrl || existing.avatarUrl || null,
       publicIdentityKey,
       publicPrekey,
-      avatarColor: avatarColor || '#3b82f6',
-      phoneNumber: phoneNumber || null,
-      registeredAt: new Date().toISOString()
+      avatarColor: avatarColor || existing.avatarColor || '#3b82f6',
+      phoneNumber: phoneNumber || existing.phoneNumber || null,
+      registeredAt: existing.registeredAt || new Date().toISOString()
     };
     this.users.set(username, userData);
     this.scheduleSave();

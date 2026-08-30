@@ -29,6 +29,8 @@ export async function initializeUserIdentity(username, serverUrl = '') {
 
   // 1. Check if session already exists in localStorage
   const existingRaw = localStorage.getItem(`${STORAGE_KEY}_${username}`);
+  const savedProfile = JSON.parse(localStorage.getItem(`ciphersocial_profile_${username}`) || '{}');
+
   if (existingRaw) {
     try {
       const data = JSON.parse(existingRaw);
@@ -42,7 +44,10 @@ export async function initializeUserIdentity(username, serverUrl = '') {
         localStorage.setItem('e2ee_current_active_user', username);
         return {
           username: data.username,
-          avatarColor: data.avatarColor || '#3b82f6',
+          displayName: savedProfile.displayName || data.displayName || data.username,
+          bio: savedProfile.bio !== undefined ? savedProfile.bio : (data.bio || ''),
+          avatarUrl: savedProfile.avatarUrl || data.avatarUrl || null,
+          avatarColor: savedProfile.avatarColor || data.avatarColor || '#3b82f6',
           spkiPublicKey: data.spkiPublicKey,
           keyPair: { publicKey, privateKey }
         };
@@ -81,7 +86,10 @@ export async function initializeUserIdentity(username, serverUrl = '') {
 
           const sessionData = {
             username,
-            avatarColor: serverUser?.avatarColor || randomColor(),
+            displayName: serverUser?.displayName || savedProfile.displayName || username,
+            bio: serverUser?.bio !== undefined ? serverUser.bio : (savedProfile.bio || ''),
+            avatarUrl: serverUser?.avatarUrl || savedProfile.avatarUrl || null,
+            avatarColor: serverUser?.avatarColor || savedProfile.avatarColor || randomColor(),
             spkiPublicKey,
             pkcs8PrivateKey
           };
@@ -92,6 +100,9 @@ export async function initializeUserIdentity(username, serverUrl = '') {
           console.log(`[Vault] Successfully auto-restored identity keypair for ${username}`);
           return {
             username,
+            displayName: sessionData.displayName,
+            bio: sessionData.bio,
+            avatarUrl: sessionData.avatarUrl,
             avatarColor: sessionData.avatarColor,
             spkiPublicKey,
             keyPair: { publicKey, privateKey }

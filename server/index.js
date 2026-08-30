@@ -80,12 +80,12 @@ function notifyInspector() {
 
 // 1. User Registration / Prekey Directory
 app.post('/api/register', (req, res) => {
-  const { username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber } = req.body;
+  const { username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio } = req.body;
   if (!username || !publicIdentityKey) {
     return res.status(400).json({ error: 'Username and public identity key are required' });
   }
 
-  const user = db.registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber);
+  const user = db.registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio);
   broadcast({ type: 'USER_JOINED', user });
   notifyInspector();
 

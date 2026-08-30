@@ -77,6 +77,18 @@ export default function App() {
         const data = await res.json();
         setAllUsers(data);
         setEngineOnline(true);
+        setCurrentUser(prev => {
+          if (!prev) return prev;
+          const me = data.find(u => u.username === prev.username);
+          if (!me) return prev;
+          return {
+            ...prev,
+            displayName: me.displayName || prev.displayName || me.username,
+            bio: me.bio !== undefined ? me.bio : prev.bio,
+            avatarUrl: (me.avatarUrl !== undefined && me.avatarUrl !== null) ? me.avatarUrl : prev.avatarUrl,
+            avatarColor: me.avatarColor || prev.avatarColor
+          };
+        });
       } else {
         setEngineOnline(false);
       }
@@ -104,7 +116,10 @@ export default function App() {
           body: JSON.stringify({
             username: userObj.username,
             publicIdentityKey: userObj.spkiPublicKey,
-            avatarColor: userObj.avatarColor
+            avatarColor: userObj.avatarColor,
+            avatarUrl: userObj.avatarUrl,
+            displayName: userObj.displayName,
+            bio: userObj.bio
           })
         });
         if (res.ok) {
