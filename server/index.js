@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { db } from './store.js';
+import { sendSmsOtp, setSmsConfig, getSmsConfigStatus } from './services/smsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,8 +93,8 @@ app.post('/api/register', (req, res) => {
   res.json({ success: true, user });
 });
 
-// 1b. Send OTP for Phone Authentication
-app.post('/api/auth/send-otp', (req, res) => {
+// 1b. Send OTP via Backend SMS Gateway (Fast2SMS / Twilio)
+app.post('/api/auth/send-otp', async (req, res) => {
   const { phone, username } = req.body;
   if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
     return res.status(400).json({ error: 'Valid phone number with country code is required (e.g. +91 9876543210)' });
@@ -104,14 +105,28 @@ app.post('/api/auth/send-otp', (req, res) => {
   const cleanPhone = phone.trim();
   db.saveOtp(cleanPhone, otp, username ? username.trim() : null);
 
-  console.log(`📱 [SMS/OTP Gateway] OTP for ${cleanPhone}: [${otp}]`);
+  // Dispatch via SMS Gateway
+  const smsResult = await sendSmsOtp(cleanPhone, otp);
 
   res.json({
     success: true,
-    message: `Verification code generated for ${cleanPhone}`,
-    testOtp: otp, // Passed for testing/development mode
+    message: smsResult.message || `Verification code sent to ${cleanPhone}`,
+    gateway: smsResult.gateway,
+    isDevPreview: smsResult.isDevPreview,
+    testOtp: smsResult.testOtp, // Provided for instant dev testing if no gateway credentials configured
     expiresInSeconds: 300
   });
+});
+
+// 1b2. SMS Gateway Configuration Status & Update
+app.get('/api/auth/sms-config', (req, res) => {
+  res.json(getSmsConfigStatus());
+});
+
+app.post('/api/auth/sms-config', (req, res) => {
+  const { fast2SmsKey, twilioSid, twilioToken, twilioFrom } = req.body;
+  setSmsConfig({ fast2SmsKey, twilioSid, twilioToken, twilioFrom });
+  res.json({ success: true, status: getSmsConfigStatus() });
 });
 
 // 1c. Verify OTP & Authenticate

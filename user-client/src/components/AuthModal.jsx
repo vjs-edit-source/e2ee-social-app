@@ -121,33 +121,35 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
     const cleanNum = phoneNumber.replace(/\D/g, '');
     const fullPhone = `${countryCode}${cleanNum}`;
     setLoading(true);
-    setStatusMsg('Sending SMS verification code via Google Firebase...');
+    setStatusMsg('Sending SMS verification code to your mobile phone...');
 
     try {
-      // 1. Send real cellular SMS using Google Firebase
-      const confirmation = await sendRealFirebaseOtp(fullPhone);
-      if (!confirmation || !confirmation.confirm) {
-        throw new Error('Google Firebase could not send SMS to this number. Please check the number.');
+      const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: fullPhone,
+          username: phoneUsername.trim()
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send SMS code.');
       }
-      setConfirmationResult(confirmation);
+
       setOtpStep(2);
       setResendCooldown(45);
-      setStatusMsg('');
-    } catch (fbErr) {
-      console.error('Firebase SMS error:', fbErr);
-      let errMsg = fbErr.message;
-      if (fbErr.code === 'auth/invalid-phone-number') {
-        errMsg = 'Invalid phone number format. Please enter a valid 10-digit mobile number.';
-      } else if (fbErr.code === 'auth/quota-exceeded') {
-        errMsg = 'Daily SMS quota exceeded. Please try again later or use Quick Username mode.';
-      } else if (fbErr.code === 'auth/too-many-requests') {
-        errMsg = 'Too many requests sent to this number. Please wait a few minutes.';
-      } else if (fbErr.code === 'auth/captcha-check-failed') {
-        errMsg = 'reCAPTCHA security check failed. Please refresh the page and try again.';
-      } else if (fbErr.code === 'auth/operation-not-allowed' || fbErr.message?.includes('operation-not-allowed') || fbErr.message?.includes('region')) {
-        errMsg = 'Phone SMS provider is not enabled in Firebase Console (or requires SMS region enablement). Please enable Phone Authentication in Firebase Console, or switch to the "⚡ Quick Username" tab to sign in instantly!';
+      if (data.isDevPreview && data.testOtp) {
+        setDevOtpHint(`(Dev preview: ${data.testOtp})`);
+      } else {
+        setDevOtpHint('');
       }
-      setAuthError(errMsg || 'Failed to send SMS to your phone.');
+      setStatusMsg(data.message || 'SMS verification code dispatched!');
+      setTimeout(() => setStatusMsg(''), 4000);
+    } catch (err) {
+      console.error('Send OTP error:', err);
+      setAuthError(err.message || 'Failed to send SMS code.');
     } finally {
       setLoading(false);
     }
@@ -160,28 +162,34 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
       return;
     }
 
+    const cleanNum = phoneNumber.replace(/\D/g, '');
+    const fullPhone = `${countryCode}${cleanNum}`;
+
     setLoading(true);
     setAuthError('');
     setStatusMsg('Verifying SMS code & generating Zero-Knowledge keys...');
 
     try {
-      if (!confirmationResult || !confirmationResult.confirm) {
-        throw new Error('Verification session expired. Please click "Change Number" to request a new code.');
-      }
+      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: fullPhone,
+          otp: otpInput.trim(),
+          username: phoneUsername.trim()
+        })
+      });
 
-      await confirmationResult.confirm(otpInput.trim());
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Invalid verification code.');
+      }
 
       // SMS verified! Complete local Zero-Knowledge key generation & login
       await onLogin(phoneUsername.trim());
     } catch (err) {
       console.error('Verify OTP error:', err);
-      let errMsg = err.message;
-      if (err.code === 'auth/invalid-verification-code') {
-        errMsg = 'Incorrect 6-digit SMS code. Please check your SMS inbox and try again.';
-      } else if (err.code === 'auth/code-expired') {
-        errMsg = 'The SMS code has expired. Please click Resend Code.';
-      }
-      setAuthError(errMsg || 'SMS verification failed.');
+      setAuthError(err.message || 'SMS verification failed.');
     } finally {
       setLoading(false);
     }
