@@ -33,12 +33,12 @@ export async function sendSmsOtp(phone, otp) {
 
   console.log(`📱 [Cellular SMS Gateway] Transmitting OTP to ${cleanPhone} via carrier network...`);
 
-  // 1. 2Factor.in (Specialized India Transactional OTP Gateway - Bypasses DND completely)
+  // 1. 2Factor.in (Specialized India Transactional OTP SMS Gateway - Bypasses DND completely)
   if (dynamic2FactorKey && (cleanPhone.startsWith('+91') || digitsOnly.length === 10)) {
     const indianNumber = digitsOnly.slice(-10);
     try {
-      console.log(`[2Factor.in] Dispatching direct text SMS OTP to Indian SIM: ${indianNumber}`);
-      const url = `https://2factor.in/API/V1/${dynamic2FactorKey}/SMS/${indianNumber}/${otp}`;
+      console.log(`[2Factor.in] Dispatching direct SMS OTP via AUTOGEN2 to Indian SIM: ${indianNumber}`);
+      const url = `https://2factor.in/API/V1/${dynamic2FactorKey}/SMS/${indianNumber}/AUTOGEN2`;
       const res = await fetch(url);
       const data = await res.json();
       console.log('[2Factor.in Response]', data);
@@ -46,6 +46,8 @@ export async function sendSmsOtp(phone, otp) {
         return {
           success: true,
           gateway: '2Factor',
+          otp: data.OTP || null,
+          sessionId: data.Details,
           message: `SMS sent successfully to your mobile phone!`
         };
       }

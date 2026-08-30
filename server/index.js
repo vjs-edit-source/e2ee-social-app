@@ -101,13 +101,18 @@ app.post('/api/auth/send-otp', async (req, res) => {
     return res.status(400).json({ error: 'Valid phone number with country code is required (e.g. +91 9876543210)' });
   }
 
-  // Generate 6-digit numeric OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate 6-digit numeric OTP fallback
+  let otp = Math.floor(100000 + Math.random() * 900000).toString();
   const cleanPhone = phone.trim();
-  db.saveOtp(cleanPhone, otp, username ? username.trim() : null);
 
   // Dispatch via SMS Gateway
   const smsResult = await sendSmsOtp(cleanPhone, otp);
+
+  // If gateway generated its own OTP (e.g. 2Factor AUTOGEN2), save that exact OTP
+  if (smsResult.otp) {
+    otp = smsResult.otp;
+  }
+  db.saveOtp(cleanPhone, otp, username ? username.trim() : null);
 
   res.json({
     success: true,
