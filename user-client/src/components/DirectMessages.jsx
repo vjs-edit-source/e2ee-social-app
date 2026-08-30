@@ -317,6 +317,7 @@ export default function DirectMessages({
           let mediaId = null;
           let mediaKeyB64 = null;
           let originalName = null;
+          let mimeType = null;
           let isVoice = false;
           let voiceDuration = 0;
           let replyTo = null;
