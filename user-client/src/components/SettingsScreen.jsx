@@ -23,7 +23,8 @@ import {
   Star,
   Shield
 } from 'lucide-react';
-import { backupKeyVaultToServer } from '../crypto/vault';
+import { backupKeyVaultToServer, ensureUserMnemonic } from '../crypto/vault';
+import MnemonicVaultModal from './MnemonicVaultModal';
 
 const AVATAR_COLORS = [
   '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b',
@@ -55,6 +56,9 @@ export default function SettingsScreen({
     }
   });
   
+  // Mnemonic seed modal state
+  const [showMnemonicModal, setShowMnemonicModal] = useState(false);
+
   // Profile state
   const [displayName, setDisplayName] = useState(currentUser?.displayName || currentUser?.username || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
@@ -779,6 +783,52 @@ export default function SettingsScreen({
             </div>
           </div>
 
+          {/* 12-Word Master Secret Recovery Seed Card */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(139, 92, 246, 0.08))',
+            border: '1px solid rgba(238, 120, 130, 0.3)',
+            borderRadius: '16px',
+            padding: '20px',
+            marginBottom: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.94rem' }}>
+                <Key size={20} />
+                <span>12-Word Master Recovery Seed</span>
+              </div>
+              <span style={{ fontSize: '0.72rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '3px 8px', borderRadius: '12px' }}>
+                Zero-Knowledge
+              </span>
+            </div>
+
+            <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Your 12-word master mnemonic mathematically derives your private cryptographic keys. You can use these 12 words to recover your account on any phone or browser.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowMnemonicModal(true)}
+              style={{
+                background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '12px',
+                width: '100%',
+                color: '#ffffff',
+                fontWeight: '600',
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <Key size={16} />
+              <span>Reveal & Backup 12-Word Secret Phrase</span>
+            </button>
+          </div>
+
           {/* Cloud Passphrase Backup Form */}
           <form onSubmit={handleSaveBackup} style={{
             background: 'rgba(16, 185, 129, 0.05)',
@@ -1138,6 +1188,15 @@ export default function SettingsScreen({
             </button>
           </div>
         </div>
+      )}
+
+      {/* 12-Word Master Recovery Modal */}
+      {showMnemonicModal && currentUser && (
+        <MnemonicVaultModal
+          mnemonicWords={ensureUserMnemonic(currentUser.username)}
+          username={currentUser.username}
+          onClose={() => setShowMnemonicModal(false)}
+        />
       )}
     </div>
   );

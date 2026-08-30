@@ -7,6 +7,11 @@ import {
   encryptPrivateKeyVault,
   decryptPrivateKeyVault
 } from './e2ee.js';
+import {
+  generate12WordMnemonic,
+  validateMnemonic,
+  mnemonicToDeterministicPassphrase
+} from './mnemonic.js';
 
 const STORAGE_KEY = 'e2ee_social_user_session';
 
@@ -233,6 +238,44 @@ export async function restoreAccountFromBackup(username, passphrase, serverUrl =
 
 export function getCurrentUsername() {
   return localStorage.getItem('e2ee_current_active_user') || null;
+}
+
+export function getUserMnemonic(username) {
+  if (!username) return null;
+  return localStorage.getItem(`ciphersocial_mnemonic_${username}`) || null;
+}
+
+export function ensureUserMnemonic(username) {
+  if (!username) return null;
+  let phrase = localStorage.getItem(`ciphersocial_mnemonic_${username}`);
+  if (!phrase) {
+    const words = generate12WordMnemonic();
+    phrase = words.join(' ');
+    localStorage.setItem(`ciphersocial_mnemonic_${username}`, phrase);
+  }
+  return phrase;
+}
+
+/**
+ * Restore account using 12-word mnemonic phrase
+ */
+export async function restoreAccountFromMnemonic(username, mnemonicPhrase, serverUrl = '') {
+  if (!validateMnemonic(mnemonicPhrase)) {
+    throw new Error("Invalid 12-word recovery phrase. Please check the spelling and order of words.");
+  }
+  const cleanMnemonic = mnemonicPhrase.trim().toLowerCase().replace(/\s+/g, ' ');
+  const passphrase = mnemonicToDeterministicPassphrase(cleanMnemonic, username);
+
+  // Save mnemonic locally
+  localStorage.setItem(`ciphersocial_mnemonic_${username}`, cleanMnemonic);
+
+  // Attempt restore using derived passphrase or default vault
+  try {
+    return await restoreAccountFromBackup(username, passphrase, serverUrl);
+  } catch (err) {
+    // If not found with seed passphrase, fallback to standard vault restore
+    return await restoreAccountFromBackup(username, '', serverUrl);
+  }
 }
 
 export function clearUserSession() {

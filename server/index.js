@@ -7,6 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { db } from './store.js';
 import { sendSmsOtp, setSmsConfig, getSmsConfigStatus } from './services/smsService.js';
+import { sendEmailOtp, setEmailConfig, getEmailConfigStatus } from './services/emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -129,23 +130,60 @@ app.post('/api/auth/sms-config', (req, res) => {
   res.json({ success: true, status: getSmsConfigStatus() });
 });
 
-// 1c. Verify OTP & Authenticate
-app.post('/api/auth/verify-otp', (req, res) => {
-  const { phone, otp, username, publicIdentityKey, publicPrekey, avatarColor } = req.body;
-  if (!phone || !otp) {
-    return res.status(400).json({ error: 'Phone number and 6-digit OTP code are required' });
+// 1b3. Send OTP via Direct SMTP Email (100% Free, Zero Telecom DND restrictions)
+app.post('/api/auth/send-email-otp', async (req, res) => {
+  const { email, username } = req.body;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email address is required (e.g. user@example.com)' });
   }
 
-  const result = db.verifyOtp(phone, otp);
+  const cleanEmail = email.trim().toLowerCase();
+  // Generate 6-digit numeric OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  db.saveOtp(cleanEmail, otp, username ? username.trim() : null);
+
+  // Dispatch via SMTP Email Service
+  const emailResult = await sendEmailOtp(cleanEmail, otp, username);
+
+  res.json({
+    success: true,
+    message: emailResult.message || `Verification code sent to ${cleanEmail}`,
+    gateway: emailResult.gateway,
+    isDevPreview: emailResult.isDevPreview,
+    testOtp: emailResult.testOtp,
+    expiresInSeconds: 300
+  });
+});
+
+// 1b4. Email Configuration Status & Update
+app.get('/api/auth/email-config', (req, res) => {
+  res.json(getEmailConfigStatus());
+});
+
+app.post('/api/auth/email-config', (req, res) => {
+  const { smtpUser, smtpPass, smtpHost, smtpPort } = req.body;
+  setEmailConfig({ smtpUser, smtpPass, smtpHost, smtpPort });
+  res.json({ success: true, status: getEmailConfigStatus() });
+});
+
+// 1c. Verify OTP & Authenticate (Phone or Email)
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { phone, email, otp, username, publicIdentityKey, publicPrekey, avatarColor } = req.body;
+  const identifier = (phone || email || '').trim().toLowerCase();
+  if (!identifier || !otp) {
+    return res.status(400).json({ error: 'Phone/Email and 6-digit OTP code are required' });
+  }
+
+  const result = db.verifyOtp(identifier, otp);
   if (!result.valid) {
     return res.status(400).json({ error: result.reason || 'Invalid OTP code' });
   }
 
   let user = null;
-  const finalUsername = (username || result.username || `user_${phone.replace(/\D/g, '').slice(-4)}`).trim();
+  const finalUsername = (username || result.username || `user_${identifier.replace(/\D/g, '').slice(-4) || 'member'}`).trim();
 
   if (publicIdentityKey) {
-    user = db.registerUser(finalUsername, publicIdentityKey, publicPrekey, avatarColor, phone);
+    user = db.registerUser(finalUsername, publicIdentityKey, publicPrekey, avatarColor, phone || null);
     broadcast({ type: 'USER_JOINED', user });
     notifyInspector();
   }
