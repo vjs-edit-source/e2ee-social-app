@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User,
   Camera,
@@ -19,7 +19,9 @@ import {
   Sliders,
   RefreshCw,
   Trash2,
-  CheckCheck
+  CheckCheck,
+  Star,
+  Shield
 } from 'lucide-react';
 import { backupKeyVaultToServer } from '../crypto/vault';
 
@@ -34,9 +36,24 @@ export default function SettingsScreen({
   serverUrl,
   onSwitchUser,
   onOpenEngineSettings,
-  onProfileUpdated
+  onProfileUpdated,
+  onTriggerLock = null
 }) {
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'preferences'
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'starred' | 'preferences'
+  
+  // PIN lock state
+  const [pinInput, setPinInput] = useState('');
+  const [pinMsg, setPinMsg] = useState('');
+  const [hasPin, setHasPin] = useState(() => Boolean(localStorage.getItem('ciphersocial_pin_hash')));
+  
+  // Starred messages state
+  const [starredList, setStarredList] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_starred_${currentUser?.username}`) || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
   
   // Profile state
   const [displayName, setDisplayName] = useState(currentUser?.displayName || currentUser?.username || '');
@@ -46,8 +63,36 @@ export default function SettingsScreen({
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   
-  // Security / Backup state
-  const [backupPassphrase, setBackupPassphrase] = useState('');
+  const handleSetPin = (e) => {
+    e.preventDefault();
+    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+      setPinMsg('PIN must be exactly 4 digits (0-9).');
+      return;
+    }
+    let hash = 0;
+    for (let i = 0; i < pinInput.length; i++) {
+      hash = ((hash << 5) - hash) + pinInput.charCodeAt(i);
+      hash |= 0;
+    }
+    localStorage.setItem('ciphersocial_pin_hash', String(hash));
+    setHasPin(true);
+    setPinInput('');
+    setPinMsg('✓ 4-digit PIN lock configured successfully!');
+  };
+
+  const handleRemovePin = () => {
+    localStorage.removeItem('ciphersocial_pin_hash');
+    setHasPin(false);
+    setPinInput('');
+    setPinMsg('PIN lock disabled.');
+  };
+
+  const handleClearStarred = () => {
+    if (window.confirm('Clear all starred messages?')) {
+      localStorage.removeItem(`ciphersocial_starred_${currentUser?.username}`);
+      setStarredList([]);
+    }
+  };
   const [backingUp, setBackingUp] = useState(false);
   const [backupStatus, setBackupStatus] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
@@ -294,6 +339,30 @@ export default function SettingsScreen({
         >
           <ShieldCheck size={16} />
           <span>Security & Keys</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('starred')}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            fontSize: '0.84rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            border: 'none',
+            background: activeTab === 'starred' ? 'rgba(251, 191, 36, 0.25)' : 'transparent',
+            color: activeTab === 'starred' ? '#fbbf24' : '#94a3b8',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Star size={16} />
+          <span>Starred</span>
         </button>
 
         <button
@@ -773,10 +842,184 @@ export default function SettingsScreen({
               {backingUp ? 'Saving Backup...' : 'Save Encrypted Backup'}
             </button>
           </form>
+
+          {/* 4-Digit PIN App Lock Card */}
+          <div style={{
+            background: 'rgba(238, 120, 130, 0.05)',
+            border: '1px solid rgba(238, 120, 130, 0.25)',
+            borderRadius: '16px',
+            padding: '20px',
+            marginTop: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '600', fontSize: '0.92rem' }}>
+                <Lock size={20} />
+                <span>App Lock & Biometric Protection</span>
+              </div>
+              {hasPin && (
+                <span style={{ fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '3px 8px', borderRadius: '12px' }}>
+                  ✓ PIN Enabled
+                </span>
+              )}
+            </div>
+
+            <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Require a 4-digit PIN or fingerprint authentication every time SadiSocial is opened or resumed.
+            </p>
+
+            <form onSubmit={handleSetPin} style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <input
+                type="password"
+                maxLength={4}
+                placeholder="Enter 4 digits..."
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                style={{
+                  flex: 1,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  color: '#ffffff',
+                  fontSize: '0.9rem',
+                  letterSpacing: '3px'
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  background: '#ee7882',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '10px 16px',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {hasPin ? 'Change PIN' : 'Set PIN'}
+              </button>
+              {hasPin && (
+                <button
+                  type="button"
+                  onClick={handleRemovePin}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    color: '#f87171',
+                    fontSize: '0.84rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Disable
+                </button>
+              )}
+            </form>
+
+            {pinMsg && (
+              <div style={{ fontSize: '0.8rem', color: pinMsg.includes('✓') ? '#34d399' : '#f87171', marginBottom: '10px' }}>
+                {pinMsg}
+              </div>
+            )}
+
+            {onTriggerLock && (
+              <button
+                type="button"
+                onClick={onTriggerLock}
+                style={{
+                  marginTop: '6px',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '10px',
+                  padding: '10px',
+                  width: '100%',
+                  color: '#cbd5e1',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Shield size={14} />
+                <span>Lock App Now (Stealth Mode)</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* TAB 3: PREFERENCES & ENGINE CONFIG */}
+      {/* TAB 3: STARRED MESSAGES VAULT */}
+      {activeTab === 'starred' && (
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '18px',
+          padding: '24px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 'bold', fontSize: '1rem' }}>
+              <Star size={18} fill="#fbbf24" />
+              <span>Starred Messages ({starredList.length})</span>
+            </div>
+            {starredList.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearStarred}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#f87171',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '0.76rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear All
+              </button>
+            )}
+          </div>
+
+          {starredList.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+              <Star size={36} style={{ opacity: 0.3, marginBottom: '8px' }} />
+              <p style={{ margin: '0 0 4px', color: '#94a3b8' }}>No starred messages yet.</p>
+              <span style={{ fontSize: '0.78rem' }}>Tap the star icon on any message bubble to bookmark it here.</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {starredList.map((id, idx) => (
+                <div
+                  key={id}
+                  style={{
+                    padding: '12px 14px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Star size={14} color="#fbbf24" fill="#fbbf24" />
+                    <span style={{ fontSize: '0.84rem', color: '#f8fafc' }}>Starred Encrypted Message #{idx + 1}</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>{id.slice(0, 10)}...</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: PREFERENCES & ENGINE CONFIG */}
       {activeTab === 'preferences' && (
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',

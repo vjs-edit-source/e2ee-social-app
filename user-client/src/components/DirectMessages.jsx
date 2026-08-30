@@ -1,5 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Lock, Unlock, ShieldCheck, User, Circle, ArrowLeft, Paperclip, X, Loader2, Image as ImageIcon, FileText } from 'lucide-react';
+import {
+  Send,
+  Lock,
+  Unlock,
+  ShieldCheck,
+  User,
+  Circle,
+  ArrowLeft,
+  Paperclip,
+  X,
+  Loader2,
+  Image as ImageIcon,
+  FileText,
+  Phone,
+  Video,
+  Mic,
+  Star,
+  CornerUpLeft,
+  Smile
+} from 'lucide-react';
 import {
   importPublicKey,
   deriveSharedAESKey,
@@ -11,6 +30,8 @@ import {
 } from '../crypto/e2ee';
 import { localSearchIndex } from '../search/searchIndex';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
+import VoiceWaveformPlayer from './VoiceWaveformPlayer';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -58,7 +79,8 @@ export default function DirectMessages({
   serverUrl,
   wsClient,
   onChatStateChange,
-  initialSelectedPeer = null
+  initialSelectedPeer = null,
+  onStartCall = null
 }) {
   const [selectedPeer, setSelectedPeer] = useState(initialSelectedPeer);
   const [sharedKeyMap, setSharedKeyMap] = useState({});
@@ -71,6 +93,22 @@ export default function DirectMessages({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [reactionsMap, setReactionsMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_reactions_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+  const [starredIds, setStarredIds] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_starred_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
   const chatEndRef = useRef(null);
 
   // Sync initialSelectedPeer if passed from notification click
@@ -279,7 +317,9 @@ export default function DirectMessages({
           let mediaId = null;
           let mediaKeyB64 = null;
           let originalName = null;
-          let mimeType = null;
+          let isVoice = false;
+          let voiceDuration = 0;
+          let replyTo = null;
 
           if (!isLegacyExpired) {
             try {
@@ -290,6 +330,9 @@ export default function DirectMessages({
                 mediaKeyB64 = parsed.mediaKeyB64 || null;
                 originalName = parsed.originalName || null;
                 mimeType = parsed.mimeType || null;
+                isVoice = !!parsed.isVoice;
+                voiceDuration = parsed.voiceDuration || 0;
+                replyTo = parsed.replyTo || null;
               }
             } catch (e) {
               // plain text
@@ -302,6 +345,9 @@ export default function DirectMessages({
             mediaKeyB64,
             originalName,
             mimeType,
+            isVoice,
+            voiceDuration,
+            replyTo,
             isLegacyExpired
           };
 
@@ -309,8 +355,8 @@ export default function DirectMessages({
           newMapEntries[m.id] = msgMeta;
           hasNewDecryptions = true;
 
-          if (textContent) {
-            localSearchIndex.indexMessage(m.id, m.sender, m.recipient, textContent, m.timestamp);
+          if (textContent || isVoice) {
+            localSearchIndex.indexMessage(m.id, m.sender, m.recipient, textContent || '🎤 Voice note', m.timestamp);
           }
         }
 
@@ -467,6 +513,97 @@ export default function DirectMessages({
     setMediaUploading(false);
   };
 
+  // Toggle emoji reaction
+  const toggleReaction = (msgId, emoji) => {
+    setReactionsMap(prev => {
+      const msgReactions = { ...(prev[msgId] || {}) };
+      msgReactions[emoji] = (msgReactions[emoji] || 0) + 1;
+      const updated = { ...prev, [msgId]: msgReactions };
+      try {
+        localStorage.setItem(`ciphersocial_reactions_${currentUser?.username}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Toggle star message
+  const toggleStar = (msg) => {
+    setStarredIds(prev => {
+      const updated = new Set(prev);
+      if (updated.has(msg.id)) {
+        updated.delete(msg.id);
+      } else {
+        updated.add(msg.id);
+      }
+      try {
+        localStorage.setItem(`ciphersocial_starred_${currentUser?.username}`, JSON.stringify(Array.from(updated)));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Send a voice note
+  const handleSendVoiceNote = async (audioBlob, duration) => {
+    if (!selectedPeer || !sharedKeyMap[selectedPeer.username]) return;
+    setSending(true);
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const { encryptedBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(arrayBuffer);
+      const formData = new FormData();
+      formData.append('file', new Blob([encryptedBuffer], { type: 'application/octet-stream' }));
+      formData.append('iv', iv);
+      formData.append('originalName', `voice_${Date.now()}.webm`);
+      formData.append('mimeType', audioBlob.type || 'audio/webm');
+      formData.append('fileSize', arrayBuffer.byteLength);
+
+      const uploadRes = await fetch(`${serverUrl}/api/media/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success) throw new Error('Failed to upload voice note');
+
+      const currentSeq = (ratchetSeqMap[selectedPeer.username] || 0) + 1;
+      setRatchetSeqMap(prev => ({ ...prev, [selectedPeer.username]: currentSeq }));
+      const ratchetKey = await deriveRatchetMessageKey(sharedKeyMap[selectedPeer.username], currentSeq);
+
+      const payloadString = JSON.stringify({
+        text: '',
+        mediaId: uploadData.media.id,
+        mediaKeyB64,
+        originalName: uploadData.media.originalName,
+        mimeType: uploadData.media.mimeType,
+        isVoice: true,
+        voiceDuration: duration,
+        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+      });
+
+      const { ciphertext, iv: msgIv } = await encryptText(ratchetKey, payloadString);
+      const msgRes = await fetch(`${serverUrl}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: currentUser.username,
+          recipient: selectedPeer.username,
+          ciphertext,
+          iv: msgIv,
+          ratchetSeq: currentSeq
+        })
+      });
+      const msgData = await msgRes.json();
+      if (msgData.success) {
+        setMessages(prev => [...prev, msgData.message]);
+        setIsRecordingVoice(false);
+        setReplyingTo(null);
+      }
+    } catch (err) {
+      console.error('Failed to send voice note:', err);
+      alert('Failed to send voice note. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Send a private message (with text, attachment, or both)
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -490,13 +627,14 @@ export default function DirectMessages({
 
       const ratchetKey = await deriveRatchetMessageKey(sharedKey, currentSeq);
 
-      // Bundle text + media payload into end-to-end encrypted ratchet payload
+      // Bundle text + media payload + quoted reply into end-to-end encrypted ratchet payload
       const payloadString = JSON.stringify({
         text: hasText ? inputMessage.trim() : '',
         mediaId: hasMedia ? attachedMedia.mediaId : null,
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
-        mimeType: hasMedia ? attachedMedia.mimeType : null
+        mimeType: hasMedia ? attachedMedia.mimeType : null,
+        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
       });
 
       const { ciphertext, iv } = await encryptText(ratchetKey, payloadString);
@@ -521,6 +659,7 @@ export default function DirectMessages({
       if (data.success) {
         setInputMessage('');
         clearAttachment();
+        setReplyingTo(null);
         setMessages(prev => [...prev, data.message]);
       }
     } catch (err) {
@@ -553,6 +692,7 @@ export default function DirectMessages({
           <div className="dm-contacts-list">
             {peers.map(peer => {
               const preview = conversationPreviews[peer.username];
+              const isPeerActive = peer.isOnline || (peer.lastSeen && (Date.now() - new Date(peer.lastSeen).getTime()) < 120000);
               const lastSeenText = formatLastSeen(peer.lastSeen, peer.isOnline);
               const messageTime = preview?.timestamp ? formatMessageTime(preview.timestamp) : '';
 
@@ -606,7 +746,7 @@ export default function DirectMessages({
                       </div>
                     )}
 
-                    {peer.isOnline && (
+                    {isPeerActive && (
                       <div
                         style={{
                           position: 'absolute',
@@ -666,8 +806,8 @@ export default function DirectMessages({
                     </div>
 
                     {/* Bottom Row: Last Seen Presence */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: peer.isOnline ? '#34d399' : '#64748b' }}>
-                      <Circle size={6} color={peer.isOnline ? '#10b981' : '#64748b'} fill={peer.isOnline ? '#10b981' : '#64748b'} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: isPeerActive ? '#34d399' : '#64748b' }}>
+                      <Circle size={6} color={isPeerActive ? '#10b981' : '#64748b'} fill={isPeerActive ? '#10b981' : '#64748b'} />
                       <span>{lastSeenText}</span>
                     </div>
                   </div>
@@ -682,44 +822,89 @@ export default function DirectMessages({
 
   // ── CONVERSATION SCREEN ───────────────────────────────────────
   const activePeer = selectedPeer ? (allUsers.find(u => u.username === selectedPeer.username) || selectedPeer) : null;
+  const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 
   return (
     <div className="dm-chat-screen">
-      {/* Chat Header with Back Button */}
+      {/* Chat Header with Call Buttons */}
       <div className="chat-header">
-        <button className="back-btn" onClick={() => setSelectedPeer(null)} title="Back to contacts">
-          <ArrowLeft size={20} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button className="back-btn" onClick={() => setSelectedPeer(null)} title="Back to contacts">
+            <ArrowLeft size={20} />
+          </button>
 
-        <div className="peer-profile">
-          {activePeer.avatarUrl ? (
-            <img
-              src={activePeer.avatarUrl}
-              alt={activePeer.username}
-              className="avatar-circle"
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: `1.5px solid ${activePeer.avatarColor || '#3b82f6'}`
-              }}
-            />
-          ) : (
-            <div className="avatar-circle" style={{ backgroundColor: activePeer.avatarColor }}>
-              {activePeer.username[0].toUpperCase()}
+          <div className="peer-profile">
+            {activePeer.avatarUrl ? (
+              <img
+                src={activePeer.avatarUrl}
+                alt={activePeer.username}
+                className="avatar-circle"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: `1.5px solid ${activePeer.avatarColor || '#3b82f6'}`
+                }}
+              />
+            ) : (
+              <div className="avatar-circle" style={{ backgroundColor: activePeer.avatarColor }}>
+                {activePeer.username[0].toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h4>{activePeer.displayName || activePeer.username}</h4>
+              <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Circle size={7} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} />
+                <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
+                <span style={{ opacity: 0.5 }}>•</span>
+                <ShieldCheck size={12} color="#10b981" />
+                <span>End-to-end encrypted</span>
+              </span>
             </div>
-          )}
-          <div>
-            <h4>{activePeer.displayName || activePeer.username}</h4>
-            <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Circle size={7} color={activePeer.isOnline ? '#10b981' : '#94a3b8'} fill={activePeer.isOnline ? '#10b981' : '#94a3b8'} />
-              <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
-              <span style={{ opacity: 0.5 }}>•</span>
-              <ShieldCheck size={12} color="#10b981" />
-              <span>End-to-end encrypted</span>
-            </span>
           </div>
+        </div>
+
+        {/* Header Voice & Video Call Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => onStartCall && onStartCall(activePeer, false)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              color: '#34d399',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title="Encrypted Audio Call"
+          >
+            <Phone size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onStartCall && onStartCall(activePeer, true)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              color: '#60a5fa',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title="Encrypted Video Call"
+          >
+            <Video size={17} />
+          </button>
         </div>
       </div>
 
@@ -729,17 +914,36 @@ export default function DirectMessages({
           <div className="empty-chat">
             <Lock size={32} color="#94a3b8" />
             <p>Start a private conversation with {activePeer.displayName || activePeer.username}.</p>
-            <span>Only you and {activePeer.displayName || activePeer.username} can read messages and files.</span>
+            <span>Only you and {activePeer.displayName || activePeer.username} can read messages, listen to voice notes, and view shared media.</span>
           </div>
         ) : (
           messages.map(msg => {
             const isMine = msg.sender === currentUser.username;
             const msgMeta = decryptedMsgMap[msg.id] || { text: 'Decrypting message...' };
             const mediaDecrypted = msgMeta.mediaId ? decryptedMediaMap[msgMeta.mediaId] : null;
+            const isStarred = starredIds.has(msg.id);
+            const msgReactions = reactionsMap[msg.id] || {};
 
             return (
               <div key={msg.id} className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}>
-                <div className="message-bubble">
+                <div className="message-bubble" style={{ position: 'relative' }}>
+                  {/* Quoted Reply Context (if any) */}
+                  {msgMeta.replyTo && (
+                    <div
+                      style={{
+                        padding: '4px 8px',
+                        background: 'rgba(0, 0, 0, 0.2)',
+                        borderLeft: '3px solid #ee7882',
+                        borderRadius: '4px',
+                        marginBottom: '6px',
+                        fontSize: '0.74rem'
+                      }}
+                    >
+                      <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
+                      <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                    </div>
+                  )}
+
                   {/* Message Text (if any) */}
                   {msgMeta.text ? (
                     msgMeta.isLegacyExpired ? (
@@ -752,8 +956,26 @@ export default function DirectMessages({
                     )
                   ) : null}
 
-                  {/* Decrypted Media Attachment (if present) */}
-                  {msgMeta.mediaId && (
+                  {/* Encrypted Voice Note Player (if voice message) */}
+                  {msgMeta.isVoice && (
+                    <div style={{ margin: '4px 0' }}>
+                      {mediaDecrypted ? (
+                        <VoiceWaveformPlayer
+                          src={mediaDecrypted.objectUrl}
+                          duration={msgMeta.voiceDuration}
+                          isMine={isMine}
+                        />
+                      ) : (
+                        <div className="dm-media-decrypting">
+                          <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                          <span>Decrypting voice note...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Decrypted Media Attachment (if present and not voice) */}
+                  {msgMeta.mediaId && !msgMeta.isVoice && (
                     <div className="dm-media-attachment-container">
                       {mediaDecrypted ? (
                         <EncryptedAttachmentViewer
@@ -771,10 +993,71 @@ export default function DirectMessages({
                     </div>
                   )}
 
-                  <div className="msg-meta">
-                    <Unlock size={10} color="#10b981" />
-                    <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                  {/* Message Footer: Timestamp, Star, & Actions */}
+                  <div className="msg-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Unlock size={10} color="#10b981" />
+                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      {isStarred && <Star size={11} color="#fbbf24" fill="#fbbf24" style={{ marginLeft: '4px' }} />}
+                    </div>
+
+                    {/* Quick Reactions & Reply Actions */}
+                    <div className="msg-hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {['❤️', '🔥', '👍'].map(emoji => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '0 2px' }}
+                          title={`React ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo({ id: msg.id, sender: msg.sender, text: msgMeta.text || (msgMeta.isVoice ? 'Voice Note' : 'Attachment') })}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px' }}
+                        title="Reply"
+                      >
+                        <CornerUpLeft size={12} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleStar(msg)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: isStarred ? '#fbbf24' : '#94a3b8', padding: '0 2px' }}
+                        title={isStarred ? 'Unstar' : 'Star message'}
+                      >
+                        <Star size={12} fill={isStarred ? '#fbbf24' : 'none'} />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Reaction Badges Container */}
+                  {Object.keys(msgReactions).length > 0 && (
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                      {Object.entries(msgReactions).map(([emoji, count]) => (
+                        <span
+                          key={emoji}
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          style={{
+                            fontSize: '0.72rem',
+                            background: 'rgba(0,0,0,0.3)',
+                            padding: '1px 5px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          {emoji} {count > 1 && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{count}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -782,6 +1065,34 @@ export default function DirectMessages({
         )}
         <div ref={chatEndRef} />
       </div>
+
+      {/* Reply Preview Context Banner */}
+      {replyingTo && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 16px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            borderLeft: '4px solid #ee7882',
+            fontSize: '0.8rem',
+            color: '#cbd5e1'
+          }}
+        >
+          <div>
+            <span style={{ fontWeight: 'bold', color: '#ee7882' }}>Replying to @{replyingTo.sender}: </span>
+            <span>{replyingTo.text.slice(0, 45)}...</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyingTo(null)}
+            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Attachment Preview Box (if selected) */}
       {attachedMedia && (
@@ -814,46 +1125,68 @@ export default function DirectMessages({
         </div>
       )}
 
-      {/* Input Form with Attachment Button */}
-      <form onSubmit={handleSendMessage} className="chat-input-form">
-        <label className="dm-paperclip-btn" title="Attach encrypted file (photos, docs, videos)">
-          <Paperclip size={18} />
-          <input
-            type="file"
-            accept="*"
-            onChange={handleFileSelect}
-            onClick={(e) => { e.target.value = null; }}
-            hidden
+      {/* Input Form with Attachment & Voice Note Recorder */}
+      {isRecordingVoice ? (
+        <div style={{ padding: '8px 12px' }}>
+          <VoiceNoteRecorder
+            onSend={handleSendVoiceNote}
+            onCancel={() => setIsRecordingVoice(false)}
           />
-        </label>
+        </div>
+      ) : (
+        <form onSubmit={handleSendMessage} className="chat-input-form">
+          <label className="dm-paperclip-btn" title="Attach encrypted file (photos, docs, videos)">
+            <Paperclip size={18} />
+            <input
+              type="file"
+              accept="*"
+              onChange={handleFileSelect}
+              onClick={(e) => { e.target.value = null; }}
+              hidden
+            />
+          </label>
 
-        <input
-          type="text"
-          placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${selectedPeer.username}...`}
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          disabled={sending}
-        />
+          <input
+            type="text"
+            placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${activePeer.displayName || activePeer.username}...`}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            disabled={sending}
+          />
 
-        <button type="submit" className="primary-btn send-dm-btn" disabled={!canSend}>
-          {sending ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              <span>Sending...</span>
-            </>
-          ) : mediaUploading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              <span>Securing...</span>
-            </>
+          {/* Voice Note Button */}
+          {!inputMessage.trim() && !attachedMedia ? (
+            <button
+              type="button"
+              onClick={() => setIsRecordingVoice(true)}
+              className="primary-btn send-dm-btn"
+              style={{ background: 'rgba(238, 120, 130, 0.2)', border: '1px solid rgba(238, 120, 130, 0.4)', color: '#ee7882' }}
+              title="Record Voice Note"
+            >
+              <Mic size={16} />
+            </button>
           ) : (
-            <>
-              <Send size={16} />
-              <span>Send</span>
-            </>
+            <button type="submit" className="primary-btn send-dm-btn" disabled={!canSend}>
+              {sending ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : mediaUploading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Securing...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  <span>Send</span>
+                </>
+              )}
+            </button>
           )}
-        </button>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

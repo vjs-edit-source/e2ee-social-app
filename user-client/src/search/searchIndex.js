@@ -1,22 +1,23 @@
-/**
+﻿/**
  * Client-Side Zero-Knowledge Full-Text Search Engine
- * Runs 100% in-memory in the browser. Zero search queries leave the device.
+ * Runs 100% in-memory on device. Zero search queries or keywords leave the client.
  */
 
-// Helper to safely escape special characters in regular expressions (?, *, +, (, ), [, ], \, etc.)
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 class ClientSearchIndex {
   constructor() {
-    this.posts = [];    // Array of { id, author, text, timestamp, type: 'post' }
-    this.messages = []; // Array of { id, sender, recipient, text, timestamp, type: 'message' }
+    this.posts = [];
+    this.messages = [];
+    this.groupMessages = [];
   }
 
   clear() {
     this.posts = [];
     this.messages = [];
+    this.groupMessages = [];
   }
 
   indexPost(id, author, decryptedText, timestamp) {
@@ -44,44 +45,76 @@ class ClientSearchIndex {
     });
   }
 
-  search(query) {
+  indexGroupMessage(id, groupId, groupName, sender, decryptedText, timestamp) {
+    if (!id || !decryptedText) return;
+    this.groupMessages = this.groupMessages.filter(m => m.id !== id);
+    this.groupMessages.push({
+      id,
+      groupId,
+      groupName,
+      sender,
+      text: decryptedText,
+      timestamp,
+      type: 'group'
+    });
+  }
+
+  search(query, category = 'all') {
     if (!query || !query.trim()) return [];
     const tokens = query.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0);
 
     const results = [];
 
     // Search Posts
-    for (const post of this.posts) {
-      const matchScore = this.calculateScore(post.text, post.author, tokens);
-      if (matchScore > 0) {
-        results.push({
-          ...post,
-          score: matchScore,
-          snippet: this.highlightSnippet(post.text, tokens)
-        });
+    if (category === 'all' || category === 'posts') {
+      for (const post of this.posts) {
+        const matchScore = this.calculateScore(post.text, post.author, tokens);
+        if (matchScore > 0) {
+          results.push({
+            ...post,
+            score: matchScore,
+            snippet: this.highlightSnippet(post.text, tokens)
+          });
+        }
       }
     }
 
-    // Search Messages
-    for (const msg of this.messages) {
-      const matchScore = this.calculateScore(msg.text, `${msg.sender} ${msg.recipient}`, tokens);
-      if (matchScore > 0) {
-        results.push({
-          ...msg,
-          score: matchScore,
-          snippet: this.highlightSnippet(msg.text, tokens)
-        });
+    // Search DMs
+    if (category === 'all' || category === 'messages') {
+      for (const msg of this.messages) {
+        const matchScore = this.calculateScore(msg.text, `${msg.sender} ${msg.recipient}`, tokens);
+        if (matchScore > 0) {
+          results.push({
+            ...msg,
+            score: matchScore,
+            snippet: this.highlightSnippet(msg.text, tokens)
+          });
+        }
       }
     }
 
-    // Sort by highest score, then newest
+    // Search Group Messages
+    if (category === 'all' || category === 'groups') {
+      for (const gm of this.groupMessages) {
+        const matchScore = this.calculateScore(gm.text, `${gm.sender} ${gm.groupName}`, tokens);
+        if (matchScore > 0) {
+          results.push({
+            ...gm,
+            score: matchScore,
+            snippet: this.highlightSnippet(gm.text, tokens)
+          });
+        }
+      }
+    }
+
+    // Sort by highest relevance score, then newest timestamp
     return results.sort((a, b) => b.score - a.score || new Date(b.timestamp) - new Date(a.timestamp));
   }
 
   calculateScore(content, metadata, tokens) {
     let score = 0;
     const contentLower = content.toLowerCase();
-    const metaLower = metadata.toLowerCase();
+    const metaLower = (metadata || '').toLowerCase();
 
     for (const token of tokens) {
       if (!token) continue;
@@ -104,18 +137,17 @@ class ClientSearchIndex {
   }
 
   highlightSnippet(text, tokens) {
-    let snippet = text;
+    if (!text) return '';
+    let snippet = text.slice(0, 140);
     for (const token of tokens) {
       if (!token) continue;
       try {
         const safeToken = escapeRegExp(token);
         const regex = new RegExp(`(${safeToken})`, 'gi');
-        snippet = snippet.replace(regex, '<mark>$1</mark>');
-      } catch (e) {
-        // Fallback safely if regex fails
-      }
+        snippet = snippet.replace(regex, '<mark class="search-hl">$1</mark>');
+      } catch (e) {}
     }
-    return snippet;
+    return snippet + (text.length > 140 ? '...' : '');
   }
 }
 

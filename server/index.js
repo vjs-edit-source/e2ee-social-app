@@ -530,6 +530,16 @@ wss.on('connection', (ws, req) => {
           db.updateUserPresence(username, true);
         }
         ws.send(JSON.stringify({ type: 'PONG' }));
+      } else if (['CALL_OFFER', 'CALL_ANSWER', 'CALL_ICE_CANDIDATE', 'CALL_REJECT', 'CALL_HANGUP'].includes(data.type)) {
+        const targetUsername = data.target || data.recipient || data.caller;
+        if (targetUsername && connectedClients.has(targetUsername)) {
+          const targetSockets = connectedClients.get(targetUsername);
+          for (const s of targetSockets) {
+            if (s.readyState === 1 /* OPEN */) {
+              s.send(JSON.stringify(data));
+            }
+          }
+        }
       }
     } catch (e) {
       console.error('[WS] Message parse error', e);

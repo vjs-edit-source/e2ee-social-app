@@ -8,6 +8,8 @@ import AuthModal from './components/AuthModal';
 import SearchModal from './components/SearchModal';
 import EngineSettingsModal from './components/EngineSettingsModal';
 import SettingsScreen from './components/SettingsScreen';
+import CallModal from './components/CallModal';
+import AppLockOverlay from './components/AppLockOverlay';
 import { initializeUserIdentity, getCurrentUsername } from './crypto/vault';
 import {
   getEngineUrl,
@@ -50,6 +52,23 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showEngineModal, setShowEngineModal] = useState(false);
+
+  // App Lock State
+  const [isAppLocked, setIsAppLocked] = useState(() => Boolean(localStorage.getItem('ciphersocial_pin_hash')));
+
+  // WebRTC Active Call State
+  const [activeCall, setActiveCall] = useState(null); // null | { isIncoming, peer, isVideo, offer }
+
+  // Auto-lock when user leaves and returns to app
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && localStorage.getItem('ciphersocial_pin_hash')) {
+        setIsAppLocked(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   // In-App Notification & Unread Count State
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
@@ -287,6 +306,20 @@ export default function App() {
                   } catch (e) {}
                 }
               }
+            } else if (data.type === 'CALL_OFFER') {
+              if (data.target === currentUser?.username) {
+                const callerUser = allUsersRef.current.find(u => u.username === data.caller) || {
+                  username: data.caller,
+                  displayName: data.callerDisplayName || data.caller,
+                  avatarUrl: data.callerAvatarUrl || null
+                };
+                setActiveCall({
+                  isIncoming: true,
+                  peer: callerUser,
+                  isVideo: !!data.isVideo,
+                  offer: data.offer
+                });
+              }
             }
           } catch (e) {
             console.error('WS event error:', e);
@@ -475,7 +508,44 @@ export default function App() {
 
       {/* Zero Knowledge Search Overlay */}
       {showSearchModal && (
-        <SearchModal onClose={() => setShowSearchModal(false)} />
+        <SearchModal
+          onClose={() => setShowSearchModal(false)}
+          onNavigate={(hit) => {
+            if (hit.type === 'message') {
+              const targetName = hit.sender === currentUser?.username ? hit.recipient : hit.sender;
+              const targetUser = allUsers.find(u => u.username === targetName) || { username: targetName };
+              setSelectedDirectPeer(targetUser);
+              setActiveTab('messages');
+            } else if (hit.type === 'group') {
+              setActiveTab('groups');
+            } else {
+              setActiveTab('feed');
+            }
+          }}
+        />
+      )}
+
+      {/* Zero-Knowledge WebRTC Audio/Video Call Modal */}
+      {activeCall && currentUser && (
+        <CallModal
+          callData={activeCall}
+          currentUser={currentUser}
+          wsClient={wsClient}
+          onClose={() => setActiveCall(null)}
+        />
+      )}
+
+      {/* App Lock PIN / Biometrics Screen */}
+      {isAppLocked && currentUser && (
+        <AppLockOverlay
+          onUnlock={() => setIsAppLocked(false)}
+          onPanic={() => {
+            if (window.confirm('Trigger Panic Mode? This will clear local cached sessions.')) {
+              localStorage.clear();
+              window.location.reload();
+            }
+          }}
+        />
       )}
 
       {/* Engine Settings Modal */}
@@ -516,6 +586,7 @@ export default function App() {
                 wsClient={wsClient}
                 onChatStateChange={setIsDMChatOpen}
                 initialSelectedPeer={selectedDirectPeer}
+                onStartCall={(peer, isVideo) => setActiveCall({ isIncoming: false, peer, isVideo })}
               />
             )}
 
@@ -545,6 +616,7 @@ export default function App() {
                 serverUrl={serverUrl}
                 onSwitchUser={() => setShowAuthModal(true)}
                 onOpenEngineSettings={() => setShowEngineModal(true)}
+                onTriggerLock={() => setIsAppLocked(true)}
                 onProfileUpdated={(updatedUser) => {
                   setCurrentUser(prev => ({
                     ...prev,

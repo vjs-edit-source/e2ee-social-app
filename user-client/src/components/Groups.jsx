@@ -31,7 +31,11 @@ import {
   Copy,
   CheckCheck,
   AlertCircle,
-  Camera
+  Camera,
+  Mic,
+  CornerUpLeft,
+  Star,
+  Smile
 } from 'lucide-react';
 import {
   encryptPost,
@@ -40,6 +44,9 @@ import {
   decryptMediaBuffer
 } from '../crypto/e2ee';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
+import VoiceWaveformPlayer from './VoiceWaveformPlayer';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
+import { localSearchIndex } from '../search/searchIndex';
 
 export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient, onGroupChatStateChange }) {
   const [groups, setGroups] = useState([]);
@@ -67,6 +74,15 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [groupReactionsMap, setGroupReactionsMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_group_reactions_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
 
@@ -267,16 +283,46 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               currentUser.keyPair.privateKey
             );
 
+            let text = dec.text;
+            let isVoice = false;
+            let voiceDuration = 0;
+            let replyTo = null;
+
+            try {
+              const parsed = JSON.parse(dec.text);
+              if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.isVoice !== undefined)) {
+                text = parsed.text || '';
+                isVoice = !!parsed.isVoice;
+                voiceDuration = parsed.voiceDuration || 0;
+                replyTo = parsed.replyTo || null;
+              }
+            } catch (e) {}
+
             msgMeta = {
-              text: dec.text,
+              text,
               mediaKey: dec.mediaKey,
-              mediaId: m.mediaId
+              mediaId: m.mediaId,
+              isVoice,
+              voiceDuration,
+              replyTo
             };
+
+            localSearchIndex.indexGroupMessage(
+              m.id,
+              selectedGroup.id,
+              selectedGroup.name,
+              m.sender,
+              text || (isVoice ? '🎤 Voice note' : ''),
+              m.timestamp
+            );
           } catch (e) {
             msgMeta = {
               text: '🔒 Encrypted Group Message',
               mediaKey: null,
-              mediaId: null
+              mediaId: null,
+              isVoice: false,
+              voiceDuration: 0,
+              replyTo: null
             };
           }
 
@@ -397,6 +443,106 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const canCreatePolls = isModerator || groupPerms.createPolls !== false;
   const canEditInfo = isAdmin || groupPerms.editInfo === true;
 
+  // Toggle group emoji reaction
+  const toggleGroupReaction = (msgId, emoji) => {
+    setGroupReactionsMap(prev => {
+      const msgReactions = { ...(prev[msgId] || {}) };
+      msgReactions[emoji] = (msgReactions[emoji] || 0) + 1;
+      const updated = { ...prev, [msgId]: msgReactions };
+      try {
+        localStorage.setItem(`ciphersocial_group_reactions_${currentUser?.username}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Send Group Voice Note
+  const handleSendVoiceNote = async (audioBlob, duration) => {
+    if (!selectedGroup || !currentUser?.keyPair || !canSendMessage) return;
+    setSending(true);
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const { encryptedBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(arrayBuffer);
+      const formData = new FormData();
+      formData.append('file', new Blob([encryptedBuffer], { type: 'application/octet-stream' }));
+      formData.append('iv', iv);
+      formData.append('originalName', `group_voice_${Date.now()}.webm`);
+      formData.append('mimeType', audioBlob.type || 'audio/webm');
+      formData.append('fileSize', arrayBuffer.byteLength);
+
+      const uploadRes = await fetch(`${serverUrl}/api/media/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success) throw new Error('Failed to upload voice note');
+
+      let userList = allUsers;
+      try {
+        const uRes = await fetch(`${serverUrl}/api/users`);
+        if (uRes.ok) userList = await uRes.json();
+      } catch (e) {}
+
+      const memberNames = selectedGroup.isCommunity
+        ? userList.map(u => u.username)
+        : (selectedGroup.members || [currentUser.username]);
+
+      const recipientPublicKeys = userList
+        .filter(u => memberNames.includes(u.username))
+        .map(u => ({
+          username: u.username,
+          spkiPublicKey: u.publicIdentityKey
+        }));
+
+      if (!recipientPublicKeys.some(r => r.username === currentUser.username)) {
+        recipientPublicKeys.push({
+          username: currentUser.username,
+          spkiPublicKey: currentUser.spkiPublicKey
+        });
+      }
+
+      const payloadString = JSON.stringify({
+        text: '',
+        isVoice: true,
+        voiceDuration: duration,
+        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+      });
+
+      const { ciphertext, iv: msgIv, keyEnvelopes } = await encryptPost(
+        payloadString,
+        recipientPublicKeys,
+        uploadData.media.mediaKeyB64 || mediaKeyB64
+      );
+
+      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: currentUser.username,
+          ciphertext,
+          iv: msgIv,
+          keyEnvelopes,
+          mediaId: uploadData.media.id
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to send voice note');
+      const data = await res.json();
+
+      setMessages(prev => {
+        if (prev.some(m => m.id === data.message.id)) return prev;
+        return [...prev, data.message];
+      });
+      setIsRecordingVoice(false);
+      setReplyingTo(null);
+    } catch (err) {
+      console.error('Failed to send group voice note:', err);
+      alert('Failed to send voice note.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Send Group Message
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -432,8 +578,13 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
         });
       }
 
+      const payloadString = JSON.stringify({
+        text: inputMessage.trim(),
+        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+      });
+
       const { ciphertext, iv, keyEnvelopes } = await encryptPost(
-        inputMessage.trim(),
+        payloadString,
         recipientPublicKeys,
         attachedMedia?.mediaKeyB64 || null
       );
@@ -459,6 +610,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       });
       setInputMessage('');
       clearAttachment();
+      setReplyingTo(null);
     } catch (err) {
       console.error('Failed to send group message:', err);
       alert('Failed to send message.');
@@ -1048,6 +1200,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               const authorColor = authorUser?.avatarColor || '#8b5cf6';
               const remainingTimeStr = formatRemainingTime(msg.expiresAt);
               const isPinned = selectedGroup.pinnedMessageId === msg.id;
+              const msgReactions = groupReactionsMap[msg.id] || {};
 
               return (
                 <div
@@ -1055,7 +1208,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   ref={el => (messageRefs.current[msg.id] = el)}
                   className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
                 >
-                  <div className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}>
+                  <div className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`} style={{ position: 'relative' }}>
                     {!isMine && (
                       <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {authorUser?.avatarUrl ? (
@@ -1078,13 +1231,48 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                       </div>
                     )}
 
+                    {/* Quoted Reply Context (if any) */}
+                    {msgMeta.replyTo && (
+                      <div
+                        style={{
+                          padding: '4px 8px',
+                          background: 'rgba(0, 0, 0, 0.25)',
+                          borderLeft: '3px solid #ee7882',
+                          borderRadius: '4px',
+                          marginBottom: '6px',
+                          fontSize: '0.74rem'
+                        }}
+                      >
+                        <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
+                        <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                      </div>
+                    )}
+
                     {/* Text */}
                     {msgMeta.text && (
                       <div className="msg-text">{msgMeta.text}</div>
                     )}
 
-                    {/* Media Attachment */}
-                    {msg.mediaId && (
+                    {/* Voice Note Player (if voice message) */}
+                    {msgMeta.isVoice && (
+                      <div style={{ margin: '4px 0' }}>
+                        {mediaDecrypted ? (
+                          <VoiceWaveformPlayer
+                            src={mediaDecrypted.objectUrl}
+                            duration={msgMeta.voiceDuration}
+                            isMine={isMine}
+                          />
+                        ) : (
+                          <div className="dm-media-decrypting">
+                            <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                            <span>Decrypting voice note...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Media Attachment (if not voice) */}
+                    {msg.mediaId && !msgMeta.isVoice && (
                       <div className="dm-media-attachment-container">
                         {mediaDecrypted ? (
                           <EncryptedAttachmentViewer
@@ -1101,8 +1289,8 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                       </div>
                     )}
 
-                    <div className="msg-meta">
-                      <div className="msg-meta-left">
+                    <div className="msg-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div className="msg-meta-left" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <ShieldCheck size={10} color="#10b981" />
                         <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
@@ -1114,16 +1302,64 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                         </span>
                       )}
 
-                      {isModerator && (
+                      {/* Quick Reactions & Reply Action Bar */}
+                      <div className="msg-hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {['❤️', '🔥', '👍'].map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => toggleGroupReaction(msg.id, emoji)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '0 2px' }}
+                            title={`React ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+
                         <button
-                          className={`pin-msg-btn ${isPinned ? 'pinned' : ''}`}
-                          onClick={() => handleTogglePin(msg.id)}
-                          title={isPinned ? 'Unpin message' : 'Pin message'}
+                          type="button"
+                          onClick={() => setReplyingTo({ id: msg.id, sender: msg.sender, text: msgMeta.text || (msgMeta.isVoice ? 'Voice Note' : 'Attachment') })}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px' }}
+                          title="Reply"
                         >
-                          <Pin size={11} />
+                          <CornerUpLeft size={12} />
                         </button>
-                      )}
+
+                        {isModerator && (
+                          <button
+                            className={`pin-msg-btn ${isPinned ? 'pinned' : ''}`}
+                            onClick={() => handleTogglePin(msg.id)}
+                            title={isPinned ? 'Unpin message' : 'Pin message'}
+                          >
+                            <Pin size={11} />
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Reaction Badges */}
+                    {Object.keys(msgReactions).length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                        {Object.entries(msgReactions).map(([emoji, count]) => (
+                          <span
+                            key={emoji}
+                            onClick={() => toggleGroupReaction(msg.id, emoji)}
+                            style={{
+                              fontSize: '0.72rem',
+                              background: 'rgba(0,0,0,0.3)',
+                              padding: '1px 5px',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                          >
+                            {emoji} {count > 1 && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{count}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1131,6 +1367,34 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           )}
           <div ref={chatEndRef} />
         </div>
+
+        {/* Reply Context Preview Banner */}
+        {replyingTo && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 16px',
+              background: 'rgba(15, 23, 42, 0.95)',
+              borderLeft: '4px solid #ee7882',
+              fontSize: '0.8rem',
+              color: '#cbd5e1'
+            }}
+          >
+            <div>
+              <span style={{ fontWeight: 'bold', color: '#ee7882' }}>Replying to @{replyingTo.sender}: </span>
+              <span>{replyingTo.text.slice(0, 45)}...</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Attachment Preview Box */}
         {attachedMedia && (
@@ -1149,30 +1413,51 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
         {/* ── SLEEK FLOATING MESSAGE BAR ── */}
         <div className="group-chat-bottom-bar">
           {canSendMessage ? (
-            <form onSubmit={handleSendMessage} className="group-chat-input-capsule">
-              <label className="msg-bar-attach-btn" title="Attach encrypted media or file">
-                <Paperclip size={18} />
-                <input type="file" accept="*" onChange={handleFileSelect} onClick={e => (e.target.value = null)} hidden />
-              </label>
+            isRecordingVoice ? (
+              <div style={{ width: '100%' }}>
+                <VoiceNoteRecorder
+                  onSend={handleSendVoiceNote}
+                  onCancel={() => setIsRecordingVoice(false)}
+                />
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessage} className="group-chat-input-capsule">
+                <label className="msg-bar-attach-btn" title="Attach encrypted media or file">
+                  <Paperclip size={18} />
+                  <input type="file" accept="*" onChange={handleFileSelect} onClick={e => (e.target.value = null)} hidden />
+                </label>
 
-              <input
-                type="text"
-                placeholder={`Message ${selectedGroup.name}...`}
-                value={inputMessage}
-                onChange={e => setInputMessage(e.target.value)}
-                disabled={sending}
-                className="msg-bar-text-input"
-              />
+                <input
+                  type="text"
+                  placeholder={`Message ${selectedGroup.name}...`}
+                  value={inputMessage}
+                  onChange={e => setInputMessage(e.target.value)}
+                  disabled={sending}
+                  className="msg-bar-text-input"
+                />
 
-              <button
-                type="submit"
-                className="msg-bar-send-btn"
-                disabled={(!inputMessage.trim() && !attachedMedia) || sending || mediaUploading}
-                title="Send encrypted message"
-              >
-                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              </button>
-            </form>
+                {!inputMessage.trim() && !attachedMedia ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsRecordingVoice(true)}
+                    className="msg-bar-send-btn"
+                    style={{ background: 'rgba(238, 120, 130, 0.25)', color: '#ee7882' }}
+                    title="Record voice note"
+                  >
+                    <Mic size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="msg-bar-send-btn"
+                    disabled={(!inputMessage.trim() && !attachedMedia) || sending || mediaUploading}
+                    title="Send encrypted message"
+                  >
+                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                )}
+              </form>
+            )
           ) : (
             <div className="broadcast-muted-capsule">
               <Megaphone size={17} color="#fbbf24" />
