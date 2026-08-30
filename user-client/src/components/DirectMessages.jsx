@@ -422,14 +422,29 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
                 className="dm-contact-card"
                 onClick={() => setSelectedPeer(peer)}
               >
-                <div className="contact-avatar" style={{ backgroundColor: peer.avatarColor }}>
-                  {peer.username[0].toUpperCase()}
-                </div>
+                {peer.avatarUrl ? (
+                  <img
+                    src={peer.avatarUrl}
+                    alt={peer.username}
+                    className="contact-avatar"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: `1.5px solid ${peer.avatarColor || '#3b82f6'}`
+                    }}
+                  />
+                ) : (
+                  <div className="contact-avatar" style={{ backgroundColor: peer.avatarColor }}>
+                    {peer.username[0].toUpperCase()}
+                  </div>
+                )}
                 <div className="contact-info">
-                  <div className="contact-name">{peer.username}</div>
+                  <div className="contact-name">{peer.displayName || peer.username}</div>
                   <div className="contact-subtitle">
                     <ShieldCheck size={12} color="#10b981" />
-                    <span>End-to-end encrypted</span>
+                    <span>{peer.bio ? peer.bio.slice(0, 30) : 'End-to-end encrypted'}</span>
                   </div>
                 </div>
                 <div className="contact-online-dot">
@@ -454,11 +469,26 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
         </button>
 
         <div className="peer-profile">
-          <div className="avatar-circle" style={{ backgroundColor: selectedPeer.avatarColor }}>
-            {selectedPeer.username[0].toUpperCase()}
-          </div>
+          {selectedPeer.avatarUrl ? (
+            <img
+              src={selectedPeer.avatarUrl}
+              alt={selectedPeer.username}
+              className="avatar-circle"
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: `1.5px solid ${selectedPeer.avatarColor || '#3b82f6'}`
+              }}
+            />
+          ) : (
+            <div className="avatar-circle" style={{ backgroundColor: selectedPeer.avatarColor }}>
+              {selectedPeer.username[0].toUpperCase()}
+            </div>
+          )}
           <div>
-            <h4>{selectedPeer.username}</h4>
+            <h4>{selectedPeer.displayName || selectedPeer.username}</h4>
             <span className="handshake-status">
               <ShieldCheck size={14} color="#10b981" />
               End-to-end encrypted

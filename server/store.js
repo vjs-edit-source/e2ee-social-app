@@ -288,6 +288,23 @@ class ZeroKnowledgeStore {
     return this.vaults.get(username) || null;
   }
 
+  updateUserProfile(username, { avatarUrl, avatarColor, bio, displayName, phoneNumber }) {
+    let user = this.users.get(username);
+    if (!user) {
+      user = { username, registeredAt: new Date().toISOString() };
+    }
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+    if (avatarColor) user.avatarColor = avatarColor;
+    if (bio !== undefined) user.bio = bio;
+    if (displayName !== undefined) user.displayName = displayName;
+    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
+
+    this.users.set(username, user);
+    this.scheduleSave();
+    this.syncDocToMongo('users', { username }, user);
+    return user;
+  }
+
   getUser(username) {
     return this.users.get(username) || null;
   }
@@ -295,9 +312,13 @@ class ZeroKnowledgeStore {
   getAllUsers() {
     return Array.from(this.users.values()).map(u => ({
       username: u.username,
+      displayName: u.displayName || u.username,
+      bio: u.bio || '',
+      avatarUrl: u.avatarUrl || null,
       publicIdentityKey: u.publicIdentityKey,
       publicPrekey: u.publicPrekey,
-      avatarColor: u.avatarColor,
+      avatarColor: u.avatarColor || '#3b82f6',
+      phoneNumber: u.phoneNumber || null,
       registeredAt: u.registeredAt || new Date().toISOString()
     }));
   }
@@ -351,7 +372,7 @@ class ZeroKnowledgeStore {
   }
 
   // ── GROUPS & COMMUNITIES (WITH ADVANCED SETTINGS & ROLES) ──
-  addGroup(name, description, isCommunity = false, creator, members = [], avatarColor = '#e06c75') {
+  addGroup(name, description, isCommunity = false, creator, members = [], avatarColor = '#e06c75', avatarUrl = null) {
     const uniqueMembers = Array.from(new Set([creator, ...members]));
     const roles = {};
     uniqueMembers.forEach(m => {
@@ -379,6 +400,7 @@ class ZeroKnowledgeStore {
       pinnedMessageId: null,
       polls: [],
       avatarColor,
+      avatarUrl: avatarUrl || null,
       createdAt: new Date().toISOString()
     };
     this.groups.set(group.id, group);
@@ -435,7 +457,7 @@ class ZeroKnowledgeStore {
     if (!group.settings) {
       group.settings = { disappearingTimer: 0, announcementOnly: false };
     }
-    if (!group.polls) g.polls = [];
+    if (!group.polls) group.polls = [];
     return group;
   }
 
@@ -452,12 +474,13 @@ class ZeroKnowledgeStore {
     return group;
   }
 
-  updateGroupInfo(groupId, { name, description, avatarColor }) {
+  updateGroupInfo(groupId, { name, description, avatarColor, avatarUrl }) {
     const group = this.getGroup(groupId);
     if (!group) return null;
     if (name) group.name = name.trim();
     if (description !== undefined) group.description = description.trim();
     if (avatarColor) group.avatarColor = avatarColor;
+    if (avatarUrl !== undefined) group.avatarUrl = avatarUrl;
     this.scheduleSave();
     this.syncDocToMongo('groups', { id: group.id }, group);
     return group;

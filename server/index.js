@@ -148,6 +148,20 @@ app.get('/api/users', (req, res) => {
   res.json(db.getAllUsers());
 });
 
+// 2b. Update User Profile (Avatar Photo, Display Name, Bio, Color)
+app.post('/api/user/profile', (req, res) => {
+  const { username, avatarUrl, avatarColor, bio, displayName, phoneNumber } = req.body;
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  const user = db.updateUserProfile(username, { avatarUrl, avatarColor, bio, displayName, phoneNumber });
+  broadcast({ type: 'USER_UPDATED', user });
+  notifyInspector();
+
+  res.json({ success: true, user });
+});
+
 // 3. Create Envelope-Encrypted Feed Post
 app.post('/api/posts', (req, res) => {
   const { author, ciphertext, iv, keyEnvelopes, mediaId, isPublic, postKeyB64 } = req.body;
@@ -194,12 +208,12 @@ app.get('/api/messages/:userA/:userB', (req, res) => {
 
 // Create Group or Community
 app.post('/api/groups', (req, res) => {
-  const { name, description, isCommunity, creator, members, avatarColor } = req.body;
+  const { name, description, isCommunity, creator, members, avatarColor, avatarUrl } = req.body;
   if (!name || !creator) {
     return res.status(400).json({ error: 'Group name and creator are required' });
   }
 
-  const group = db.addGroup(name, description, isCommunity, creator, members, avatarColor);
+  const group = db.addGroup(name, description, isCommunity, creator, members, avatarColor, avatarUrl);
   broadcast({ type: 'NEW_GROUP', group });
   notifyInspector();
 
@@ -290,12 +304,12 @@ app.patch('/api/groups/:groupId/permissions', (req, res) => {
   res.json({ success: true, group });
 });
 
-// Update Group Info (Name, Description, Theme Color)
+// Update Group Info (Name, Description, Theme Color, Group Picture)
 app.patch('/api/groups/:groupId/info', (req, res) => {
   const { groupId } = req.params;
-  const { name, description, avatarColor } = req.body;
+  const { name, description, avatarColor, avatarUrl } = req.body;
 
-  const group = db.updateGroupInfo(groupId, { name, description, avatarColor });
+  const group = db.updateGroupInfo(groupId, { name, description, avatarColor, avatarUrl });
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   broadcast({ type: 'GROUP_UPDATED', group });

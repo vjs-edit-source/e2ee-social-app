@@ -316,9 +316,24 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
       <div className="create-post-card">
         <div className="card-header">
-          <div className="user-avatar" style={{ backgroundColor: currentUser.avatarColor }}>
-            {currentUser.username[0].toUpperCase()}
-          </div>
+          {currentUser.avatarUrl ? (
+            <img
+              src={currentUser.avatarUrl}
+              alt={currentUser.username}
+              className="user-avatar"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: `2px solid ${currentUser.avatarColor || '#3b82f6'}`
+              }}
+            />
+          ) : (
+            <div className="user-avatar" style={{ backgroundColor: currentUser.avatarColor }}>
+              {currentUser.username[0].toUpperCase()}
+            </div>
+          )}
           <div className="header-title">
             <h3>Share something</h3>
             <span className="privacy-note privacy-note--amber">
@@ -414,11 +429,26 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             return (
               <div key={post.id} className="post-card">
                 <div className="post-author-row">
-                  <div className="author-avatar" style={{ backgroundColor: authorObj.avatarColor || '#3b82f6' }}>
-                    {post.author[0].toUpperCase()}
-                  </div>
+                  {authorObj.avatarUrl ? (
+                    <img
+                      src={authorObj.avatarUrl}
+                      alt={post.author}
+                      className="author-avatar"
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: `1.5px solid ${authorObj.avatarColor || '#3b82f6'}`
+                      }}
+                    />
+                  ) : (
+                    <div className="author-avatar" style={{ backgroundColor: authorObj.avatarColor || '#3b82f6' }}>
+                      {post.author[0].toUpperCase()}
+                    </div>
+                  )}
                   <div className="author-meta">
-                    <span className="author-name">{post.author}</span>
+                    <span className="author-name">{authorObj.displayName || post.author}</span>
                     <span className="post-time">{new Date(post.timestamp).toLocaleTimeString()}</span>
                   </div>
 

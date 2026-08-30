@@ -7,6 +7,7 @@ import StatusScreen from './components/StatusScreen';
 import AuthModal from './components/AuthModal';
 import SearchModal from './components/SearchModal';
 import EngineSettingsModal from './components/EngineSettingsModal';
+import SettingsModal from './components/SettingsModal';
 import { initializeUserIdentity, getCurrentUsername } from './crypto/vault';
 import {
   getEngineUrl,
@@ -27,6 +28,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showEngineModal, setShowEngineModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isDMChatOpen, setIsDMChatOpen] = useState(false);
   const [isGroupChatOpen, setIsGroupChatOpen] = useState(false);
 
@@ -176,8 +178,17 @@ export default function App() {
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (data.type === 'USER_JOINED') {
+            if (data.type === 'USER_JOINED' || data.type === 'USER_UPDATED') {
               loadUsersDirectory();
+              if (data.user && currentUser && data.user.username === currentUser.username) {
+                setCurrentUser(prev => ({
+                  ...prev,
+                  displayName: data.user.displayName || prev.displayName,
+                  bio: data.user.bio !== undefined ? data.user.bio : prev.bio,
+                  avatarUrl: data.user.avatarUrl !== undefined ? data.user.avatarUrl : prev.avatarUrl,
+                  avatarColor: data.user.avatarColor || prev.avatarColor
+                }));
+              }
             }
           } catch (e) {
             console.error('WS event error:', e);
@@ -251,6 +262,7 @@ export default function App() {
         onSwitchUser={() => setShowAuthModal(true)}
         onOpenSearch={() => setShowSearchModal(true)}
         onOpenEngineSettings={() => setShowEngineModal(true)}
+        onOpenSettings={() => setShowSettingsModal(true)}
         engineOnline={engineOnline}
         hideBottomNav={isAnyChatActive}
       />
@@ -265,6 +277,31 @@ export default function App() {
         <EngineSettingsModal
           onClose={() => setShowEngineModal(false)}
           onEngineChanged={handleEngineChanged}
+        />
+      )}
+
+      {/* Settings & Profile Modal */}
+      {showSettingsModal && (
+        <SettingsModal
+          currentUser={currentUser}
+          allUsers={allUsers}
+          serverUrl={serverUrl}
+          onClose={() => setShowSettingsModal(false)}
+          onSwitchUser={() => {
+            setShowSettingsModal(false);
+            setShowAuthModal(true);
+          }}
+          onOpenEngineSettings={() => {
+            setShowSettingsModal(false);
+            setShowEngineModal(true);
+          }}
+          onProfileUpdated={(updatedUser) => {
+            setCurrentUser(prev => ({
+              ...prev,
+              ...updatedUser
+            }));
+            loadUsersDirectory();
+          }}
         />
       )}
 

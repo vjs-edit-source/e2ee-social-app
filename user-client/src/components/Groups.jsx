@@ -53,6 +53,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const [groupName, setGroupName] = useState('');
   const [groupDesc, setGroupDesc] = useState('');
   const [isCommunity, setIsCommunity] = useState(false);
+  const [groupAvatarUrl, setGroupAvatarUrl] = useState(null);
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [creating, setCreating] = useState(false);
 
@@ -88,6 +89,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const [editingInfo, setEditingInfo] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState(null);
 
   // Copied Link Toast
   const [copiedLink, setCopiedLink] = useState(false);
@@ -99,6 +101,56 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const messageRefs = useRef({});
   const decryptedMsgCache = useRef({});
   const decryptedMediaCache = useRef({});
+  const groupFileInputRef = useRef(null);
+  const editGroupFileInputRef = useRef(null);
+
+  // Photo compression helper for Groups
+  const handleGroupPhotoSelect = (e, isEditing = false) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPEG, PNG, WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 240;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (isEditing) {
+          setEditAvatarUrl(dataUrl);
+        } else {
+          setGroupAvatarUrl(dataUrl);
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Notify parent component of chat state (to hide floating bottom nav when inside a group chat)
   useEffect(() => {
@@ -430,7 +482,8 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           isCommunity,
           creator: currentUser.username,
           members: selectedMembers,
-          avatarColor: isCommunity ? '#3b82f6' : '#e06c75'
+          avatarColor: isCommunity ? '#3b82f6' : '#e06c75',
+          avatarUrl: groupAvatarUrl
         })
       });
 
@@ -442,6 +495,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       setShowCreateModal(false);
       setGroupName('');
       setGroupDesc('');
+      setGroupAvatarUrl(null);
       setSelectedMembers([]);
     } catch (err) {
       console.error('Failed to create group:', err);
@@ -487,7 +541,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     }
   };
 
-  // Update Group Info (Name & Description)
+  // Update Group Info (Name, Description & Photo)
   const handleSaveGroupInfo = async (e) => {
     e.preventDefault();
     if (!selectedGroup || !canEditInfo || !editName.trim()) return;
@@ -497,7 +551,8 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editName.trim(),
-          description: editDesc.trim()
+          description: editDesc.trim(),
+          avatarUrl: editAvatarUrl
         })
       });
       if (res.ok) {
@@ -723,13 +778,30 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               <ArrowLeft size={18} />
             </button>
 
-            <div
-              className="avatar-circle group-avatar-header"
-              style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75' }}
-              onClick={() => setShowMembersDrawer(true)}
-            >
-              {selectedGroup.isCommunity ? <Globe size={18} /> : selectedGroup.name[0].toUpperCase()}
-            </div>
+            {selectedGroup.avatarUrl ? (
+              <img
+                src={selectedGroup.avatarUrl}
+                alt={selectedGroup.name}
+                className="avatar-circle group-avatar-header"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  cursor: 'pointer',
+                  border: `1.5px solid ${selectedGroup.avatarColor || '#e06c75'}`
+                }}
+                onClick={() => setShowMembersDrawer(true)}
+              />
+            ) : (
+              <div
+                className="avatar-circle group-avatar-header"
+                style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75' }}
+                onClick={() => setShowMembersDrawer(true)}
+              >
+                {selectedGroup.isCommunity ? <Globe size={18} /> : selectedGroup.name[0].toUpperCase()}
+              </div>
+            )}
 
             <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings">
               <div className="group-name-row">
@@ -984,8 +1056,21 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                 >
                   <div className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}>
                     {!isMine && (
-                      <div className="group-msg-author" style={{ color: authorColor }}>
-                        <span>{msg.sender}</span>
+                      <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {authorUser?.avatarUrl ? (
+                          <img
+                            src={authorUser.avatarUrl}
+                            alt={msg.sender}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: `1px solid ${authorColor}`
+                            }}
+                          />
+                        ) : null}
+                        <span>{authorUser?.displayName || msg.sender}</span>
                         {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
                         {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
                         {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
@@ -1384,6 +1469,76 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
                         {editingInfo ? (
                           <form onSubmit={handleSaveGroupInfo} className="edit-info-form">
+                            {/* Group Photo Edit */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                              {editAvatarUrl || selectedGroup.avatarUrl ? (
+                                <img
+                                  src={editAvatarUrl || selectedGroup.avatarUrl}
+                                  alt="Group Photo"
+                                  style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    borderRadius: '50%',
+                                    background: selectedGroup.avatarColor || '#e06c75',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {selectedGroup.name[0].toUpperCase()}
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                ref={editGroupFileInputRef}
+                                onChange={(e) => handleGroupPhotoSelect(e, true)}
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => editGroupFileInputRef.current?.click()}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                                  color: '#f8fafc',
+                                  padding: '6px 10px',
+                                  borderRadius: '8px',
+                                  fontSize: '0.74rem',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                <Camera size={13} />
+                                <span>Change Photo</span>
+                              </button>
+                              {(editAvatarUrl || selectedGroup.avatarUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditAvatarUrl(null)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    padding: '6px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.74rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+
                             <input
                               type="text"
                               placeholder="Group Name"
@@ -1408,6 +1563,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                             onClick={() => {
                               setEditName(selectedGroup.name);
                               setEditDesc(selectedGroup.description || '');
+                              setEditAvatarUrl(selectedGroup.avatarUrl || null);
                               setEditingInfo(true);
                             }}
                           >
@@ -1768,12 +1924,27 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                 onClick={() => setSelectedGroup(group)}
               >
                 <div className="group-card-top">
-                  <div
-                    className="avatar-circle group-card-avatar"
-                    style={{ backgroundColor: group.avatarColor || '#e06c75' }}
-                  >
-                    {group.isCommunity ? <Globe size={22} /> : group.name[0].toUpperCase()}
-                  </div>
+                  {group.avatarUrl ? (
+                    <img
+                      src={group.avatarUrl}
+                      alt={group.name}
+                      className="avatar-circle group-card-avatar"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: `2px solid ${group.avatarColor || '#e06c75'}`
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="avatar-circle group-card-avatar"
+                      style={{ backgroundColor: group.avatarColor || '#e06c75' }}
+                    >
+                      {group.isCommunity ? <Globe size={22} /> : group.name[0].toUpperCase()}
+                    </div>
+                  )}
                   <div className="group-card-header-info">
                     <div className="group-card-name-row">
                       <h4>{group.name}</h4>
@@ -1862,6 +2033,81 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   <Globe size={16} />
                   <span>Public Community</span>
                 </button>
+              </div>
+
+              {/* Group Photo Picker */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '14px 0 10px' }}>
+                <div style={{ position: 'relative' }}>
+                  {groupAvatarUrl ? (
+                    <img
+                      src={groupAvatarUrl}
+                      alt="Preview"
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '2px solid #ee7882'
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        background: 'rgba(238, 120, 130, 0.15)',
+                        border: '2px dashed rgba(238, 120, 130, 0.4)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ee7882',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => groupFileInputRef.current?.click()}
+                    >
+                      <Camera size={22} />
+                      <span style={{ fontSize: '0.65rem', marginTop: '2px' }}>Photo</span>
+                    </div>
+                  )}
+
+                  <input
+                    type="file"
+                    ref={groupFileInputRef}
+                    onChange={(e) => handleGroupPhotoSelect(e, false)}
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                  />
+
+                  {groupAvatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setGroupAvatarUrl(null)}
+                      style={{
+                        position: 'absolute',
+                        top: '-4px',
+                        right: '-4px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Remove Photo"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '6px' }}>
+                  {groupAvatarUrl ? 'Group photo selected' : 'Upload group icon / photo (optional)'}
+                </span>
               </div>
 
               {/* Group Name */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Rss, MessageSquare, Users, Sparkles, Search, Server, Zap } from 'lucide-react';
+import { RefreshCw, Rss, MessageSquare, Users, Sparkles, Search, Server, Sliders, Settings } from 'lucide-react';
 
 export default function Navigation({
   activeTab,
@@ -8,6 +8,7 @@ export default function Navigation({
   onSwitchUser,
   onOpenSearch,
   onOpenEngineSettings,
+  onOpenSettings,
   engineOnline = true,
   hideBottomNav = false
 }) {
@@ -33,13 +34,41 @@ export default function Navigation({
           </button>
 
           {user && (
-            <div className="user-profile-pill" onClick={onSwitchUser} title="Switch account">
-              <div className="user-avatar" style={{ backgroundColor: user.avatarColor }}>
-                {user.username[0].toUpperCase()}
-              </div>
-              <span className="user-name">{user.username}</span>
-              <button className="switch-user-btn" onClick={(e) => { e.stopPropagation(); onSwitchUser(); }} title="Switch account">
-                <RefreshCw size={11} />
+            <div
+              className="user-profile-pill"
+              onClick={onOpenSettings || onSwitchUser}
+              title="Profile & Settings"
+              style={{ cursor: 'pointer' }}
+            >
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.username}
+                  className="user-avatar"
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                  }}
+                />
+              ) : (
+                <div className="user-avatar" style={{ backgroundColor: user.avatarColor }}>
+                  {user.username[0].toUpperCase()}
+                </div>
+              )}
+              <span className="user-name">{user.displayName || user.username}</span>
+              <button
+                className="switch-user-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenSettings) onOpenSettings();
+                  else onSwitchUser();
+                }}
+                title="Profile & Settings"
+              >
+                <Settings size={11} />
               </button>
             </div>
           )}
