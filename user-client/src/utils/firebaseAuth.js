@@ -1,4 +1,4 @@
-﻿import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getAuth, 
   RecaptchaVerifier, 
@@ -24,6 +24,7 @@ export function setupRecaptcha(containerId = 'recaptcha-container') {
     try {
       window.recaptchaVerifier.clear();
     } catch (e) {}
+    window.recaptchaVerifier = null;
   }
 
   window.recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {

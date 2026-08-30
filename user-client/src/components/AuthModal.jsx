@@ -82,11 +82,35 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
     }
   };
 
+  const validatePhoneNumber = (code, number) => {
+    const digits = number.replace(/\D/g, '');
+    if (!digits) return 'Please enter your mobile phone number.';
+    if (code === '+91') {
+      if (digits.length !== 10) {
+        return `Indian mobile numbers must be exactly 10 digits (you entered ${digits.length} digits).`;
+      }
+      if (!/^[6-9]/.test(digits)) {
+        return 'Indian mobile numbers must start with 6, 7, 8, or 9.';
+      }
+    } else if (code === '+1') {
+      if (digits.length !== 10) {
+        return `US/Canada mobile numbers must be exactly 10 digits (you entered ${digits.length} digits).`;
+      }
+    } else {
+      if (digits.length < 7 || digits.length > 13) {
+        return `Please enter a valid mobile number between 7 and 13 digits (you entered ${digits.length} digits).`;
+      }
+    }
+    return null;
+  };
+
   const handleSendOtp = async (e) => {
     e.preventDefault();
-    const cleanNum = phoneNumber.replace(/\D/g, '');
-    if (cleanNum.length < 7) {
-      setAuthError('Please enter a valid phone number (at least 7 digits).');
+    setAuthError('');
+
+    const validationError = validatePhoneNumber(countryCode, phoneNumber);
+    if (validationError) {
+      setAuthError(validationError);
       return;
     }
     if (!phoneUsername.trim()) {
@@ -94,42 +118,34 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
       return;
     }
 
+    const cleanNum = phoneNumber.replace(/\D/g, '');
     const fullPhone = `${countryCode}${cleanNum}`;
     setLoading(true);
-    setAuthError('');
-    setStatusMsg('Sending SMS verification code to your phone...');
+    setStatusMsg('Sending SMS verification code via Google Firebase...');
 
     try {
-      let sentViaFirebase = false;
-      try {
-        const confirmation = await sendRealFirebaseOtp(fullPhone);
-        if (confirmation && confirmation.confirm) {
-          setConfirmationResult(confirmation);
-          sentViaFirebase = true;
-        }
-      } catch (fbErr) {
-        console.warn('Firebase SMS info:', fbErr.message);
+      // 1. Send real cellular SMS using Google Firebase
+      const confirmation = await sendRealFirebaseOtp(fullPhone);
+      if (!confirmation || !confirmation.confirm) {
+        throw new Error('Google Firebase could not send SMS to this number. Please check the number.');
       }
-
-      // Also trigger server session record
-      const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone, username: phoneUsername.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok && !sentViaFirebase) throw new Error(data.error || 'Failed to send verification code.');
-
+      setConfirmationResult(confirmation);
       setOtpStep(2);
-      setResendCooldown(30);
-      if (data.testOtp) {
-        setDevOtpHint(data.testOtp);
-      }
+      setResendCooldown(45);
       setStatusMsg('');
-    } catch (err) {
-      console.error('Send OTP error:', err);
-      setAuthError(err.message || 'Failed to send SMS OTP. Please check the phone number.');
+    } catch (fbErr) {
+      console.error('Firebase SMS error:', fbErr);
+      let errMsg = fbErr.message;
+      if (fbErr.code === 'auth/invalid-phone-number') {
+        errMsg = 'Invalid phone number format. Please enter a valid 10-digit mobile number.';
+      } else if (fbErr.code === 'auth/quota-exceeded') {
+        errMsg = 'Daily SMS quota exceeded. Please try again later or use Quick Username mode.';
+      } else if (fbErr.code === 'auth/too-many-requests') {
+        errMsg = 'Too many requests sent to this number. Please wait a few minutes.';
+      } else if (fbErr.code === 'auth/captcha-check-failed') {
+        errMsg = 'reCAPTCHA security check failed. Please refresh the page and try again.';
+      }
+      setAuthError(errMsg || 'Failed to send SMS to your phone.');
     } finally {
       setLoading(false);
     }
@@ -138,33 +154,32 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (otpInput.trim().length !== 6) {
-      setAuthError('Please enter the complete 6-digit OTP code.');
+      setAuthError('Please enter the complete 6-digit SMS code.');
       return;
     }
 
-    const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Verifying code & generating Zero-Knowledge keys...');
+    setStatusMsg('Verifying SMS code & generating Zero-Knowledge keys...');
 
     try {
-      if (confirmationResult && confirmationResult.confirm) {
-        await confirmationResult.confirm(otpInput.trim());
-      } else {
-        const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: fullPhone, otp: otpInput.trim(), username: phoneUsername.trim() })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Invalid OTP code.');
+      if (!confirmationResult || !confirmationResult.confirm) {
+        throw new Error('Verification session expired. Please click "Change Number" to request a new code.');
       }
 
-      // Proceed with E2EE registration and local key generation
+      await confirmationResult.confirm(otpInput.trim());
+
+      // SMS verified! Complete local Zero-Knowledge key generation & login
       await onLogin(phoneUsername.trim());
     } catch (err) {
       console.error('Verify OTP error:', err);
-      setAuthError(err.message || 'OTP verification failed. Please check the code.');
+      let errMsg = err.message;
+      if (err.code === 'auth/invalid-verification-code') {
+        errMsg = 'Incorrect 6-digit SMS code. Please check your SMS inbox and try again.';
+      } else if (err.code === 'auth/code-expired') {
+        errMsg = 'The SMS code has expired. Please click Resend Code.';
+      }
+      setAuthError(errMsg || 'SMS verification failed.');
     } finally {
       setLoading(false);
     }
@@ -486,35 +501,12 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
                       Enter the 6-digit code sent to <strong style={{ color: '#ffffff' }}>{countryCode} {phoneNumber}</strong>:
                     </div>
 
-                    {devOtpHint && (
-                      <div
-                        onClick={() => setOtpInput(devOtpHint)}
-                        style={{
-                          marginBottom: '12px',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(16, 185, 129, 0.15)',
-                          border: '1px dashed rgba(16, 185, 129, 0.4)',
-                          color: '#34d399',
-                          fontSize: '0.78rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          cursor: 'pointer'
-                        }}
-                        title="Click to auto-fill test OTP"
-                      >
-                        <span>🧪 <strong>Test Mode OTP:</strong> {devOtpHint}</span>
-                        <span style={{ textDecoration: 'underline', fontSize: '0.72rem' }}>Auto-Fill</span>
-                      </div>
-                    )}
-
                     <div className="input-group">
                       <Key size={18} className="input-icon" />
                       <input
                         type="text"
                         maxLength={6}
-                        placeholder="• • • • • • (Enter 6-digit OTP)"
+                        placeholder="• • • • • • (Enter 6-digit SMS code)"
                         value={otpInput}
                         onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
                         style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
