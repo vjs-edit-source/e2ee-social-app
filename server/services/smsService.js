@@ -37,8 +37,8 @@ export async function sendSmsOtp(phone, otp) {
   if (dynamic2FactorKey && (cleanPhone.startsWith('+91') || digitsOnly.length === 10)) {
     const indianNumber = digitsOnly.slice(-10);
     try {
-      console.log(`[2Factor.in] Dispatching SMS OTP to Indian SIM: ${indianNumber}`);
-      const url = `https://2factor.in/API/V1/${dynamic2FactorKey}/SMS/${indianNumber}/${otp}/AUTOGEN`;
+      console.log(`[2Factor.in] Dispatching direct text SMS OTP to Indian SIM: ${indianNumber}`);
+      const url = `https://2factor.in/API/V1/${dynamic2FactorKey}/SMS/${indianNumber}/${otp}`;
       const res = await fetch(url);
       const data = await res.json();
       console.log('[2Factor.in Response]', data);
