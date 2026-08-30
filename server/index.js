@@ -94,7 +94,7 @@ app.post('/api/register', (req, res) => {
   res.json({ success: true, user });
 });
 
-// 1b. Send OTP via Backend SMS Gateway (Fast2SMS / Twilio)
+// 1b. Send OTP via Backend SMS Gateway (2Factor.in / Fast2SMS / Twilio)
 app.post('/api/auth/send-otp', async (req, res) => {
   const { phone, username } = req.body;
   if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
@@ -111,10 +111,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
   res.json({
     success: true,
-    message: smsResult.message || `Verification code sent to ${cleanPhone}`,
+    message: smsResult.message || `Verification code sent to ${cleanPhone} via SMS`,
     gateway: smsResult.gateway,
-    isDevPreview: smsResult.isDevPreview,
-    testOtp: smsResult.testOtp, // Provided for instant dev testing if no gateway credentials configured
     expiresInSeconds: 300
   });
 });
@@ -125,8 +123,8 @@ app.get('/api/auth/sms-config', (req, res) => {
 });
 
 app.post('/api/auth/sms-config', (req, res) => {
-  const { fast2SmsKey, twilioSid, twilioToken, twilioFrom } = req.body;
-  setSmsConfig({ fast2SmsKey, twilioSid, twilioToken, twilioFrom });
+  const { twoFactorKey, fast2SmsKey, twilioSid, twilioToken, twilioFrom } = req.body;
+  setSmsConfig({ twoFactorKey, fast2SmsKey, twilioSid, twilioToken, twilioFrom });
   res.json({ success: true, status: getSmsConfigStatus() });
 });
 

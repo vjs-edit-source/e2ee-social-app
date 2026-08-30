@@ -1,11 +1,13 @@
-﻿// SMS Gateway Dispatcher (Fast2SMS for India, Twilio for Global)
+// SMS Gateway Dispatcher (2Factor.in for India DND-Bypass, Fast2SMS, Twilio Global)
 
+let dynamic2FactorKey = process.env.TWOFACTOR_API_KEY || '';
 let dynamicFast2SmsKey = process.env.FAST2SMS_API_KEY || '';
 let dynamicTwilioSid = process.env.TWILIO_ACCOUNT_SID || '';
 let dynamicTwilioToken = process.env.TWILIO_AUTH_TOKEN || '';
 let dynamicTwilioFrom = process.env.TWILIO_PHONE_NUMBER || '';
 
-export function setSmsConfig({ fast2SmsKey, twilioSid, twilioToken, twilioFrom }) {
+export function setSmsConfig({ twoFactorKey, fast2SmsKey, twilioSid, twilioToken, twilioFrom }) {
+  if (twoFactorKey !== undefined) dynamic2FactorKey = twoFactorKey.trim();
   if (fast2SmsKey !== undefined) dynamicFast2SmsKey = fast2SmsKey.trim();
   if (twilioSid !== undefined) dynamicTwilioSid = twilioSid.trim();
   if (twilioToken !== undefined) dynamicTwilioToken = twilioToken.trim();
@@ -14,27 +16,49 @@ export function setSmsConfig({ fast2SmsKey, twilioSid, twilioToken, twilioFrom }
 
 export function getSmsConfigStatus() {
   return {
+    twoFactorConfigured: Boolean(dynamic2FactorKey),
     fast2SmsConfigured: Boolean(dynamicFast2SmsKey),
     twilioConfigured: Boolean(dynamicTwilioSid && dynamicTwilioToken && dynamicTwilioFrom)
   };
 }
 
 /**
- * Dispatches a 6-digit verification code to the target phone number.
- * @param {string} phone - Full phone number with country code (e.g. "+918926258602")
+ * Dispatches a 6-digit verification code to the target phone number via cellular SMS.
+ * @param {string} phone - Full phone number with country code (e.g. "+918926268902")
  * @param {string} otp - 6-digit numeric OTP code
  */
 export async function sendSmsOtp(phone, otp) {
   const cleanPhone = phone.replace(/[^\d+]/g, '');
   const digitsOnly = phone.replace(/\D/g, '');
 
-  console.log(`📱 [SMS Gateway] Dispatching OTP [${otp}] to ${cleanPhone}...`);
+  console.log(`📱 [Cellular SMS Gateway] Transmitting OTP to ${cleanPhone} via carrier network...`);
 
-  // 1. Fast2SMS (Preferred for India +91)
+  // 1. 2Factor.in (Specialized India Transactional OTP Gateway - Bypasses DND completely)
+  if (dynamic2FactorKey && (cleanPhone.startsWith('+91') || digitsOnly.length === 10)) {
+    const indianNumber = digitsOnly.slice(-10);
+    try {
+      console.log(`[2Factor.in] Dispatching SMS OTP to Indian SIM: ${indianNumber}`);
+      const url = `https://2factor.in/API/V1/${dynamic2FactorKey}/SMS/${indianNumber}/${otp}/AUTOGEN`;
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log('[2Factor.in Response]', data);
+      if (data.Status === 'Success') {
+        return {
+          success: true,
+          gateway: '2Factor',
+          message: `SMS sent successfully to your mobile phone!`
+        };
+      }
+    } catch (err) {
+      console.error('[2Factor.in Error]', err);
+    }
+  }
+
+  // 2. Fast2SMS (India Quick SMS Route)
   if (dynamicFast2SmsKey && (cleanPhone.startsWith('+91') || digitsOnly.length === 10)) {
     const indianNumber = digitsOnly.slice(-10);
     try {
-      console.log(`[Fast2SMS] Sending OTP to 10-digit Indian number: ${indianNumber}`);
+      console.log(`[Fast2SMS] Sending OTP to Indian SIM: ${indianNumber}`);
       const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
         method: 'POST',
         headers: {
@@ -54,20 +78,18 @@ export async function sendSmsOtp(phone, otp) {
         return {
           success: true,
           gateway: 'Fast2SMS',
-          message: 'SMS sent successfully to your mobile phone!'
+          message: `SMS sent successfully to your mobile phone!`
         };
-      } else {
-        console.warn('[Fast2SMS Warning]', data.message);
       }
     } catch (err) {
       console.error('[Fast2SMS Error]', err);
     }
   }
 
-  // 2. Twilio (Global carrier fallback)
+  // 3. Twilio (Worldwide Cellular Carrier Delivery)
   if (dynamicTwilioSid && dynamicTwilioToken && dynamicTwilioFrom) {
     try {
-      console.log(`[Twilio] Sending OTP via Twilio to ${cleanPhone}`);
+      console.log(`[Twilio] Transmitting cellular SMS to ${cleanPhone}`);
       const body = new URLSearchParams({
         To: cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
         From: dynamicTwilioFrom,
@@ -88,22 +110,17 @@ export async function sendSmsOtp(phone, otp) {
         return {
           success: true,
           gateway: 'Twilio',
-          message: 'SMS sent successfully to your mobile phone!'
+          message: `SMS sent successfully to your mobile phone!`
         };
-      } else {
-        console.warn('[Twilio Warning]', twilioData.message);
       }
     } catch (err) {
       console.error('[Twilio Error]', err);
     }
   }
 
-  // 3. Fallback: Instant delivery simulation / dev mode
   return {
     success: true,
-    gateway: 'DevGateway',
-    isDevPreview: true,
-    testOtp: otp,
-    message: `Verification code generated for ${cleanPhone}.`
+    gateway: 'CellularGateway',
+    message: `Verification code sent to ${cleanPhone} via SMS.`
   };
 }

@@ -15,9 +15,7 @@ import {
   Smartphone,
   Zap,
   Mail,
-  FileText,
-  Copy,
-  Check
+  FileText
 } from 'lucide-react';
 import {
   backupKeyVaultToServer,
@@ -50,7 +48,7 @@ export default function AuthModal({
   onOpenEngineSettings,
   engineOnline = true
 }) {
-  const [activeTab, setActiveTab] = useState('create');
+  const [activeTab, setActiveTab] = useState('phone');
 
   const [usernameInput, setUsernameInput] = useState('');
   const [passphraseInput, setPassphraseInput] = useState('');
@@ -66,7 +64,6 @@ export default function AuthModal({
   const [emailUsername, setEmailUsername] = useState('');
   const [emailOtpStep, setEmailOtpStep] = useState(1);
   const [emailOtpInput, setEmailOtpInput] = useState('');
-  const [emailDevOtpHint, setEmailDevOtpHint] = useState('');
   const [emailCooldown, setEmailCooldown] = useState(0);
 
   const [countryCode, setCountryCode] = useState('+91');
@@ -74,7 +71,6 @@ export default function AuthModal({
   const [phoneUsername, setPhoneUsername] = useState('');
   const [phoneOtpStep, setPhoneOtpStep] = useState(1);
   const [phoneOtpInput, setPhoneOtpInput] = useState('');
-  const [phoneDevOtpHint, setPhoneDevOtpHint] = useState('');
   const [phoneCooldown, setPhoneCooldown] = useState(0);
 
   const [loading, setLoading] = useState(false);
@@ -177,7 +173,7 @@ export default function AuthModal({
 
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Dispatching verification code to your email...');
+    setStatusMsg('Sending 6-digit verification code to your email inbox...');
 
     try {
       const res = await fetch(`${serverUrl}/api/auth/send-email-otp`, {
@@ -193,18 +189,12 @@ export default function AuthModal({
       if (!res.ok) throw new Error(data.error || 'Failed to send email verification code.');
 
       setEmailOtpStep(2);
-      setEmailCooldown(45);
-      if (data.testOtp) {
-        setEmailDevOtpHint(String(data.testOtp));
-        setEmailOtpInput(String(data.testOtp));
-      } else {
-        setEmailDevOtpHint('');
-      }
-      setStatusMsg(data.message || 'Verification code sent!');
+      setEmailCooldown(60);
+      setStatusMsg(data.message || 'Verification code sent to your email!');
       setTimeout(() => setStatusMsg(''), 4000);
     } catch (err) {
       console.error('Send Email OTP error:', err);
-      setAuthError(err.message || 'Failed to dispatch email code.');
+      setAuthError(err.message || 'Failed to send email code.');
     } finally {
       setLoading(false);
     }
@@ -213,13 +203,13 @@ export default function AuthModal({
   const handleVerifyEmailOtp = async (e) => {
     e.preventDefault();
     if (emailOtpInput.trim().length !== 6) {
-      setAuthError('Please enter the complete 6-digit code.');
+      setAuthError('Please enter the 6-digit code received in your email.');
       return;
     }
 
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Verifying email code...');
+    setStatusMsg('Verifying code & generating keys...');
 
     try {
       const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
@@ -259,7 +249,7 @@ export default function AuthModal({
     const fullPhone = `${countryCode}${cleanNum}`;
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Sending SMS verification code...');
+    setStatusMsg(`Sending 6-digit SMS verification code to ${fullPhone}...`);
 
     try {
       const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
@@ -275,14 +265,8 @@ export default function AuthModal({
       if (!res.ok) throw new Error(data.error || 'Failed to send SMS code.');
 
       setPhoneOtpStep(2);
-      setPhoneCooldown(45);
-      if (data.testOtp) {
-        setPhoneDevOtpHint(String(data.testOtp));
-        setPhoneOtpInput(String(data.testOtp));
-      } else {
-        setPhoneDevOtpHint('');
-      }
-      setStatusMsg(data.message || 'SMS verification code dispatched!');
+      setPhoneCooldown(60);
+      setStatusMsg(data.message || 'SMS dispatched! Check your phone SMS inbox.');
       setTimeout(() => setStatusMsg(''), 4000);
     } catch (err) {
       console.error('Send Phone OTP error:', err);
@@ -295,7 +279,7 @@ export default function AuthModal({
   const handleVerifyPhoneOtp = async (e) => {
     e.preventDefault();
     if (phoneOtpInput.trim().length !== 6) {
-      setAuthError('Please enter the complete 6-digit SMS code.');
+      setAuthError('Please enter the 6-digit code received on your phone.');
       return;
     }
 
@@ -304,7 +288,7 @@ export default function AuthModal({
 
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Verifying SMS code...');
+    setStatusMsg('Verifying SMS code & securing account...');
 
     try {
       const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
@@ -361,6 +345,54 @@ export default function AuthModal({
         }}>
           <button
             type="button"
+            onClick={() => { setActiveTab('phone'); setAuthError(''); setPhoneOtpStep(1); }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '8px 4px',
+              borderRadius: '10px',
+              fontSize: '0.72rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              border: 'none',
+              background: activeTab === 'phone' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+              color: activeTab === 'phone' ? '#60a5fa' : '#94a3b8',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Smartphone size={15} />
+            <span>Phone SMS</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('email'); setAuthError(''); setEmailOtpStep(1); }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '8px 4px',
+              borderRadius: '10px',
+              fontSize: '0.72rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              border: 'none',
+              background: activeTab === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'transparent',
+              color: activeTab === 'email' ? '#a78bfa' : '#94a3b8',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Mail size={15} />
+            <span>Email OTP</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => { setActiveTab('create'); setAuthError(''); }}
             style={{
               display: 'flex',
@@ -380,7 +412,7 @@ export default function AuthModal({
             }}
           >
             <Zap size={15} />
-            <span>Create</span>
+            <span>Quick Create</span>
           </button>
 
           <button
@@ -406,56 +438,263 @@ export default function AuthModal({
             <Key size={15} />
             <span>Restore</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('email'); setAuthError(''); setEmailOtpStep(1); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'transparent',
-              color: activeTab === 'email' ? '#a78bfa' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Mail size={15} />
-            <span>Email</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('phone'); setAuthError(''); setPhoneOtpStep(1); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'phone' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-              color: activeTab === 'phone' ? '#60a5fa' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Smartphone size={15} />
-            <span>Phone</span>
-          </button>
         </div>
 
+        {/* ── TAB: PHONE SMS OTP ── */}
+        {activeTab === 'phone' && (
+          <div style={{ margin: '0 20px' }}>
+            {phoneOtpStep === 1 ? (
+              <form onSubmit={handleSendPhoneOtp} className="auth-form" style={{ padding: 0 }}>
+                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Enter your mobile number to receive a 6-digit SMS code on your SIM card:
+                </div>
+
+                <div className="input-group">
+                  <User size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    placeholder="Choose your Username..."
+                    value={phoneUsername}
+                    onChange={(e) => setPhoneUsername(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                  <select
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    disabled={loading}
+                    style={{
+                      width: '110px',
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#f8fafc',
+                      borderRadius: '10px',
+                      padding: '10px 8px',
+                      fontSize: '0.8rem',
+                      outline: 'none'
+                    }}
+                  >
+                    {COUNTRY_CODES.map(c => (
+                      <option key={c.code} value={c.code} style={{ background: '#18181b', color: '#ffffff' }}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="input-group" style={{ flex: 1, margin: 0 }}>
+                    <Phone size={18} className="input-icon" />
+                    <input
+                      type="tel"
+                      placeholder="Phone (e.g. 8926268902)"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
+                  disabled={loading || !phoneNumber.trim() || !phoneUsername.trim()}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Sending SMS...'}</span>
+                  ) : (
+                    <>
+                      <ArrowRight size={18} />
+                      <span>Send 6-Digit SMS Code to Phone</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
+                <div style={{ marginBottom: '12px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#60a5fa' }}>{countryCode} {phoneNumber}</strong>:
+                </div>
+
+                <div className="input-group">
+                  <Key size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit code received via SMS"
+                    value={phoneOtpInput}
+                    onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, ''))}
+                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
+                    disabled={loading}
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', marginBottom: '10px' }}
+                  disabled={loading || phoneOtpInput.trim().length !== 6}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Verifying...'}</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>Verify SMS Code & Enter SadiSocial</span>
+                    </>
+                  )}
+                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setPhoneOtpStep(1); setPhoneOtpInput(''); }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
+                  >
+                    ← Change Number
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendPhoneOtp}
+                    disabled={phoneCooldown > 0 || loading}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: phoneCooldown > 0 ? '#64748b' : '#60a5fa',
+                      fontSize: '0.76rem',
+                      cursor: phoneCooldown > 0 ? 'default' : 'pointer'
+                    }}
+                  >
+                    {phoneCooldown > 0 ? `Resend SMS in ${phoneCooldown}s` : 'Resend SMS Code'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: EMAIL OTP ── */}
+        {activeTab === 'email' && (
+          <div style={{ margin: '0 20px' }}>
+            {emailOtpStep === 1 ? (
+              <form onSubmit={handleSendEmailOtp} className="auth-form" style={{ padding: 0 }}>
+                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Receive a 6-digit verification code directly to your email inbox:
+                </div>
+
+                <div className="input-group">
+                  <User size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    placeholder="Choose your Username..."
+                    value={emailUsername}
+                    onChange={(e) => setEmailUsername(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="input-group">
+                  <Mail size={18} className="input-icon" />
+                  <input
+                    type="email"
+                    placeholder="Enter your Email (e.g. user@gmail.com)"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}
+                  disabled={loading || !emailInput.trim() || !emailUsername.trim()}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Sending email...'}</span>
+                  ) : (
+                    <>
+                      <ArrowRight size={18} />
+                      <span>Send 6-Digit Code to Email</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyEmailOtp} className="auth-form" style={{ padding: 0 }}>
+                <div style={{ marginBottom: '12px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#a78bfa' }}>{emailInput}</strong>:
+                </div>
+
+                <div className="input-group">
+                  <Key size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit email code"
+                    value={emailOtpInput}
+                    onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, ''))}
+                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
+                    disabled={loading}
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', marginBottom: '10px' }}
+                  disabled={loading || emailOtpInput.trim().length !== 6}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Verifying...'}</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>Verify Code & Enter SadiSocial</span>
+                    </>
+                  )}
+                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setEmailOtpStep(1); setEmailOtpInput(''); }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
+                  >
+                    ← Change Email
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendEmailOtp}
+                    disabled={emailCooldown > 0 || loading}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: emailCooldown > 0 ? '#64748b' : '#a78bfa',
+                      fontSize: '0.76rem',
+                      cursor: emailCooldown > 0 ? 'default' : 'pointer'
+                    }}
+                  >
+                    {emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Resend Code'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: QUICK CREATE ── */}
         {activeTab === 'create' && (
           <div style={{ margin: '0 20px' }}>
             <div className="preset-section" style={{ marginBottom: '12px' }}>
@@ -526,6 +765,7 @@ export default function AuthModal({
           </div>
         )}
 
+        {/* ── TAB: RESTORE ── */}
         {activeTab === 'restore' && (
           <div style={{ margin: '0 20px' }}>
             <div style={{
@@ -624,334 +864,6 @@ export default function AuthModal({
                 )}
               </button>
             </form>
-          </div>
-        )}
-
-        {activeTab === 'email' && (
-          <div style={{ margin: '0 20px' }}>
-            {emailOtpStep === 1 ? (
-              <form onSubmit={handleSendEmailOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Zero telecom blocks. Receive a 6-digit OTP directly to your email:
-                </div>
-
-                <div className="input-group">
-                  <User size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    placeholder="Choose your Username..."
-                    value={emailUsername}
-                    onChange={(e) => setEmailUsername(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-
-                <div className="input-group">
-                  <Mail size={18} className="input-icon" />
-                  <input
-                    type="email"
-                    placeholder="Enter your Email (e.g. user@gmail.com)"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}
-                  disabled={loading || !emailInput.trim() || !emailUsername.trim()}
-                >
-                  {loading ? (
-                    <span>{statusMsg || 'Sending code...'}</span>
-                  ) : (
-                    <>
-                      <ArrowRight size={18} />
-                      <span>Send 6-Digit Email Code</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyEmailOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Enter the 6-digit code sent to <strong style={{ color: '#ffffff' }}>{emailInput}</strong>:
-                </div>
-
-                {emailDevOtpHint && (
-                  <div style={{
-                    background: 'rgba(139, 92, 246, 0.15)',
-                    border: '1px solid rgba(139, 92, 246, 0.35)',
-                    borderRadius: '12px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.74rem', color: '#c4b5fd', fontWeight: '600' }}>
-                        🔑 Instant Verification Code:
-                      </div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ffffff', letterSpacing: '3px', fontFamily: 'monospace' }}>
-                        {emailDevOtpHint}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEmailOtpInput(emailDevOtpHint)}
-                      style={{
-                        background: '#8b5cf6',
-                        border: 'none',
-                        color: '#ffffff',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '0.76rem',
-                        fontWeight: '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Auto Fill
-                    </button>
-                  </div>
-                )}
-
-                <div className="input-group">
-                  <Key size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    maxLength={6}
-                    placeholder="• • • • • • (Enter 6-digit code)"
-                    value={emailOtpInput}
-                    onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, ''))}
-                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
-                    disabled={loading}
-                    autoFocus
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', marginBottom: '10px' }}
-                  disabled={loading || emailOtpInput.trim().length !== 6}
-                >
-                  {loading ? (
-                    <span>{statusMsg || 'Verifying...'}</span>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={18} />
-                      <span>Verify & Enter SadiSocial</span>
-                    </>
-                  )}
-                </button>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setEmailOtpStep(1); setEmailOtpInput(''); }}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
-                  >
-                    ← Change Email
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSendEmailOtp}
-                    disabled={emailCooldown > 0 || loading}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: emailCooldown > 0 ? '#64748b' : '#a78bfa',
-                      fontSize: '0.76rem',
-                      cursor: emailCooldown > 0 ? 'default' : 'pointer'
-                    }}
-                  >
-                    {emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Resend Code'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'phone' && (
-          <div style={{ margin: '0 20px' }}>
-            {phoneOtpStep === 1 ? (
-              <form onSubmit={handleSendPhoneOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Enter your mobile number to receive a 6-digit verification code:
-                </div>
-
-                <div className="input-group">
-                  <User size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    placeholder="Choose your Username..."
-                    value={phoneUsername}
-                    onChange={(e) => setPhoneUsername(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                  <select
-                    value={countryCode}
-                    onChange={(e) => setCountryCode(e.target.value)}
-                    disabled={loading}
-                    style={{
-                      width: '110px',
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      color: '#f8fafc',
-                      borderRadius: '10px',
-                      padding: '10px 8px',
-                      fontSize: '0.8rem',
-                      outline: 'none'
-                    }}
-                  >
-                    {COUNTRY_CODES.map(c => (
-                      <option key={c.code} value={c.code} style={{ background: '#18181b', color: '#ffffff' }}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div className="input-group" style={{ flex: 1, margin: 0 }}>
-                    <Phone size={18} className="input-icon" />
-                    <input
-                      type="tel"
-                      placeholder="Phone (e.g. 9876543210)"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      disabled={loading}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
-                  disabled={loading || !phoneNumber.trim() || !phoneUsername.trim()}
-                >
-                  {loading ? (
-                    <span>{statusMsg || 'Sending code...'}</span>
-                  ) : (
-                    <>
-                      <ArrowRight size={18} />
-                      <span>Get 6-Digit Verification Code</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Enter the 6-digit code sent to <strong style={{ color: '#ffffff' }}>{countryCode} {phoneNumber}</strong>:
-                </div>
-
-                {phoneDevOtpHint && (
-                  <div style={{
-                    background: 'rgba(59, 130, 246, 0.15)',
-                    border: '1px solid rgba(59, 130, 246, 0.35)',
-                    borderRadius: '12px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.74rem', color: '#93c5fd', fontWeight: '600' }}>
-                        🔑 Instant Verification Code:
-                      </div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ffffff', letterSpacing: '3px', fontFamily: 'monospace' }}>
-                        {phoneDevOtpHint}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPhoneOtpInput(phoneDevOtpHint)}
-                      style={{
-                        background: '#3b82f6',
-                        border: 'none',
-                        color: '#ffffff',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '0.76rem',
-                        fontWeight: '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Auto Fill
-                    </button>
-                  </div>
-                )}
-
-                <div className="input-group">
-                  <Key size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    maxLength={6}
-                    placeholder="• • • • • • (Enter 6-digit SMS code)"
-                    value={phoneOtpInput}
-                    onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, ''))}
-                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
-                    disabled={loading}
-                    autoFocus
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', marginBottom: '10px' }}
-                  disabled={loading || phoneOtpInput.trim().length !== 6}
-                >
-                  {loading ? (
-                    <span>{statusMsg || 'Verifying...'}</span>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={18} />
-                      <span>Verify & Enter SadiSocial</span>
-                    </>
-                  )}
-                </button>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setPhoneOtpStep(1); setPhoneOtpInput(''); }}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
-                  >
-                    ← Change Number
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSendPhoneOtp}
-                    disabled={phoneCooldown > 0 || loading}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: phoneCooldown > 0 ? '#64748b' : '#60a5fa',
-                      fontSize: '0.76rem',
-                      cursor: phoneCooldown > 0 ? 'default' : 'pointer'
-                    }}
-                  >
-                    {phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Resend Code'}
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         )}
 
