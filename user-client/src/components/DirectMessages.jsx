@@ -681,6 +681,8 @@ export default function DirectMessages({
   }
 
   // ── CONVERSATION SCREEN ───────────────────────────────────────
+  const activePeer = selectedPeer ? (allUsers.find(u => u.username === selectedPeer.username) || selectedPeer) : null;
+
   return (
     <div className="dm-chat-screen">
       {/* Chat Header with Back Button */}
@@ -690,29 +692,29 @@ export default function DirectMessages({
         </button>
 
         <div className="peer-profile">
-          {selectedPeer.avatarUrl ? (
+          {activePeer.avatarUrl ? (
             <img
-              src={selectedPeer.avatarUrl}
-              alt={selectedPeer.username}
+              src={activePeer.avatarUrl}
+              alt={activePeer.username}
               className="avatar-circle"
               style={{
                 width: '38px',
                 height: '38px',
                 borderRadius: '50%',
                 objectFit: 'cover',
-                border: `1.5px solid ${selectedPeer.avatarColor || '#3b82f6'}`
+                border: `1.5px solid ${activePeer.avatarColor || '#3b82f6'}`
               }}
             />
           ) : (
-            <div className="avatar-circle" style={{ backgroundColor: selectedPeer.avatarColor }}>
-              {selectedPeer.username[0].toUpperCase()}
+            <div className="avatar-circle" style={{ backgroundColor: activePeer.avatarColor }}>
+              {activePeer.username[0].toUpperCase()}
             </div>
           )}
           <div>
-            <h4>{selectedPeer.displayName || selectedPeer.username}</h4>
+            <h4>{activePeer.displayName || activePeer.username}</h4>
             <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Circle size={7} color={selectedPeer.isOnline ? '#10b981' : '#94a3b8'} fill={selectedPeer.isOnline ? '#10b981' : '#94a3b8'} />
-              <span>{formatLastSeen(selectedPeer.lastSeen, selectedPeer.isOnline)}</span>
+              <Circle size={7} color={activePeer.isOnline ? '#10b981' : '#94a3b8'} fill={activePeer.isOnline ? '#10b981' : '#94a3b8'} />
+              <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
               <span style={{ opacity: 0.5 }}>•</span>
               <ShieldCheck size={12} color="#10b981" />
               <span>End-to-end encrypted</span>
@@ -726,8 +728,8 @@ export default function DirectMessages({
         {messages.length === 0 ? (
           <div className="empty-chat">
             <Lock size={32} color="#94a3b8" />
-            <p>Start a private conversation with {selectedPeer.username}.</p>
-            <span>Only you and {selectedPeer.username} can read messages and files.</span>
+            <p>Start a private conversation with {activePeer.displayName || activePeer.username}.</p>
+            <span>Only you and {activePeer.displayName || activePeer.username} can read messages and files.</span>
           </div>
         ) : (
           messages.map(msg => {
@@ -738,8 +740,6 @@ export default function DirectMessages({
             return (
               <div key={msg.id} className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}>
                 <div className="message-bubble">
-                  <div className="msg-sender">{msg.sender}</div>
-
                   {/* Message Text (if any) */}
                   {msgMeta.text ? (
                     msgMeta.isLegacyExpired ? (

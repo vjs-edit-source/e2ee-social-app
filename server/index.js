@@ -526,6 +526,9 @@ wss.on('connection', (ws, req) => {
     try {
       const data = JSON.parse(message.toString());
       if (data.type === 'PING') {
+        if (username) {
+          db.updateUserPresence(username, true);
+        }
         ws.send(JSON.stringify({ type: 'PONG' }));
       }
     } catch (e) {
