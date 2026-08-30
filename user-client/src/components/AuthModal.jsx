@@ -144,6 +144,8 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
         errMsg = 'Too many requests sent to this number. Please wait a few minutes.';
       } else if (fbErr.code === 'auth/captcha-check-failed') {
         errMsg = 'reCAPTCHA security check failed. Please refresh the page and try again.';
+      } else if (fbErr.code === 'auth/operation-not-allowed' || fbErr.message?.includes('operation-not-allowed') || fbErr.message?.includes('region')) {
+        errMsg = 'Phone SMS provider is not enabled in Firebase Console (or requires SMS region enablement). Please enable Phone Authentication in Firebase Console, or switch to the "⚡ Quick Username" tab to sign in instantly!';
       }
       setAuthError(errMsg || 'Failed to send SMS to your phone.');
     } finally {
