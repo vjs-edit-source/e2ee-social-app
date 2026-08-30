@@ -145,7 +145,12 @@ app.post('/api/auth/verify-otp', (req, res) => {
 
 // 2. Fetch Directory of Public Keys
 app.get('/api/users', (req, res) => {
-  res.json(db.getAllUsers());
+  const onlineUsers = new Set(
+    Array.from(connectedClients.entries())
+      .filter(([_, sockets]) => sockets && sockets.size > 0)
+      .map(([uname]) => uname)
+  );
+  res.json(db.getAllUsers(onlineUsers));
 });
 
 // 2b. Update User Profile (Avatar Photo, Display Name, Bio, Color)
@@ -160,6 +165,11 @@ app.post('/api/user/profile', (req, res) => {
   notifyInspector();
 
   res.json({ success: true, user });
+});
+
+// 2c. Fetch User Recent Conversations Preview
+app.get('/api/conversations/:username', (req, res) => {
+  res.json(db.getRecentConversations(req.params.username));
 });
 
 // 3. Create Envelope-Encrypted Feed Post
@@ -497,6 +507,13 @@ wss.on('connection', (ws, req) => {
       connectedClients.set(username, new Set());
     }
     connectedClients.get(username).add(ws);
+    db.updateUserPresence(username, true);
+    broadcast({
+      type: 'USER_PRESENCE',
+      username,
+      isOnline: true,
+      lastSeen: new Date().toISOString()
+    });
     console.log(`[WS] Client connected: ${username} (Active sockets for user: ${connectedClients.get(username).size})`);
   }
 
@@ -521,6 +538,13 @@ wss.on('connection', (ws, req) => {
       connectedClients.get(username).delete(ws);
       if (connectedClients.get(username).size === 0) {
         connectedClients.delete(username);
+        db.updateUserPresence(username, false);
+        broadcast({
+          type: 'USER_PRESENCE',
+          username,
+          isOnline: false,
+          lastSeen: new Date().toISOString()
+        });
       }
       console.log(`[WS] Client disconnected: ${username}`);
     }

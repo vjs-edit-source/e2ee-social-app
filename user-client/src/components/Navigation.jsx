@@ -10,7 +10,8 @@ export default function Navigation({
   onOpenEngineSettings,
   onOpenSettings,
   engineOnline = true,
-  hideBottomNav = false
+  hideBottomNav = false,
+  unreadChatsCount = 0
 }) {
   return (
     <>
@@ -90,8 +91,34 @@ export default function Navigation({
             className={`bottom-nav-item ${activeTab === 'messages' ? 'active' : ''}`}
             onClick={() => setActiveTab('messages')}
             type="button"
+            style={{ position: 'relative' }}
           >
-            <MessageSquare size={18} />
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <MessageSquare size={18} />
+              {unreadChatsCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-9px',
+                    background: '#ee7882',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 'bold',
+                    borderRadius: '10px',
+                    padding: '0 4px',
+                    minWidth: '14px',
+                    height: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 8px rgba(238, 120, 130, 0.7)'
+                  }}
+                >
+                  {unreadChatsCount > 9 ? '9+' : unreadChatsCount}
+                </span>
+              )}
+            </div>
             <span>Chats</span>
           </button>
 

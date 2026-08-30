@@ -313,7 +313,17 @@ class ZeroKnowledgeStore {
     return this.users.get(username) || null;
   }
 
-  getAllUsers() {
+  updateUserPresence(username, isOnline) {
+    const user = this.users.get(username);
+    if (user) {
+      user.lastSeen = new Date().toISOString();
+      this.users.set(username, user);
+      this.scheduleSave();
+      this.syncDocToMongo('users', { username }, user);
+    }
+  }
+
+  getAllUsers(connectedUsersSet = null) {
     return Array.from(this.users.values()).map(u => ({
       username: u.username,
       displayName: u.displayName || u.username,
@@ -323,7 +333,9 @@ class ZeroKnowledgeStore {
       publicPrekey: u.publicPrekey,
       avatarColor: u.avatarColor || '#3b82f6',
       phoneNumber: u.phoneNumber || null,
-      registeredAt: u.registeredAt || new Date().toISOString()
+      registeredAt: u.registeredAt || new Date().toISOString(),
+      lastSeen: u.lastSeen || u.registeredAt || new Date().toISOString(),
+      isOnline: connectedUsersSet ? connectedUsersSet.has(u.username) : false
     }));
   }
 
@@ -373,6 +385,24 @@ class ZeroKnowledgeStore {
       m => (m.sender === userA && m.recipient === userB) ||
            (m.sender === userB && m.recipient === userA)
     );
+  }
+
+  getRecentConversations(username) {
+    const conversationMap = new Map();
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.sender === username || msg.recipient === username) {
+        const peer = msg.sender === username ? msg.recipient : msg.sender;
+        if (!conversationMap.has(peer)) {
+          conversationMap.set(peer, msg);
+        }
+      }
+    }
+    const result = [];
+    for (const [peer, lastMessage] of conversationMap.entries()) {
+      result.push({ peer, lastMessage });
+    }
+    return result;
   }
 
   // ── GROUPS & COMMUNITIES (WITH ADVANCED SETTINGS & ROLES) ──

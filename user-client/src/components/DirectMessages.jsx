@@ -27,18 +27,58 @@ function getFileFormatBadge(fileName, mimeType) {
   return 'File Attachment';
 }
 
-export default function DirectMessages({ currentUser, allUsers, serverUrl, wsClient, onChatStateChange }) {
-  const [selectedPeer, setSelectedPeer] = useState(null);
+function formatLastSeen(lastSeenDateStr, isOnline) {
+  if (isOnline) return 'Active now';
+  if (!lastSeenDateStr) return 'Offline';
+  const diffMs = Date.now() - new Date(lastSeenDateStr).getTime();
+  if (isNaN(diffMs)) return 'Offline';
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 1) return 'Active just now';
+  if (diffMins < 60) return `Last seen ${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `Last seen ${diffHours}h ago`;
+  const date = new Date(lastSeenDateStr);
+  return `Last seen ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+}
+
+function formatMessageTime(isoString) {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+export default function DirectMessages({
+  currentUser,
+  allUsers,
+  serverUrl,
+  wsClient,
+  onChatStateChange,
+  initialSelectedPeer = null
+}) {
+  const [selectedPeer, setSelectedPeer] = useState(initialSelectedPeer);
   const [sharedKeyMap, setSharedKeyMap] = useState({});
   const [messages, setMessages] = useState([]);
   const [decryptedMsgMap, setDecryptedMsgMap] = useState({});
   const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [conversationPreviews, setConversationPreviews] = useState({});
   const [inputMessage, setInputMessage] = useState('');
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef(null);
+
+  // Sync initialSelectedPeer if passed from notification click
+  useEffect(() => {
+    if (initialSelectedPeer) {
+      setSelectedPeer(initialSelectedPeer);
+    }
+  }, [initialSelectedPeer]);
 
   // Notify parent component whether a peer conversation is currently active
   useEffect(() => {
@@ -51,6 +91,100 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
   const decryptedMsgCache = useRef({});
   const decryptedMediaCache = useRef({});
   const pendingMediaFetches = useRef(new Set());
+  const pairwiseKeyCache = useRef({});
+
+  // Helper to derive or get cached shared AES key for any peer
+  const getSharedKeyForPeer = async (peer) => {
+    if (!peer || !currentUser?.keyPair?.privateKey) return null;
+    if (pairwiseKeyCache.current[peer.username]) {
+      return pairwiseKeyCache.current[peer.username];
+    }
+    try {
+      const peerPubKey = await importPublicKey(peer.publicIdentityKey);
+      const sharedAESKey = await deriveSharedAESKey(currentUser.keyPair.privateKey, peerPubKey);
+      pairwiseKeyCache.current[peer.username] = sharedAESKey;
+      return sharedAESKey;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Load conversation previews for contacts list
+  const loadConversationsOverview = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/conversations/${currentUser.username}`);
+      if (!res.ok) return;
+      const convos = await res.json();
+      const previewUpdates = {};
+
+      for (const item of convos) {
+        const { peer: peerUsername, lastMessage } = item;
+        if (!lastMessage) continue;
+
+        const peerUser = allUsers.find(u => u.username === peerUsername);
+        if (!peerUser) continue;
+
+        const sharedKey = await getSharedKeyForPeer(peerUser);
+        if (!sharedKey) continue;
+
+        let previewText = 'Encrypted message';
+        let isMedia = false;
+        let mediaType = null;
+
+        try {
+          let decryptedRaw = null;
+          if (lastMessage.ratchetSeq) {
+            try {
+              const rKey = await deriveRatchetMessageKey(sharedKey, lastMessage.ratchetSeq);
+              decryptedRaw = await decryptText(rKey, lastMessage.ciphertext, lastMessage.iv);
+            } catch (e) {}
+          }
+          if (!decryptedRaw || decryptedRaw.startsWith('[Decryption Error')) {
+            decryptedRaw = await decryptText(sharedKey, lastMessage.ciphertext, lastMessage.iv);
+          }
+
+          if (decryptedRaw && !decryptedRaw.startsWith('[Decryption Error')) {
+            if (decryptedRaw.startsWith('{') && decryptedRaw.endsWith('}')) {
+              try {
+                const parsed = JSON.parse(decryptedRaw);
+                if (parsed.mediaId) {
+                  isMedia = true;
+                  mediaType = parsed.mimeType || 'file';
+                  previewText = parsed.text ? `📷 ${parsed.text}` : (parsed.mimeType?.startsWith('image/') ? '📷 Photo' : (parsed.mimeType?.startsWith('video/') ? '🎥 Video' : (parsed.mimeType?.startsWith('audio/') ? '🎤 Audio' : '📄 File')));
+                } else if (parsed.text) {
+                  previewText = parsed.text;
+                }
+              } catch (e) {
+                previewText = decryptedRaw;
+              }
+            } else {
+              previewText = decryptedRaw;
+            }
+          }
+        } catch (e) {}
+
+        previewUpdates[peerUsername] = {
+          text: previewText,
+          timestamp: lastMessage.timestamp,
+          isMine: lastMessage.sender === currentUser.username,
+          sender: lastMessage.sender,
+          isMedia,
+          mediaType
+        };
+      }
+
+      setConversationPreviews(prev => ({ ...prev, ...previewUpdates }));
+    } catch (err) {
+      console.error('Failed to load conversations overview:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadConversationsOverview();
+    const interval = setInterval(loadConversationsOverview, 4000);
+    return () => clearInterval(interval);
+  }, [currentUser, allUsers, serverUrl]);
 
   // Ratchet sequence tracking for forward secrecy
   const [ratchetSeqMap, setRatchetSeqMap] = useState({});
@@ -60,9 +194,10 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
     async function setupPairwiseKey() {
       if (!selectedPeer || !currentUser || !currentUser.keyPair) return;
       try {
-        const peerPubKey = await importPublicKey(selectedPeer.publicIdentityKey);
-        const sharedAESKey = await deriveSharedAESKey(currentUser.keyPair.privateKey, peerPubKey);
-        setSharedKeyMap(prev => ({ ...prev, [selectedPeer.username]: sharedAESKey }));
+        const sharedAESKey = await getSharedKeyForPeer(selectedPeer);
+        if (sharedAESKey) {
+          setSharedKeyMap(prev => ({ ...prev, [selectedPeer.username]: sharedAESKey }));
+        }
       } catch (err) {
         console.error('Failed to derive shared key:', err);
       }
@@ -416,43 +551,129 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
           </div>
         ) : (
           <div className="dm-contacts-list">
-            {peers.map(peer => (
-              <button
-                key={peer.username}
-                className="dm-contact-card"
-                onClick={() => setSelectedPeer(peer)}
-              >
-                {peer.avatarUrl ? (
-                  <img
-                    src={peer.avatarUrl}
-                    alt={peer.username}
-                    className="contact-avatar"
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: `1.5px solid ${peer.avatarColor || '#3b82f6'}`
-                    }}
-                  />
-                ) : (
-                  <div className="contact-avatar" style={{ backgroundColor: peer.avatarColor }}>
-                    {peer.username[0].toUpperCase()}
+            {peers.map(peer => {
+              const preview = conversationPreviews[peer.username];
+              const lastSeenText = formatLastSeen(peer.lastSeen, peer.isOnline);
+              const messageTime = preview?.timestamp ? formatMessageTime(preview.timestamp) : '';
+
+              return (
+                <button
+                  key={peer.username}
+                  className="dm-contact-card"
+                  onClick={() => setSelectedPeer(peer)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 16px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    textAlign: 'left'
+                  }}
+                >
+                  {/* Contact Avatar with Online Badge */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    {peer.avatarUrl ? (
+                      <img
+                        src={peer.avatarUrl}
+                        alt={peer.username}
+                        className="contact-avatar"
+                        style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: `2px solid ${peer.avatarColor || '#3b82f6'}`
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="contact-avatar"
+                        style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '50%',
+                          backgroundColor: peer.avatarColor || '#3b82f6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold',
+                          color: '#fff',
+                          fontSize: '1.1rem'
+                        }}
+                      >
+                        {peer.username[0].toUpperCase()}
+                      </div>
+                    )}
+
+                    {peer.isOnline && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '1px',
+                          right: '1px',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          backgroundColor: '#10b981',
+                          border: '2px solid #0f172a',
+                          boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)'
+                        }}
+                        title="Online"
+                      />
+                    )}
                   </div>
-                )}
-                <div className="contact-info">
-                  <div className="contact-name">{peer.displayName || peer.username}</div>
-                  <div className="contact-subtitle">
-                    <ShieldCheck size={12} color="#10b981" />
-                    <span>{peer.bio ? peer.bio.slice(0, 30) : 'End-to-end encrypted'}</span>
+
+                  {/* Contact Info & Message Preview */}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {/* Top Row: Name + Time */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ fontWeight: '600', color: '#f8fafc', fontSize: '0.94rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {peer.displayName || peer.username}
+                      </span>
+                      {messageTime && (
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0 }}>
+                          {messageTime}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Middle Row: Decrypted Last Message Preview */}
+                    <div style={{
+                      fontSize: '0.82rem',
+                      color: preview ? '#cbd5e1' : '#64748b',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      {preview ? (
+                        <>
+                          <span style={{ color: preview.isMine ? '#ee7882' : '#94a3b8', fontWeight: preview.isMine ? '600' : '400' }}>
+                            {preview.isMine ? 'You: ' : ''}
+                          </span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {preview.text}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ color: '#64748b', fontStyle: 'italic' }}>
+                          {peer.bio ? peer.bio : '✨ Start encrypted chat'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Bottom Row: Last Seen Presence */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: peer.isOnline ? '#34d399' : '#64748b' }}>
+                      <Circle size={6} color={peer.isOnline ? '#10b981' : '#64748b'} fill={peer.isOnline ? '#10b981' : '#64748b'} />
+                      <span>{lastSeenText}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="contact-online-dot">
-                  <Circle size={10} color="#10b981" fill="#10b981" />
-                  <span>Online</span>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -489,9 +710,12 @@ export default function DirectMessages({ currentUser, allUsers, serverUrl, wsCli
           )}
           <div>
             <h4>{selectedPeer.displayName || selectedPeer.username}</h4>
-            <span className="handshake-status">
-              <ShieldCheck size={14} color="#10b981" />
-              End-to-end encrypted
+            <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Circle size={7} color={selectedPeer.isOnline ? '#10b981' : '#94a3b8'} fill={selectedPeer.isOnline ? '#10b981' : '#94a3b8'} />
+              <span>{formatLastSeen(selectedPeer.lastSeen, selectedPeer.isOnline)}</span>
+              <span style={{ opacity: 0.5 }}>•</span>
+              <ShieldCheck size={12} color="#10b981" />
+              <span>End-to-end encrypted</span>
             </span>
           </div>
         </div>
