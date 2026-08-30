@@ -140,8 +140,9 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
 
       setOtpStep(2);
       setResendCooldown(45);
-      if (data.isDevPreview && data.testOtp) {
-        setDevOtpHint(`(Dev preview: ${data.testOtp})`);
+      if (data.testOtp) {
+        setDevOtpHint(String(data.testOtp));
+        setOtpInput(String(data.testOtp));
       } else {
         setDevOtpHint('');
       }
@@ -510,6 +511,44 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
                     <div style={{ marginBottom: '10px', fontSize: '0.8rem', color: '#94a3b8' }}>
                       Enter the 6-digit code sent to <strong style={{ color: '#ffffff' }}>{countryCode} {phoneNumber}</strong>:
                     </div>
+
+                    {devOtpHint && (
+                      <div style={{
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        borderRadius: '12px',
+                        padding: '10px 14px',
+                        marginBottom: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '0.74rem', color: '#34d399', fontWeight: '600' }}>
+                            🔑 Instant Verification Code:
+                          </div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ffffff', letterSpacing: '3px', fontFamily: 'monospace' }}>
+                            {devOtpHint}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOtpInput(devOtpHint)}
+                          style={{
+                            background: '#10b981',
+                            border: 'none',
+                            color: '#ffffff',
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontSize: '0.76rem',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Auto Fill
+                        </button>
+                      </div>
+                    )}
 
                     <div className="input-group">
                       <Key size={18} className="input-icon" />
