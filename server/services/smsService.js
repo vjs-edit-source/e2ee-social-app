@@ -1,6 +1,6 @@
 // SMS Gateway Dispatcher (2Factor.in for India DND-Bypass, Fast2SMS, Twilio Global)
 
-let dynamic2FactorKey = process.env.TWOFACTOR_API_KEY || '';
+let dynamic2FactorKey = process.env.TWOFACTOR_API_KEY || 'f6d68aa2-a4af-11f1-9cb1-0200cd936042';
 let dynamicFast2SmsKey = process.env.FAST2SMS_API_KEY || '';
 let dynamicTwilioSid = process.env.TWILIO_ACCOUNT_SID || '';
 let dynamicTwilioToken = process.env.TWILIO_AUTH_TOKEN || '';
