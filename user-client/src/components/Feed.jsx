@@ -190,10 +190,25 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
                   decryptedMediaCache.current[post.mediaId] = mediaEntry;
                   setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: mediaEntry }));
+                } else if (isMounted) {
+                  const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
+                  decryptedMediaCache.current[post.mediaId] = failedEntry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
                 }
+              } else if (isMounted) {
+                const failedEntry = { failed: true, error: 'Media payload missing' };
+                decryptedMediaCache.current[post.mediaId] = failedEntry;
+                setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
               }
             })
-            .catch(e => console.error('Feed media fetch error:', e))
+            .catch(e => {
+              console.warn('Feed media fetch info:', e.message);
+              if (isMounted) {
+                const failedEntry = { failed: true, error: 'Attachment from previous session expired' };
+                decryptedMediaCache.current[post.mediaId] = failedEntry;
+                setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
+              }
+            })
             .finally(() => {
               pendingMediaFetches.current.delete(post.mediaId);
             });
@@ -442,13 +457,28 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
                 {post.mediaId && (
                   <div className="post-media-container-wrapper">
-                    {decryptedMediaMap[post.mediaId] ? (
+                    {decryptedMediaMap[post.mediaId] && !decryptedMediaMap[post.mediaId].failed ? (
                       <EncryptedAttachmentViewer
                         objectUrl={decryptedMediaMap[post.mediaId].objectUrl}
                         originalName={decryptedMediaMap[post.mediaId].originalName || decState.originalName}
                         mimeType={decryptedMediaMap[post.mediaId].mimeType || decState.mimeType}
                         mediaId={post.mediaId}
                       />
+                    ) : decryptedMediaMap[post.mediaId]?.failed ? (
+                      <div style={{
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px dashed rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '0.78rem',
+                        color: '#94a3b8'
+                      }}>
+                        <ImageIcon size={18} color="#64748b" />
+                        <span>Attachment unavailable (ephemeral media from previous session)</span>
+                      </div>
                     ) : (
                       <div className="media-decrypting-placeholder">
                         <div className="decrypting-spinner-row">

@@ -384,6 +384,7 @@ class ZeroKnowledgeStore {
     this.groups.set(group.id, group);
     this.groupMessages.set(group.id, []);
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -434,7 +435,7 @@ class ZeroKnowledgeStore {
     if (!group.settings) {
       group.settings = { disappearingTimer: 0, announcementOnly: false };
     }
-    if (!group.polls) group.polls = [];
+    if (!group.polls) g.polls = [];
     return group;
   }
 
@@ -447,6 +448,7 @@ class ZeroKnowledgeStore {
       group.settings.announcementOnly = !newPermissions.sendMessages;
     }
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -457,6 +459,7 @@ class ZeroKnowledgeStore {
     if (description !== undefined) group.description = description.trim();
     if (avatarColor) group.avatarColor = avatarColor;
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -469,6 +472,7 @@ class ZeroKnowledgeStore {
       group.permissions.sendMessages = !newSettings.announcementOnly;
     }
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -477,6 +481,7 @@ class ZeroKnowledgeStore {
     if (!group) return null;
     group.pinnedMessageId = messageId || null;
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -486,6 +491,7 @@ class ZeroKnowledgeStore {
     if (!['admin', 'moderator', 'member'].includes(role)) return null;
     group.roles[username] = role;
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -497,6 +503,7 @@ class ZeroKnowledgeStore {
       delete group.roles[username];
     }
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return group;
   }
 
@@ -508,6 +515,7 @@ class ZeroKnowledgeStore {
       if (!group.roles) group.roles = {};
       group.roles[username] = 'member';
       this.scheduleSave();
+      this.syncDocToMongo('groups', { id: group.id }, group);
     }
     return group;
   }
@@ -539,6 +547,7 @@ class ZeroKnowledgeStore {
     }
     this.groupMessages.get(groupId).push(msg);
     this.scheduleSave();
+    this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
     return msg;
   }
 
@@ -576,6 +585,7 @@ class ZeroKnowledgeStore {
 
     group.polls.push(poll);
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return poll;
   }
 
@@ -600,6 +610,7 @@ class ZeroKnowledgeStore {
     });
 
     this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
     return poll;
   }
 
@@ -623,6 +634,7 @@ class ZeroKnowledgeStore {
     };
     this.statuses.unshift(status);
     this.scheduleSave();
+    this.syncDocToMongo('statuses', { id: status.id }, status);
     return status;
   }
 
@@ -643,6 +655,7 @@ class ZeroKnowledgeStore {
       status.likes.push(username);    // Like
     }
     this.scheduleSave();
+    this.syncDocToMongo('statuses', { id: status.id }, status);
     return status;
   }
 
@@ -661,6 +674,7 @@ class ZeroKnowledgeStore {
     };
     status.comments.push(comment);
     this.scheduleSave();
+    this.syncDocToMongo('statuses', { id: status.id }, status);
     return { status, comment };
   }
 
@@ -676,6 +690,7 @@ class ZeroKnowledgeStore {
     };
     this.media.set(mediaId, mediaObj);
     this.scheduleSave();
+    this.syncDocToMongo('media', { id: mediaObj.id }, mediaObj);
     return mediaObj;
   }
 
