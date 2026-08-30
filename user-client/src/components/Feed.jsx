@@ -36,12 +36,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       const res = await fetch(`${serverUrl}/api/posts`);
       if (res.ok) {
         const data = await res.json();
-        setPosts(prev => {
-          if (prev.length === data.length && prev[0]?.id === data[0]?.id) {
-            return prev;
-          }
-          return data;
-        });
+        setPosts(data);
       }
     } catch (err) {
       console.error('Failed to load posts:', err);
@@ -50,7 +45,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
   useEffect(() => {
     loadPosts();
-    const interval = setInterval(loadPosts, 3000);
+    const interval = setInterval(loadPosts, 2500);
     return () => clearInterval(interval);
   }, [serverUrl]);
 
@@ -84,7 +79,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       for (const post of posts) {
         let cachedPost = decryptedPostsCache.current[post.id];
 
-        if (!cachedPost) {
+        if (!cachedPost || !cachedPost.success) {
           try {
             let postKey = null;
 

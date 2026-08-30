@@ -141,12 +141,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages`);
       if (res.ok) {
         const history = await res.json();
-        setMessages(prev => {
-          if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
-            return prev;
-          }
-          return history;
-        });
+        setMessages(history);
       }
     } catch (err) {
       console.error('Failed to load group messages:', err);
@@ -209,7 +204,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
       for (const m of messages) {
         let msgMeta = decryptedMsgCache.current[m.id];
-        if (!msgMeta) {
+        if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message') {
           try {
             const dec = await decryptPost(
               currentUser.username,
@@ -357,16 +352,32 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
     setSending(true);
     try {
+      let userList = allUsers;
+      try {
+        const uRes = await fetch(`${serverUrl}/api/users`);
+        if (uRes.ok) {
+          userList = await uRes.json();
+        }
+      } catch (e) {}
+
       const memberNames = selectedGroup.isCommunity
-        ? allUsers.map(u => u.username)
+        ? userList.map(u => u.username)
         : (selectedGroup.members || [currentUser.username]);
 
-      const recipientPublicKeys = allUsers
+      const recipientPublicKeys = userList
         .filter(u => memberNames.includes(u.username))
         .map(u => ({
           username: u.username,
           spkiPublicKey: u.publicIdentityKey
         }));
+
+      // Ensure sender is always in recipient list so sender can decrypt their own messages
+      if (!recipientPublicKeys.some(r => r.username === currentUser.username)) {
+        recipientPublicKeys.push({
+          username: currentUser.username,
+          spkiPublicKey: currentUser.spkiPublicKey
+        });
+      }
 
       const { ciphertext, iv, keyEnvelopes } = await encryptPost(
         inputMessage.trim(),
