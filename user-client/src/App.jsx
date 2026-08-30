@@ -7,7 +7,7 @@ import StatusScreen from './components/StatusScreen';
 import AuthModal from './components/AuthModal';
 import SearchModal from './components/SearchModal';
 import EngineSettingsModal from './components/EngineSettingsModal';
-import SettingsModal from './components/SettingsModal';
+import SettingsScreen from './components/SettingsScreen';
 import { initializeUserIdentity, getCurrentUsername } from './crypto/vault';
 import {
   getEngineUrl,
@@ -280,31 +280,6 @@ export default function App() {
         />
       )}
 
-      {/* Settings & Profile Modal */}
-      {showSettingsModal && (
-        <SettingsModal
-          currentUser={currentUser}
-          allUsers={allUsers}
-          serverUrl={serverUrl}
-          onClose={() => setShowSettingsModal(false)}
-          onSwitchUser={() => {
-            setShowSettingsModal(false);
-            setShowAuthModal(true);
-          }}
-          onOpenEngineSettings={() => {
-            setShowSettingsModal(false);
-            setShowEngineModal(true);
-          }}
-          onProfileUpdated={(updatedUser) => {
-            setCurrentUser(prev => ({
-              ...prev,
-              ...updatedUser
-            }));
-            loadUsersDirectory();
-          }}
-        />
-      )}
-
       {/* Main Content Area */}
       <main className={`main-content ${isAnyChatActive ? 'chat-mode' : ''}`}>
         {!currentUser || showAuthModal ? (
@@ -353,6 +328,23 @@ export default function App() {
                 allUsers={allUsers}
                 serverUrl={serverUrl}
                 wsClient={wsClient}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsScreen
+                currentUser={currentUser}
+                allUsers={allUsers}
+                serverUrl={serverUrl}
+                onSwitchUser={() => setShowAuthModal(true)}
+                onOpenEngineSettings={() => setShowEngineModal(true)}
+                onProfileUpdated={(updatedUser) => {
+                  setCurrentUser(prev => ({
+                    ...prev,
+                    ...updatedUser
+                  }));
+                  loadUsersDirectory();
+                }}
               />
             )}
           </>

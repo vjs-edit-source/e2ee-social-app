@@ -35,8 +35,8 @@ export default function Navigation({
 
           {user && (
             <div
-              className="user-profile-pill"
-              onClick={onOpenSettings || onSwitchUser}
+              className={`user-profile-pill ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
               title="Profile & Settings"
               style={{ cursor: 'pointer' }}
             >
@@ -63,8 +63,7 @@ export default function Navigation({
                 className="switch-user-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onOpenSettings) onOpenSettings();
-                  else onSwitchUser();
+                  setActiveTab('settings');
                 }}
                 title="Profile & Settings"
               >
@@ -112,6 +111,15 @@ export default function Navigation({
           >
             <Sparkles size={18} />
             <span>Status</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+            type="button"
+          >
+            <Settings size={18} />
+            <span>Settings</span>
           </button>
 
           <button
