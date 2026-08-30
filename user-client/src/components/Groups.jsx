@@ -30,7 +30,8 @@ import {
   Sliders,
   Copy,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  Camera
 } from 'lucide-react';
 import {
   encryptPost,
@@ -1189,9 +1190,24 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
             <div className="group-members-drawer" onClick={e => e.stopPropagation()}>
               <div className="drawer-header">
                 <div className="drawer-title-wrap">
-                  <div className="avatar-circle" style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75', width: 38, height: 38 }}>
-                    {selectedGroup.isCommunity ? <Globe size={19} /> : selectedGroup.name[0].toUpperCase()}
-                  </div>
+                  {selectedGroup.avatarUrl ? (
+                    <img
+                      src={selectedGroup.avatarUrl}
+                      alt={selectedGroup.name}
+                      className="avatar-circle"
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: `2px solid ${selectedGroup.avatarColor || '#e06c75'}`
+                      }}
+                    />
+                  ) : (
+                    <div className="avatar-circle" style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75', width: 42, height: 42 }}>
+                      {selectedGroup.isCommunity ? <Globe size={20} /> : selectedGroup.name[0].toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <h3>{selectedGroup.name}</h3>
                     <span className="drawer-sub">
@@ -1280,12 +1296,27 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
                       return (
                         <div key={m} className="drawer-member-item">
-                          <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
-                            {m[0].toUpperCase()}
-                          </div>
+                          {u?.avatarUrl ? (
+                            <img
+                              src={u.avatarUrl}
+                              alt={m}
+                              className="avatar-circle"
+                              style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: `1.5px solid ${u.avatarColor || '#3b82f6'}`
+                              }}
+                            />
+                          ) : (
+                            <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
+                              {m[0].toUpperCase()}
+                            </div>
+                          )}
                           <div className="drawer-member-info">
                             <div className="member-name-row">
-                              <span className="drawer-member-name">{m} {isSelf && '(You)'}</span>
+                              <span className="drawer-member-name">{u?.displayName || m} {isSelf && '(You)'}</span>
                               {isOwner && <span className="role-tag-badge creator"><Crown size={10} /> Creator</span>}
                               {!isOwner && mRole === 'admin' && <span className="role-tag-badge admin"><Shield size={10} /> Admin</span>}
                               {!isOwner && mRole === 'moderator' && <span className="role-tag-badge mod">Mod</span>}
@@ -1794,10 +1825,25 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                       className="add-member-item"
                       onClick={() => handleAddMember(user.username)}
                     >
-                      <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
-                        {user.username[0].toUpperCase()}
-                      </div>
-                      <span className="member-name">{user.username}</span>
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.username}
+                          className="avatar-circle"
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                          }}
+                        />
+                      ) : (
+                        <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
+                          {user.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <span className="member-name">{user.displayName || user.username}</span>
                       <button className="add-btn-badge" type="button">
                         <Plus size={14} />
                         <span>Add</span>
@@ -1963,17 +2009,35 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                         {previewMembers.map((mName, i) => {
                           const mUser = allUsers.find(u => u.username === mName);
                           return (
-                            <div
-                              key={mName}
-                              className="stack-avatar"
-                              style={{
-                                backgroundColor: mUser?.avatarColor || '#3b82f6',
-                                zIndex: 10 - i
-                              }}
-                              title={mName}
-                            >
-                              {mName[0].toUpperCase()}
-                            </div>
+                            mUser?.avatarUrl ? (
+                              <img
+                                key={mName}
+                                src={mUser.avatarUrl}
+                                alt={mName}
+                                className="stack-avatar"
+                                style={{
+                                  width: '26px',
+                                  height: '26px',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: `1.5px solid ${mUser.avatarColor || '#3b82f6'}`,
+                                  zIndex: 10 - i
+                                }}
+                                title={mUser.displayName || mName}
+                              />
+                            ) : (
+                              <div
+                                key={mName}
+                                className="stack-avatar"
+                                style={{
+                                  backgroundColor: mUser?.avatarColor || '#3b82f6',
+                                  zIndex: 10 - i
+                                }}
+                                title={mUser?.displayName || mName}
+                              >
+                                {mName[0].toUpperCase()}
+                              </div>
+                            )
                           );
                         })}
                       </div>
@@ -2150,10 +2214,25 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                             );
                           }}
                         >
-                          <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
-                            {user.username[0].toUpperCase()}
-                          </div>
-                          <span className="member-select-name">{user.username}</span>
+                          {user.avatarUrl ? (
+                            <img
+                              src={user.avatarUrl}
+                              alt={user.username}
+                              className="avatar-circle"
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                              }}
+                            />
+                          ) : (
+                            <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
+                              {user.username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span className="member-select-name">{user.displayName || user.username}</span>
                           {isSelected && <CheckCircle2 size={16} color="#10b981" />}
                         </div>
                       );
