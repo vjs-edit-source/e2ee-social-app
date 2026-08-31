@@ -31,9 +31,9 @@ export function getEngineUrl() {
   }
 
   // 3. Native Android / iOS (Capacitor)
-  // Default to localhost:4000 (tunnels over USB with adb reverse for dev), with quick switch to Cloud
+  // Default to live Production Cloud Engine so all mobile users connect out of the box
   if (isCapacitorNative()) {
-    return DEFAULT_USB_ENGINE_URL;
+    return DEFAULT_PRODUCTION_CLOUD_URL;
   }
 
   // 4. Web Browser on LAN
