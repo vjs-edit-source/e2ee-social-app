@@ -21,7 +21,8 @@ import {
   Trash2,
   CheckCheck,
   Star,
-  Shield
+  Shield,
+  Activity
 } from 'lucide-react';
 import { backupKeyVaultToServer, ensureUserMnemonic } from '../crypto/vault';
 import MnemonicVaultModal from './MnemonicVaultModal';
@@ -1117,6 +1118,49 @@ export default function SettingsScreen({
             >
               Configure
             </button>
+          </div>
+
+          {/* Live Server Inspector Dashboard Card */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(16, 185, 129, 0.08))',
+            border: '1px solid rgba(238, 120, 130, 0.3)',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px'
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.92rem', marginBottom: '4px' }}>
+                <Activity size={18} />
+                <span>Central Engine Inspector Dashboard</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                View real-time user connections, encrypted message routing traffic, groups, and network metrics.
+              </div>
+            </div>
+            <a
+              href={`${serverUrl || 'https://sadisocial-engine.onrender.com'}/inspector`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                color: '#ffffff',
+                textDecoration: 'none',
+                borderRadius: '10px',
+                padding: '10px 16px',
+                fontSize: '0.82rem',
+                fontWeight: 'bold',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>Open Inspector UI ↗</span>
+            </a>
           </div>
 
           {/* Zero Knowledge Guarantee Banner */}
