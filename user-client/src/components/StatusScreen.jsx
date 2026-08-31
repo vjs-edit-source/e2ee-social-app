@@ -9,9 +9,10 @@ import {
   ShieldCheck,
   Lock,
   ChevronRight,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
-import { decryptPost } from '../crypto/e2ee';
+import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
 import StatusPublisherModal from './StatusPublisherModal';
 import StatusViewerModal from './StatusViewerModal';
 
@@ -20,6 +21,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
   const [showPublisher, setShowPublisher] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
   const [decryptedPreviews, setDecryptedPreviews] = useState({});
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
 
   const loadStatuses = async () => {
     try {
@@ -60,7 +62,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
     return () => wsClient.removeEventListener('message', handleMessage);
   }, [wsClient]);
 
-  // Decrypt previews for all statuses
+  // Decrypt previews and media thumbnails for all statuses
   useEffect(() => {
     if (!currentUser?.keyPair || statuses.length === 0) return;
 
@@ -68,27 +70,57 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
 
     async function decryptAllPreviews() {
       for (const s of statuses) {
-        if (decryptedPreviews[s.id]) continue;
-        try {
-          const dec = await decryptPost(
-            currentUser.username,
-            s.ciphertext,
-            s.iv,
-            s.keyEnvelopes,
-            currentUser.keyPair.privateKey
-          );
-          if (isMounted) {
-            setDecryptedPreviews(prev => ({
-              ...prev,
-              [s.id]: dec.text
-            }));
+        let mediaKey = null;
+
+        if (!decryptedPreviews[s.id]) {
+          try {
+            const dec = await decryptPost(
+              currentUser.username,
+              s.ciphertext,
+              s.iv,
+              s.keyEnvelopes,
+              currentUser.keyPair.privateKey
+            );
+            mediaKey = dec.mediaKey;
+
+            if (isMounted) {
+              setDecryptedPreviews(prev => ({
+                ...prev,
+                [s.id]: dec.text
+              }));
+            }
+          } catch (e) {
+            if (isMounted) {
+              setDecryptedPreviews(prev => ({
+                ...prev,
+                [s.id]: '🔒 Encrypted Status'
+              }));
+            }
           }
-        } catch (e) {
-          if (isMounted) {
-            setDecryptedPreviews(prev => ({
-              ...prev,
-              [s.id]: '🔒 Encrypted Status'
-            }));
+        }
+
+        // Decrypt attached photo thumbnail
+        if (s.mediaId && mediaKey && !decryptedMediaMap[s.mediaId]) {
+          try {
+            const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
+            if (mediaRes.ok) {
+              const mediaObj = await mediaRes.json();
+              const objectUrl = await decryptMediaBuffer(
+                mediaKey,
+                mediaObj.ciphertextBlob,
+                mediaObj.iv,
+                mediaObj.mimeType
+              );
+
+              if (objectUrl && isMounted) {
+                setDecryptedMediaMap(prev => ({
+                  ...prev,
+                  [s.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn('Status thumbnail decryption error:', e);
           }
         }
       }
@@ -98,8 +130,8 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
     return () => { isMounted = false; };
   }, [statuses, currentUser]);
 
-  const myStatus = statuses.find(s => s.author === currentUser?.username);
-  const otherStatuses = statuses.filter(s => s.author !== currentUser?.username);
+  const myStatus = statuses.find(s => s.author?.toLowerCase() === currentUser?.username?.toLowerCase());
+  const otherStatuses = statuses.filter(s => s.author?.toLowerCase() !== currentUser?.username?.toLowerCase());
 
   const handleOpenViewer = (status) => {
     const idx = statuses.findIndex(s => s.id === status.id);
@@ -149,12 +181,21 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           onClick={() => (myStatus ? handleOpenViewer(myStatus) : setShowPublisher(true))}
         >
           <div className={`status-avatar-ring-large ${myStatus ? 'has-status' : 'no-status'}`}>
-            <div
-              className="status-avatar-large"
-              style={{ backgroundColor: currentUser?.avatarColor || '#3b82f6' }}
-            >
-              {currentUser?.username?.[0]?.toUpperCase() || 'U'}
-            </div>
+            {currentUser?.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.username}
+                className="status-avatar-large"
+                style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <div
+                className="status-avatar-large"
+                style={{ backgroundColor: currentUser?.avatarColor || '#3b82f6', width: '52px', height: '52px' }}
+              >
+                {currentUser?.displayName?.[0]?.toUpperCase() || currentUser?.username?.[0]?.toUpperCase() || 'U'}
+              </div>
+            )}
             {!myStatus && (
               <div className="status-plus-badge-large">
                 <Plus size={14} color="#ffffff" />
@@ -163,7 +204,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           </div>
 
           <div className="my-status-info">
-            <h4>My Status</h4>
+            <h4>My Status ({currentUser?.displayName || currentUser?.username})</h4>
             {myStatus ? (
               <div className="my-status-meta">
                 <span>{timeAgo(myStatus.timestamp)} • {getHoursLeft(myStatus.expiresAt)}</span>
@@ -230,9 +271,10 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
         ) : (
           <div className="status-cards-grid">
             {otherStatuses.map(status => {
-              const authorUser = allUsers.find(u => u.username === status.author);
+              const authorUser = allUsers.find(u => u.username?.toLowerCase() === status.author?.toLowerCase());
               const avatarColor = authorUser?.avatarColor || '#8b5cf6';
               const previewText = decryptedPreviews[status.id] || 'Decrypting...';
+              const mediaDecrypted = status.mediaId ? decryptedMediaMap[status.mediaId] : null;
               const likesCount = status.likes?.length || 0;
               const commentsCount = status.comments?.length || 0;
 
@@ -244,27 +286,53 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                 >
                   <div
                     className="status-card-gradient-preview"
-                    style={{ background: status.backgroundGradient || 'linear-gradient(135deg, #e06c75, #ee7882)' }}
+                    style={{
+                      background: status.backgroundGradient || 'linear-gradient(135deg, #e06c75, #ee7882)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
                   >
-                    <div className="status-card-preview-text">
-                      {status.mediaId ? (
-                        <div className="status-card-media-icon">
-                          <ImageIcon size={22} color="#ffffff" />
-                          <span>Photo / Media</span>
-                        </div>
-                      ) : (
+                    {mediaDecrypted ? (
+                      <img
+                        src={mediaDecrypted.objectUrl}
+                        alt="Status thumbnail"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0
+                        }}
+                      />
+                    ) : status.mediaId ? (
+                      <div className="status-card-media-icon">
+                        <ImageIcon size={22} color="#ffffff" />
+                        <span>Photo / Media</span>
+                      </div>
+                    ) : (
+                      <div className="status-card-preview-text">
                         <p>{previewText}</p>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="status-card-bottom-info">
                     <div className="status-card-author-row">
-                      <div className="avatar-circle status-card-avatar" style={{ backgroundColor: avatarColor }}>
-                        {status.author[0].toUpperCase()}
-                      </div>
+                      {authorUser?.avatarUrl ? (
+                        <img
+                          src={authorUser.avatarUrl}
+                          alt={status.author}
+                          className="avatar-circle status-card-avatar"
+                          style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: `1.5px solid ${avatarColor}` }}
+                        />
+                      ) : (
+                        <div className="avatar-circle status-card-avatar" style={{ backgroundColor: avatarColor, width: '28px', height: '28px' }}>
+                          {authorUser?.displayName?.[0]?.toUpperCase() || status.author[0].toUpperCase()}
+                        </div>
+                      )}
                       <div className="status-card-author-meta">
-                        <span className="status-card-author-name">{status.author}</span>
+                        <span className="status-card-author-name">{authorUser?.displayName || status.author}</span>
                         <span className="status-card-time">{timeAgo(status.timestamp)}</span>
                       </div>
                     </div>
