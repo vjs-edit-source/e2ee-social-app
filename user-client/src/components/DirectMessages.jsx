@@ -17,7 +17,8 @@ import {
   Mic,
   Star,
   CornerUpLeft,
-  Smile
+  Smile,
+  ChevronDown
 } from 'lucide-react';
 import {
   importPublicKey,
@@ -130,6 +131,17 @@ export default function DirectMessages({
   const decryptedMediaCache = useRef({});
   const pendingMediaFetches = useRef(new Set());
   const pairwiseKeyCache = useRef({});
+  const messagesContainerRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const prevMsgCountRef = useRef(0);
+
+  const handleScrollFeed = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+    isAtBottomRef.current = isNearBottom;
+    setShowScrollBottom(!isNearBottom);
+  };
 
   // Helper to derive or get cached shared AES key for any peer
   const getSharedKeyForPeer = async (peer) => {
@@ -412,10 +424,27 @@ export default function DirectMessages({
     };
   }, [messages, sharedKeyMap, selectedPeer]);
 
-  // Scroll to bottom on new messages
+  // Reset scroll position on opening contact
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, decryptedMsgMap, decryptedMediaMap]);
+    isAtBottomRef.current = true;
+    setShowScrollBottom(false);
+    prevMsgCountRef.current = 0;
+    if (selectedPeer) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+    }
+  }, [selectedPeer?.username]);
+
+  // Auto-scroll on new messages ONLY if user is already near bottom
+  useEffect(() => {
+    const isNewMessage = messages.length > prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+
+    if (isAtBottomRef.current && isNewMessage) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   // Receive live messages via WebSocket
   useEffect(() => {
@@ -910,7 +939,11 @@ export default function DirectMessages({
       </div>
 
       {/* Messages Log */}
-      <div className="messages-log">
+      <div
+        className="messages-log"
+        ref={messagesContainerRef}
+        onScroll={handleScrollFeed}
+      >
         {messages.length === 0 ? (
           <div className="empty-chat">
             <Lock size={32} color="#94a3b8" />
@@ -1066,6 +1099,40 @@ export default function DirectMessages({
         )}
         <div ref={chatEndRef} />
       </div>
+
+      {/* Floating Scroll-to-Bottom Quick Button */}
+      {showScrollBottom && (
+        <button
+          type="button"
+          className="scroll-to-bottom-btn"
+          onClick={() => {
+            isAtBottomRef.current = true;
+            setShowScrollBottom(false);
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          title="Scroll to latest messages"
+          style={{
+            position: 'absolute',
+            bottom: '84px',
+            right: '24px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(238, 120, 130, 0.5)',
+            color: '#ee7882',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.6), 0 0 14px rgba(238, 120, 130, 0.25)',
+            borderRadius: '50%',
+            width: '42px',
+            height: '42px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 50,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <ChevronDown size={22} />
+        </button>
+      )}
 
       {/* Reply Preview Context Banner */}
       {replyingTo && (

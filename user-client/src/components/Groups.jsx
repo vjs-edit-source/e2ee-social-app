@@ -35,7 +35,8 @@ import {
   Mic,
   CornerUpLeft,
   Star,
-  Smile
+  Smile,
+  ChevronDown
 } from 'lucide-react';
 import {
   encryptPost,
@@ -123,11 +124,22 @@ export default function Groups({
   const [, setTimerTick] = useState(0);
 
   const chatEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const prevMsgCountRef = useRef(0);
   const messageRefs = useRef({});
   const decryptedMsgCache = useRef({});
   const decryptedMediaCache = useRef({});
   const groupFileInputRef = useRef(null);
   const editGroupFileInputRef = useRef(null);
+
+  const handleScrollFeed = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+    isAtBottomRef.current = isNearBottom;
+    setShowScrollBottom(!isNearBottom);
+  };
 
   // Photo compression helper for Groups
   const handleGroupPhotoSelect = (e, isEditing = false) => {
@@ -262,12 +274,27 @@ export default function Groups({
     return () => wsClient.removeEventListener('message', handleMessage);
   }, [wsClient, selectedGroup]);
 
-  // Auto scroll
+  // Reset scroll position on opening a group/community
   useEffect(() => {
-    if (!showSearchBar) {
+    isAtBottomRef.current = true;
+    setShowScrollBottom(false);
+    prevMsgCountRef.current = 0;
+    if (selectedGroup) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+    }
+  }, [selectedGroup?.id]);
+
+  // Auto-scroll on new messages ONLY if user is already near the bottom
+  useEffect(() => {
+    const isNewMessage = messages.length > prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+
+    if (isAtBottomRef.current && isNewMessage && !showSearchBar) {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, decryptedMsgMap, showSearchBar]);
+  }, [messages, showSearchBar]);
 
   // Decrypt group messages
   useEffect(() => {
@@ -1143,7 +1170,11 @@ export default function Groups({
         )}
 
         {/* Message Feed / Bubbles */}
-        <div className="group-messages-feed">
+        <div
+          className="group-messages-feed"
+          ref={messagesContainerRef}
+          onScroll={handleScrollFeed}
+        >
           {/* Active Polls in Group */}
           {selectedGroup.polls && selectedGroup.polls.length > 0 && (
             <div className="group-polls-section">
@@ -1384,6 +1415,40 @@ export default function Groups({
           )}
           <div ref={chatEndRef} />
         </div>
+
+        {/* Floating Scroll-to-Bottom Quick Button */}
+        {showScrollBottom && (
+          <button
+            type="button"
+            className="scroll-to-bottom-btn"
+            onClick={() => {
+              isAtBottomRef.current = true;
+              setShowScrollBottom(false);
+              chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            title="Scroll to bottom"
+            style={{
+              position: 'absolute',
+              bottom: '84px',
+              right: '24px',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1px solid rgba(238, 120, 130, 0.5)',
+              color: '#ee7882',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.6), 0 0 14px rgba(238, 120, 130, 0.25)',
+              borderRadius: '50%',
+              width: '42px',
+              height: '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 50,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <ChevronDown size={22} />
+          </button>
+        )}
 
         {/* Reply Context Preview Banner */}
         {replyingTo && (
