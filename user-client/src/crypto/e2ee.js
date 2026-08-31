@@ -458,41 +458,53 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
     throw new Error(`No key envelopes found`);
   }
 
-  // Case-insensitive matching for username in keyEnvelopes
-  const envelopeKey = Object.keys(keyEnvelopes).find(
-    k => k.toLowerCase() === (myUsername || '').toLowerCase()
-  ) || myUsername;
+  // Prioritize exact username match first, then case-insensitive candidates
+  const candidateKeys = [];
+  if (myUsername && keyEnvelopes[myUsername]) {
+    candidateKeys.push(myUsername);
+  }
+  Object.keys(keyEnvelopes).forEach(k => {
+    if (k.toLowerCase() === (myUsername || '').toLowerCase() && !candidateKeys.includes(k)) {
+      candidateKeys.push(k);
+    }
+  });
 
-  const envelope = keyEnvelopes[envelopeKey];
-  if (!envelope) {
+  if (candidateKeys.length === 0) {
     throw new Error(`No key envelope for ${myUsername}`);
   }
 
   let postKey = null;
 
-  if (envelope.ephemeralPublicKey) {
-    try {
-      const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
-      const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
-      const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
-      if (!rawKeyB64.startsWith("[Decryption Error")) {
-        postKey = await getSubtleCrypto().importKey(
-          "raw",
-          base64ToBuffer(rawKeyB64),
-          { name: "AES-GCM" },
-          true,
-          ["encrypt", "decrypt"]
-        );
-      }
-    } catch (e) {
-      console.warn('Ephemeral key unwrap attempt failed:', e);
-    }
-  }
+  for (const candidateKey of candidateKeys) {
+    const envelope = keyEnvelopes[candidateKey];
+    if (!envelope) continue;
 
-  if (!postKey && authorPublicKey) {
-    try {
-      postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
-    } catch (e) {}
+    if (envelope.ephemeralPublicKey) {
+      try {
+        const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
+        const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
+        const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
+        if (rawKeyB64 && !rawKeyB64.startsWith("[Decryption Error")) {
+          postKey = await getSubtleCrypto().importKey(
+            "raw",
+            base64ToBuffer(rawKeyB64),
+            { name: "AES-GCM" },
+            true,
+            ["encrypt", "decrypt"]
+          );
+          if (postKey) break;
+        }
+      } catch (e) {
+        // try next candidate
+      }
+    }
+
+    if (!postKey && authorPublicKey) {
+      try {
+        postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
+        if (postKey) break;
+      } catch (e) {}
+    }
   }
 
   if (!postKey) throw new Error("Could not derive post key");

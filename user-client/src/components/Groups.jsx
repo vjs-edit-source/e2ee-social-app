@@ -504,7 +504,7 @@ export default function Groups({
 
       // Ensure sender is always in recipient list with valid public key so sender can decrypt their own voice notes
       const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
-      const senderIndex = recipientPublicKeys.findIndex(r => r.username.toLowerCase() === currentUser.username.toLowerCase());
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username === currentUser.username);
       if (senderIndex >= 0) {
         if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
       } else if (myPublicKey) {
@@ -585,7 +585,7 @@ export default function Groups({
 
       // Ensure sender is always in recipient list with valid public key so sender can decrypt their own messages
       const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
-      const senderIndex = recipientPublicKeys.findIndex(r => r.username.toLowerCase() === currentUser.username.toLowerCase());
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username === currentUser.username);
       if (senderIndex >= 0) {
         if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
       } else if (myPublicKey) {
