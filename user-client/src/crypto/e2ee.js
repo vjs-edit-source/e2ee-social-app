@@ -454,29 +454,45 @@ export async function encryptPost(payloadText, recipientsWithPublicKeys = [], me
  * 19. Helper: High-Level Multi-Recipient Envelope Decryption for Posts, Statuses, and Group Messages
  */
 export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPrivateKey, authorPublicKey = null) {
-  if (!keyEnvelopes || !keyEnvelopes[myUsername]) {
+  if (!keyEnvelopes || typeof keyEnvelopes !== 'object') {
+    throw new Error(`No key envelopes found`);
+  }
+
+  // Case-insensitive matching for username in keyEnvelopes
+  const envelopeKey = Object.keys(keyEnvelopes).find(
+    k => k.toLowerCase() === (myUsername || '').toLowerCase()
+  ) || myUsername;
+
+  const envelope = keyEnvelopes[envelopeKey];
+  if (!envelope) {
     throw new Error(`No key envelope for ${myUsername}`);
   }
 
-  const envelope = keyEnvelopes[myUsername];
   let postKey = null;
 
   if (envelope.ephemeralPublicKey) {
-    const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
-    const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
-    const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
-    if (rawKeyB64.startsWith("[Decryption Error")) {
-      throw new Error("Failed to unwrap post key");
+    try {
+      const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
+      const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
+      const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
+      if (!rawKeyB64.startsWith("[Decryption Error")) {
+        postKey = await getSubtleCrypto().importKey(
+          "raw",
+          base64ToBuffer(rawKeyB64),
+          { name: "AES-GCM" },
+          true,
+          ["encrypt", "decrypt"]
+        );
+      }
+    } catch (e) {
+      console.warn('Ephemeral key unwrap attempt failed:', e);
     }
-    postKey = await getSubtleCrypto().importKey(
-      "raw",
-      base64ToBuffer(rawKeyB64),
-      { name: "AES-GCM" },
-      true,
-      ["encrypt", "decrypt"]
-    );
-  } else if (authorPublicKey) {
-    postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
+  }
+
+  if (!postKey && authorPublicKey) {
+    try {
+      postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
+    } catch (e) {}
   }
 
   if (!postKey) throw new Error("Could not derive post key");
@@ -488,9 +504,17 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
 
   try {
     const parsed = JSON.parse(decryptedRaw);
-    if (parsed.text !== undefined || parsed.mediaKey !== undefined) {
+    if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.mediaKey !== undefined)) {
+      let innerText = parsed.text || '';
+      try {
+        const nestedParsed = JSON.parse(innerText);
+        if (nestedParsed && typeof nestedParsed === 'object' && nestedParsed.text !== undefined) {
+          innerText = nestedParsed.text;
+        }
+      } catch (e) {}
+
       return {
-        text: parsed.text || '',
+        text: innerText,
         mediaKey: parsed.mediaKey || null
       };
     }

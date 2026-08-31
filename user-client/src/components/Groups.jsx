@@ -366,8 +366,8 @@ export default function Groups({
         }
       }
 
-      if (isMounted && hasUpdates) {
-        setDecryptedMsgMap(prev => ({ ...prev, ...newDecrypted }));
+      if (isMounted) {
+        setDecryptedMsgMap(prev => ({ ...prev, ...decryptedMsgCache.current, ...newDecrypted }));
       }
     }
 
@@ -496,16 +496,21 @@ export default function Groups({
         : (selectedGroup.members || [currentUser.username]);
 
       const recipientPublicKeys = userList
-        .filter(u => memberNames.includes(u.username))
+        .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
         .map(u => ({
           username: u.username,
           spkiPublicKey: u.publicIdentityKey
         }));
 
-      if (!recipientPublicKeys.some(r => r.username === currentUser.username)) {
+      // Ensure sender is always in recipient list with valid public key so sender can decrypt their own voice notes
+      const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username.toLowerCase() === currentUser.username.toLowerCase());
+      if (senderIndex >= 0) {
+        if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
+      } else if (myPublicKey) {
         recipientPublicKeys.push({
           username: currentUser.username,
-          spkiPublicKey: currentUser.spkiPublicKey
+          spkiPublicKey: myPublicKey
         });
       }
 
@@ -572,17 +577,21 @@ export default function Groups({
         : (selectedGroup.members || [currentUser.username]);
 
       const recipientPublicKeys = userList
-        .filter(u => memberNames.includes(u.username))
+        .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
         .map(u => ({
           username: u.username,
           spkiPublicKey: u.publicIdentityKey
         }));
 
-      // Ensure sender is always in recipient list so sender can decrypt their own messages
-      if (!recipientPublicKeys.some(r => r.username === currentUser.username)) {
+      // Ensure sender is always in recipient list with valid public key so sender can decrypt their own messages
+      const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username.toLowerCase() === currentUser.username.toLowerCase());
+      if (senderIndex >= 0) {
+        if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
+      } else if (myPublicKey) {
         recipientPublicKeys.push({
           username: currentUser.username,
-          spkiPublicKey: currentUser.spkiPublicKey
+          spkiPublicKey: myPublicKey
         });
       }
 
