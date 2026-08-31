@@ -72,6 +72,36 @@ export default function App() {
 
   // In-App Notification & Unread Count State
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+  const [unreadGroupsCount, setUnreadGroupsCount] = useState(0);
+  const [unreadGroupMap, setUnreadGroupMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`sadisocial_unread_groups_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Keep total unread groups count synchronized
+  useEffect(() => {
+    const total = Object.values(unreadGroupMap).reduce((sum, count) => sum + (Number(count) || 0), 0);
+    setUnreadGroupsCount(total);
+    if (currentUser?.username) {
+      try {
+        localStorage.setItem(`sadisocial_unread_groups_${currentUser.username}`, JSON.stringify(unreadGroupMap));
+      } catch (e) {}
+    }
+  }, [unreadGroupMap, currentUser]);
+
+  const handleClearGroupUnread = (groupId) => {
+    if (!groupId) return;
+    setUnreadGroupMap(prev => {
+      if (!prev[groupId]) return prev;
+      const copy = { ...prev };
+      delete copy[groupId];
+      return copy;
+    });
+  };
+
   const [inAppNotification, setInAppNotification] = useState(null);
   const [selectedDirectPeer, setSelectedDirectPeer] = useState(null);
 
@@ -306,6 +336,41 @@ export default function App() {
                   } catch (e) {}
                 }
               }
+            } else if (data.type === 'GROUP_MESSAGE') {
+              const msg = data.message;
+              const groupId = data.groupId;
+              const groupName = data.groupName || 'Community';
+              const sender = data.sender || msg?.sender;
+
+              if (sender && sender !== currentUser?.username) {
+                playNotificationChime();
+                setUnreadGroupMap(prev => ({
+                  ...prev,
+                  [groupId]: (prev[groupId] || 0) + 1
+                }));
+
+                const senderUser = allUsersRef.current.find(u => u.username === sender) || { username: sender };
+
+                setInAppNotification({
+                  id: msg?.id || `gm_${Date.now()}`,
+                  sender: groupName,
+                  displayName: `👥 ${groupName}`,
+                  avatarUrl: null,
+                  avatarColor: '#ee7882',
+                  previewText: `@${senderUser.displayName || sender}: New encrypted message`,
+                  peerObj: null
+                });
+
+                // Web Notification
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                  try {
+                    new Notification(`👥 ${groupName}`, {
+                      body: `@${senderUser.displayName || sender}: New message on SadiSocial`,
+                      icon: '/favicon.ico'
+                    });
+                  } catch (e) {}
+                }
+              }
             } else if (data.type === 'CALL_OFFER') {
               if (data.target === currentUser?.username) {
                 const callerUser = allUsersRef.current.find(u => u.username === data.caller) || {
@@ -504,6 +569,7 @@ export default function App() {
         engineOnline={engineOnline}
         hideBottomNav={isAnyChatActive}
         unreadChatsCount={unreadChatsCount}
+        unreadGroupsCount={unreadGroupsCount}
       />
 
       {/* Zero Knowledge Search Overlay */}
@@ -596,6 +662,8 @@ export default function App() {
                 allUsers={allUsers}
                 serverUrl={serverUrl}
                 wsClient={wsClient}
+                unreadGroupMap={unreadGroupMap}
+                onClearGroupUnread={handleClearGroupUnread}
                 onGroupChatStateChange={setIsGroupChatOpen}
               />
             )}

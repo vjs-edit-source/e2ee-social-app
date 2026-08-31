@@ -316,6 +316,7 @@ class ZeroKnowledgeStore {
   updateUserPresence(username, isOnline) {
     const user = this.users.get(username);
     if (user) {
+      user.isOnline = !!isOnline;
       user.lastSeen = new Date().toISOString();
       this.users.set(username, user);
       this.scheduleSave();
@@ -335,7 +336,7 @@ class ZeroKnowledgeStore {
       phoneNumber: u.phoneNumber || null,
       registeredAt: u.registeredAt || new Date().toISOString(),
       lastSeen: u.lastSeen || u.registeredAt || new Date().toISOString(),
-      isOnline: connectedUsersSet ? connectedUsersSet.has(u.username) : false
+      isOnline: connectedUsersSet ? connectedUsersSet.has(u.username) : !!u.isOnline
     }));
   }
 
@@ -756,11 +757,11 @@ class ZeroKnowledgeStore {
   }
 
   // ── FULL ZERO-KNOWLEDGE SERVER AUDIT SNAPSHOT ───────────────
-  getAuditSnapshot() {
+  getAuditSnapshot(connectedUsersSet = null) {
     const activeStatuses = this.getActiveStatuses();
     return {
       totalUsers: this.users.size,
-      users: this.getAllUsers(),
+      users: this.getAllUsers(connectedUsersSet),
       totalPosts: this.posts.length,
       posts: this.posts,
       totalMessages: this.messages.length,

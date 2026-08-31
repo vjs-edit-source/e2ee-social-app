@@ -48,7 +48,15 @@ import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import { localSearchIndex } from '../search/searchIndex';
 
-export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient, onGroupChatStateChange }) {
+export default function Groups({
+  currentUser,
+  allUsers = [],
+  serverUrl,
+  wsClient,
+  unreadGroupMap = {},
+  onClearGroupUnread,
+  onGroupChatStateChange
+}) {
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'groups' | 'communities'
@@ -2252,7 +2260,10 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               <div
                 key={group.id}
                 className="group-card"
-                onClick={() => setSelectedGroup(group)}
+                onClick={() => {
+                  setSelectedGroup(group);
+                  if (onClearGroupUnread) onClearGroupUnread(group.id);
+                }}
               >
                 <div className="group-card-top">
                   {group.avatarUrl ? (
@@ -2278,7 +2289,28 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   )}
                   <div className="group-card-header-info">
                     <div className="group-card-name-row">
-                      <h4>{group.name}</h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <h4 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name}</h4>
+                        {unreadGroupMap && unreadGroupMap[group.id] > 0 && (
+                          <span
+                            style={{
+                              background: '#ee7882',
+                              color: '#ffffff',
+                              fontSize: '0.66rem',
+                              fontWeight: 'bold',
+                              borderRadius: '12px',
+                              padding: '1px 6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 0 8px rgba(238, 120, 130, 0.6)',
+                              flexShrink: 0
+                            }}
+                          >
+                            {unreadGroupMap[group.id] > 99 ? '99+' : unreadGroupMap[group.id]}
+                          </span>
+                        )}
+                      </div>
                       <div className="group-card-badges">
                         {isGroupOwner && <span className="group-role-badge creator"><Crown size={10} /> Owner</span>}
                         {!isGroupOwner && groupRole === 'admin' && <span className="group-role-badge admin"><Shield size={10} /> Admin</span>}

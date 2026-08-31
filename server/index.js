@@ -80,11 +80,22 @@ function broadcast(data, excludeUsername = null) {
   }
 }
 
+// Helper to get active online users Set
+function getOnlineUsersSet() {
+  const online = new Set();
+  for (const [username, sockets] of connectedClients.entries()) {
+    if (sockets && sockets.size > 0 && username !== '__inspector__') {
+      online.add(username);
+    }
+  }
+  return online;
+}
+
 // Broadcast updated database state to any open Server Inspectors
 function notifyInspector() {
   broadcast({
     type: 'INSPECTOR_UPDATE',
-    snapshot: db.getAuditSnapshot()
+    snapshot: db.getAuditSnapshot(getOnlineUsersSet())
   });
 }
 
@@ -332,10 +343,18 @@ app.post('/api/groups/:groupId/messages', (req, res) => {
     return res.status(400).json({ error: 'Missing required group message fields' });
   }
 
+  const group = db.getGroup(groupId);
   const msg = db.addGroupMessage(groupId, sender, ciphertext, iv, keyEnvelopes, mediaId);
-  if (!msg) return res.status(404).json({ error: 'Group not found' });
+  if (!msg || !group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_MESSAGE', groupId, message: msg });
+  broadcast({
+    type: 'GROUP_MESSAGE',
+    groupId,
+    groupName: group.name,
+    isCommunity: !!group.isCommunity,
+    sender,
+    message: msg
+  });
   notifyInspector();
 
   res.json({ success: true, message: msg });
@@ -560,7 +579,7 @@ app.get('/api/media/:mediaId', (req, res) => {
 
 // ── ZERO-KNOWLEDGE SERVER INSPECTOR AUDIT API ───────────────
 app.get('/api/inspector', (req, res) => {
-  res.json(db.getAuditSnapshot());
+  res.json(db.getAuditSnapshot(getOnlineUsersSet()));
 });
 
 // ── WEBSOCKET SERVER ────────────────────────────────────────
@@ -581,6 +600,7 @@ wss.on('connection', (ws, req) => {
       lastSeen: new Date().toISOString()
     });
     console.log(`[WS] Client connected: ${username} (Active sockets for user: ${connectedClients.get(username).size})`);
+    notifyInspector();
   }
 
   ws.isAlive = true;
@@ -626,6 +646,7 @@ wss.on('connection', (ws, req) => {
         });
       }
       console.log(`[WS] Client disconnected: ${username}`);
+      notifyInspector();
     }
   });
 });

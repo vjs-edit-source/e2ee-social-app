@@ -11,7 +11,8 @@ export default function Navigation({
   onOpenSettings,
   engineOnline = true,
   hideBottomNav = false,
-  unreadChatsCount = 0
+  unreadChatsCount = 0,
+  unreadGroupsCount = 0
 }) {
   return (
     <>
@@ -126,8 +127,34 @@ export default function Navigation({
             className={`bottom-nav-item ${activeTab === 'groups' ? 'active' : ''}`}
             onClick={() => setActiveTab('groups')}
             type="button"
+            style={{ position: 'relative' }}
           >
-            <Users size={18} />
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <Users size={18} />
+              {unreadGroupsCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-9px',
+                    background: '#ee7882',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 'bold',
+                    borderRadius: '10px',
+                    padding: '0 4px',
+                    minWidth: '14px',
+                    height: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 8px rgba(238, 120, 130, 0.7)'
+                  }}
+                >
+                  {unreadGroupsCount > 9 ? '9+' : unreadGroupsCount}
+                </span>
+              )}
+            </div>
             <span>Groups</span>
           </button>
 
