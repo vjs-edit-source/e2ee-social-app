@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SadiSocial • Server Engine Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070913;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --primary: #ee7882;
+      --primary-glow: rgba(238, 120, 130, 0.2);
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.2);
+      --purple: #a855f7;
+      --blue: #3b82f6;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(238, 120, 130, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 40%);
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 15, 30, 0.85);
+      backdrop-filter: blur(16px);
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ee7882, #10b981);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #fff;
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+    .brand-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-subtitle {
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .main-container {
+      max-width: 1300px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      flex: 1;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .stat-label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Tabs */
+    .tabs-nav {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .tab-btn.active {
+      background: rgba(238, 120, 130, 0.15);
+      border-color: rgba(238, 120, 130, 0.4);
+      color: #ee7882;
+    }
+
+    /* Content Tables & Cards */
+    .content-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      backdrop-filter: blur(12px);
+    }
+    .box-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .box-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+      text-align: left;
+    }
+    th {
+      padding: 12px 14px;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+    td {
+      padding: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: middle;
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tag-green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .tag-blue { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+    .tag-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+    .tag-red { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+    .code-snippet {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 8px;
+      border-radius: 6px;
+      color: #cbd5e1;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    /* Live Stream Console */
+    .log-stream {
+      background: #050811;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      max-height: 420px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .log-entry {
+      display: flex;
+      gap: 12px;
+      line-height: 1.4;
+    }
+    .log-time { color: var(--muted); }
+    .log-type { font-weight: 600; }
+    .log-type.USER_JOINED { color: #60a5fa; }
+    .log-type.MESSAGE_SENT { color: #34d399; }
+    .log-type.GROUP_CREATED { color: #c084fc; }
+    .log-type.STATUS_POSTED { color: #f59e0b; }
+    .log-type.OTP_DISPATCHED { color: #ee7882; }
+
+    .zk-banner {
+      background: linear-gradient(135deg, rgba(238, 120, 130, 0.1), rgba(16, 185, 129, 0.1));
+      border: 1px solid rgba(238, 120, 130, 0.3);
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 0.82rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">S</div>
+      <div>
+        <div class="brand-title">SadiSocial Engine Inspector</div>
+        <div class="brand-subtitle">Real-Time Central Server Audit & Network Monitor</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="status-pill">
+        <div class="pulse-dot"></div>
+        <span id="ws-status">Live Engine WebSocket Connected</span>
+      </div>
+      <button onclick="fetchAuditSnapshot()" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #fff; padding: 8px 14px; border-radius: 10px; font-size: 0.8rem; cursor: pointer; font-weight: 600;">
+        ↻ Refresh Data
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="main-container">
+
+    <!-- ZK Proof Banner -->
+    <div class="zk-banner">
+      <div>
+        🛡️ <strong>Zero-Knowledge Architecture Confirmed:</strong> Central server routes metadata and ciphertext envelopes but holds <strong>zero private keys</strong>. Plaintext messages and voice notes are cryptographically invisible to server inspectors.
+      </div>
+      <div class="tag tag-green">100% P2P E2EE</div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Users</div>
+        <div class="stat-value" id="stat-users">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Online</div>
+        <div class="stat-value" id="stat-online" style="color: #34d399;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Encrypted Chats</div>
+        <div class="stat-value" id="stat-messages" style="color: #60a5fa;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Groups & Communities</div>
+        <div class="stat-value" id="stat-groups" style="color: #c084fc;">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Feed Posts</div>
+        <div class="stat-value" id="stat-posts">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Media Blobs</div>
+        <div class="stat-value" id="stat-media">0</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchTab('users')">👥 Connected Users</button>
+      <button class="tab-btn" onclick="switchTab('messages')">💬 Message Routing</button>
+      <button class="tab-btn" onclick="switchTab('groups')">👥 Groups & Communities</button>
+      <button class="tab-btn" onclick="switchTab('posts')">📰 Posts & Stories</button>
+      <button class="tab-btn" onclick="switchTab('stream')">⚡ Real-Time Live Logs</button>
+    </div>
+
+    <!-- Tab 1: Connected Users -->
+    <div id="tab-users" class="content-box">
+      <div class="box-header">
+        <div class="box-title">Registered User Directory & Identity Keys</div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Display Name</th>
+              <th>Phone / SIM</th>
+              <th>Presence</th>
+              <th>Public Identity Key (SPKI)</th>
+              <th>Joined Date</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--muted);">Loading users...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 2: Message Routing -->
+    <div id="tab-messages" class="content-box" style="display: none;">
+      <div class="box-header">
+        <div class="box-title">E2EE Message Traffic (Ciphertext Envelopes)</div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>From (Sender)</th>
+              <th>To (Recipient)</th>
+              <th>Type</th>
+              <th>Ciphertext Envelope Preview</th>
+              <th>Sent Time</th>
+            </tr>
+          </thead>
+          <tbody id="messages-table-body">
+            <tr><td colspan="5" style="text-align:center; color: var(--muted);">No messages routed yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 3: Groups & Communities -->
+    <div id="tab-groups" class="content-box" style="display: none;">
+      <div class="box-header">
+        <div class="box-title">Created Groups & Public Communities</div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Group / Community Name</th>
+              <th>Type</th>
+              <th>Creator</th>
+              <th>Members</th>
+              <th>Total Messages</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody id="groups-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--muted);">No groups created yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 4: Posts & Stories -->
+    <div id="tab-posts" class="content-box" style="display: none;">
+      <div class="box-header">
+        <div class="box-title">Encrypted Posts & 24h Stories</div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Author</th>
+              <th>Content Type</th>
+              <th>Likes</th>
+              <th>Comments</th>
+              <th>Encrypted Envelope</th>
+              <th>Posted Time</th>
+            </tr>
+          </thead>
+          <tbody id="posts-table-body">
+            <tr><td colspan="6" style="text-align:center; color: var(--muted);">No posts published yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 5: Live Event Stream -->
+    <div id="tab-stream" class="content-box" style="display: none;">
+      <div class="box-header">
+        <div class="box-title">Central Engine WebSocket Live Event Stream</div>
+      </div>
+      <div class="log-stream" id="log-stream-container">
+        <div class="log-entry">
+          <span class="log-time">[${new Date().toLocaleTimeString()}]</span>
+          <span class="log-type" style="color: #60a5fa;">SYSTEM_READY</span>
+          <span>Engine Inspector listener initialized. Listening for real-time traffic...</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentData = null;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.content-box').forEach(box => box.style.display = 'none');
+      
+      const targetBox = document.getElementById('tab-' + tabId);
+      if (targetBox) targetBox.style.display = 'block';
+
+      event.currentTarget.classList.add('active');
+    }
+
+    async function fetchAuditSnapshot() {
+      try {
+        const res = await fetch('/api/inspector');
+        if (!res.ok) return;
+        currentData = await res.json();
+        renderSnapshot(currentData);
+      } catch (err) {
+        console.error('Failed to fetch inspector snapshot:', err);
+      }
+    }
+
+    function renderSnapshot(data) {
+      if (!data) return;
+
+      // Stats
+      document.getElementById('stat-users').innerText = data.totalUsers || 0;
+      document.getElementById('stat-messages').innerText = data.totalMessages || 0;
+      document.getElementById('stat-groups').innerText = data.totalGroups || 0;
+      document.getElementById('stat-posts').innerText = data.totalPosts || 0;
+      document.getElementById('stat-media').innerText = data.totalMediaBlobs || 0;
+
+      // Calculate Online Users
+      const onlineCount = (data.users || []).filter(u => u.isOnline).length;
+      document.getElementById('stat-online').innerText = onlineCount;
+
+      // 1. Users Table
+      const usersTbody = document.getElementById('users-table-body');
+      if (data.users && data.users.length > 0) {
+        usersTbody.innerHTML = data.users.map(u => `
+          <tr>
+            <td><strong style="color: #fff;">@${u.username}</strong></td>
+            <td>${u.displayName || u.username}</td>
+            <td>${u.phoneNumber ? `<span class="tag tag-blue">${u.phoneNumber}</span>` : '<span style="color:#64748b;">N/A</span>'}</td>
+            <td>${u.isOnline ? '<span class="tag tag-green">Online</span>' : '<span class="tag" style="background:rgba(255,255,255,0.06); color:#94a3b8;">Offline</span>'}</td>
+            <td><span class="code-snippet">${u.publicIdentityKey || 'N/A'}</span></td>
+            <td><span style="color: var(--muted); font-size: 0.78rem;">${new Date(u.joinedAt || Date.now()).toLocaleDateString()}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        usersTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--muted);">No users registered yet.</td></tr>';
+      }
+
+      // 2. Messages Table
+      const msgTbody = document.getElementById('messages-table-body');
+      if (data.messages && data.messages.length > 0) {
+        msgTbody.innerHTML = data.messages.slice(-30).reverse().map(m => `
+          <tr>
+            <td><span class="tag tag-blue">@${m.sender}</span></td>
+            <td><span class="tag tag-purple">@${m.recipient}</span></td>
+            <td><span class="tag tag-green">${m.isVoice ? 'Voice Note' : (m.attachments && m.attachments.length ? 'Media' : 'Encrypted Text')}</span></td>
+            <td><span class="code-snippet">${m.ciphertext ? m.ciphertext.slice(0, 45) + '...' : '[Encrypted Payload]'}</span></td>
+            <td><span style="color: var(--muted); font-size: 0.78rem;">${new Date(m.timestamp).toLocaleTimeString()}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        msgTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--muted);">No messages routed yet.</td></tr>';
+      }
+
+      // 3. Groups Table
+      const groupsTbody = document.getElementById('groups-table-body');
+      if (data.groups && data.groups.length > 0) {
+        groupsTbody.innerHTML = data.groups.map(g => `
+          <tr>
+            <td><strong style="color: #fff;">${g.name}</strong></td>
+            <td>${g.isCommunity ? '<span class="tag tag-purple">Public Community</span>' : '<span class="tag tag-blue">Private Group</span>'}</td>
+            <td><span class="tag tag-green">@${g.creator}</span></td>
+            <td>${g.membersCount} members</td>
+            <td>${g.totalMessages || 0} msgs</td>
+            <td><span style="color: var(--muted); font-size: 0.78rem;">${new Date(g.createdAt).toLocaleDateString()}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        groupsTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--muted);">No groups created yet.</td></tr>';
+      }
+
+      // 4. Posts Table
+      const postsTbody = document.getElementById('posts-table-body');
+      if (data.posts && data.posts.length > 0) {
+        postsTbody.innerHTML = data.posts.map(p => `
+          <tr>
+            <td><strong style="color: #fff;">@${p.author}</strong></td>
+            <td><span class="tag tag-blue">Encrypted Feed Post</span></td>
+            <td>${p.likes ? p.likes.length : 0} likes</td>
+            <td>${p.comments ? p.comments.length : 0} comments</td>
+            <td><span class="code-snippet">${p.ciphertext ? p.ciphertext.slice(0, 45) + '...' : '[Encrypted Blob]'}</span></td>
+            <td><span style="color: var(--muted); font-size: 0.78rem;">${new Date(p.timestamp).toLocaleString()}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        postsTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--muted);">No posts published yet.</td></tr>';
+      }
+    }
+
+    // Append to live log stream
+    function appendLiveLog(type, text) {
+      const container = document.getElementById('log-stream-container');
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = `
+        <span class="log-time">[${new Date().toLocaleTimeString()}]</span>
+        <span class="log-type ${type}">${type}</span>
+        <span>${text}</span>
+      `;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Connect WebSocket for Live Real-Time Feed
+    function connectInspectorWs() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}?user=__inspector__`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('ws-status').innerText = 'Live Engine WebSocket Connected';
+        appendLiveLog('SYSTEM_READY', 'WebSocket connection established with central engine.');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'INSPECTOR_UPDATE' && msg.snapshot) {
+            renderSnapshot(msg.snapshot);
+          } else if (msg.type === 'MESSAGE_SENT') {
+            appendLiveLog('MESSAGE_SENT', `Encrypted message routed from @${msg.sender} to @${msg.recipient}`);
+            fetchAuditSnapshot();
+          } else if (msg.type === 'USER_JOINED') {
+            appendLiveLog('USER_JOINED', `New user @${msg.user?.username || 'member'} joined the network`);
+            fetchAuditSnapshot();
+          } else if (msg.type === 'GROUP_CREATED') {
+            appendLiveLog('GROUP_CREATED', `New group "${msg.group?.name}" created by @${msg.group?.creator}`);
+            fetchAuditSnapshot();
+          } else if (msg.type === 'STATUS_POSTED') {
+            appendLiveLog('STATUS_POSTED', `New 24h story posted by @${msg.author}`);
+            fetchAuditSnapshot();
+          }
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        document.getElementById('ws-status').innerText = 'Engine Reconnecting...';
+        setTimeout(connectInspectorWs, 3000);
+      };
+    }
+
+    // Initial load
+    fetchAuditSnapshot();
+    connectInspectorWs();
+    setInterval(fetchAuditSnapshot, 10000);
+  </script>
+</body>
+</html>

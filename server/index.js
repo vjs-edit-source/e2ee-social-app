@@ -38,6 +38,16 @@ if (fs.existsSync(publicPath)) {
   app.use(express.static(publicPath));
 }
 
+// Inspector Dashboard Route
+app.get('/inspector', (req, res) => {
+  const inspectorFile = path.join(publicPath, 'inspector.html');
+  if (fs.existsSync(inspectorFile)) {
+    res.sendFile(inspectorFile);
+  } else {
+    res.json(db.getAuditSnapshot());
+  }
+});
+
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
