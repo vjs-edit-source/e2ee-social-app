@@ -98,6 +98,7 @@ export default function SettingsScreen({
       setStarredList([]);
     }
   };
+  const [backupPassphrase, setBackupPassphrase] = useState('');
   const [backingUp, setBackingUp] = useState(false);
   const [backupStatus, setBackupStatus] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
@@ -107,17 +108,20 @@ export default function SettingsScreen({
 
   // Derive human-readable safety number / fingerprint from public key
   const generateSafetyFingerprint = (spkiKey) => {
-    if (!spkiKey) return '0000 0000 0000 0000 0000 0000';
+    const key = spkiKey || currentUser?.spkiPublicKey || currentUser?.publicIdentityKey;
+    if (!key || typeof key !== 'string') return '0000 0000 0000 0000 0000 0000';
     let hash = 0;
-    for (let i = 0; i < spkiKey.length; i++) {
-      hash = (hash << 5) - hash + spkiKey.charCodeAt(i);
+    for (let i = 0; i < key.length; i++) {
+      hash = (hash << 5) - hash + key.charCodeAt(i);
       hash |= 0;
     }
     const abs = Math.abs(hash).toString().padStart(12, '7');
-    return `${abs.slice(0, 4)} ${abs.slice(4, 8)} ${abs.slice(8, 12)} ${spkiKey.slice(10, 14).toUpperCase()}`;
+    const suffix = key.length >= 14 ? key.slice(10, 14).toUpperCase() : 'E2EE';
+    return `${abs.slice(0, 4)} ${abs.slice(4, 8)} ${abs.slice(8, 12)} ${suffix}`;
   };
 
-  const safetyFingerprint = generateSafetyFingerprint(currentUser?.spkiPublicKey);
+  const currentPublicKeyStr = currentUser?.spkiPublicKey || currentUser?.publicIdentityKey || '';
+  const safetyFingerprint = generateSafetyFingerprint(currentPublicKeyStr);
 
   // Compress and set photo
   const handlePhotoSelect = (e) => {
@@ -233,8 +237,9 @@ export default function SettingsScreen({
   };
 
   const handleCopyKey = () => {
-    if (!currentUser?.spkiPublicKey) return;
-    navigator.clipboard.writeText(currentUser.spkiPublicKey);
+    const keyToCopy = currentUser?.spkiPublicKey || currentUser?.publicIdentityKey;
+    if (!keyToCopy) return;
+    navigator.clipboard.writeText(keyToCopy);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2500);
   };
@@ -780,7 +785,7 @@ export default function SettingsScreen({
               maxHeight: '75px',
               overflowY: 'auto'
             }}>
-              {currentUser?.spkiPublicKey || 'Generating...'}
+              {currentUser?.spkiPublicKey || currentUser?.publicIdentityKey || 'Generating...'}
             </div>
           </div>
 
