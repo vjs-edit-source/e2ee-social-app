@@ -15,7 +15,8 @@ import {
   Smartphone,
   Zap,
   Mail,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 import {
   backupKeyVaultToServer,
@@ -46,7 +47,8 @@ export default function AuthModal({
   onRestored,
   serverUrl,
   onOpenEngineSettings,
-  engineOnline = true
+  engineOnline = true,
+  onClose = null
 }) {
   const [activeTab, setActiveTab] = useState('phone');
 
@@ -314,7 +316,14 @@ export default function AuthModal({
   };
 
   return (
-    <div className="auth-modal-overlay">
+    <div
+      className="auth-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) {
+          onClose();
+        }
+      }}
+    >
       {createdMnemonic && (
         <MnemonicVaultModal
           mnemonicWords={createdMnemonic}
@@ -324,135 +333,81 @@ export default function AuthModal({
         />
       )}
 
-      <div className="auth-modal-card" style={{ maxWidth: '440px' }}>
-        <div className="auth-header">
-          <div className="auth-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.2), rgba(16, 185, 129, 0.2))' }}>
-            <ShieldCheck size={32} color="#ee7882" />
-          </div>
-          <h2>SadiSocial Identity</h2>
-          <p>Self-Sovereign • Zero-Knowledge End-to-End Encrypted</p>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          background: 'rgba(255, 255, 255, 0.04)',
-          borderRadius: '14px',
-          padding: '4px',
-          margin: '0 20px 16px',
-          gap: '4px',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
+      <div className="auth-modal-card">
+        {onClose && (
           <button
             type="button"
-            onClick={() => { setActiveTab('phone'); setAuthError(''); setPhoneOtpStep(1); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'phone' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-              color: activeTab === 'phone' ? '#60a5fa' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
+            className="auth-modal-close-btn"
+            onClick={onClose}
+            title="Close"
           >
-            <Smartphone size={15} />
+            <X size={16} />
+          </button>
+        )}
+
+        <div className="auth-header">
+          <div className="auth-icon-wrap">
+            <ShieldCheck size={30} color="#ee7882" />
+          </div>
+          <h2>SadiSocial Identity</h2>
+          <div className="auth-header-badge">
+            <span className="auth-badge-dot" />
+            <span>Self-Sovereign • Zero-Knowledge E2EE</span>
+          </div>
+        </div>
+
+        <div className="auth-tabs-nav">
+          <button
+            type="button"
+            className={`auth-tab-btn tab-phone ${activeTab === 'phone' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('phone'); setAuthError(''); setPhoneOtpStep(1); }}
+          >
+            <Smartphone size={16} />
             <span>Phone SMS</span>
           </button>
 
           <button
             type="button"
+            className={`auth-tab-btn tab-email ${activeTab === 'email' ? 'active' : ''}`}
             onClick={() => { setActiveTab('email'); setAuthError(''); setEmailOtpStep(1); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'transparent',
-              color: activeTab === 'email' ? '#a78bfa' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
           >
-            <Mail size={15} />
+            <Mail size={16} />
             <span>Email OTP</span>
           </button>
 
           <button
             type="button"
+            className={`auth-tab-btn tab-create ${activeTab === 'create' ? 'active' : ''}`}
             onClick={() => { setActiveTab('create'); setAuthError(''); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'create' ? 'rgba(238, 120, 130, 0.25)' : 'transparent',
-              color: activeTab === 'create' ? '#ee7882' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
           >
-            <Zap size={15} />
-            <span>Quick Create</span>
+            <Zap size={16} />
+            <span>Quick Start</span>
           </button>
 
           <button
             type="button"
+            className={`auth-tab-btn tab-restore ${activeTab === 'restore' ? 'active' : ''}`}
             onClick={() => { setActiveTab('restore'); setAuthError(''); }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '8px 4px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'restore' ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
-              color: activeTab === 'restore' ? '#34d399' : '#94a3b8',
-              transition: 'all 0.2s ease'
-            }}
           >
-            <Key size={15} />
+            <Key size={16} />
             <span>Restore</span>
           </button>
         </div>
 
         {/* ── TAB: PHONE SMS OTP ── */}
         {activeTab === 'phone' && (
-          <div style={{ margin: '0 20px' }}>
+          <div className="auth-form-container">
             {phoneOtpStep === 1 ? (
               <form onSubmit={handleSendPhoneOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Enter your mobile number to receive a 6-digit SMS code on your SIM card:
+                <div className="auth-guide-text">
+                  Enter your mobile number to receive a 6-digit SMS verification code on your device:
                 </div>
 
-                <div className="input-group">
+                <div className="auth-input-group">
                   <User size={18} className="input-icon" />
                   <input
                     type="text"
+                    className="auth-input"
                     placeholder="Choose your Username..."
                     value={phoneUsername}
                     onChange={(e) => setPhoneUsername(e.target.value)}
@@ -461,33 +416,25 @@ export default function AuthModal({
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <div className="auth-phone-row">
                   <select
+                    className="auth-country-select"
                     value={countryCode}
                     onChange={(e) => setCountryCode(e.target.value)}
                     disabled={loading}
-                    style={{
-                      width: '110px',
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      color: '#f8fafc',
-                      borderRadius: '10px',
-                      padding: '10px 8px',
-                      fontSize: '0.8rem',
-                      outline: 'none'
-                    }}
                   >
                     {COUNTRY_CODES.map(c => (
-                      <option key={c.code} value={c.code} style={{ background: '#18181b', color: '#ffffff' }}>
+                      <option key={c.code} value={c.code} style={{ background: '#131826', color: '#ffffff' }}>
                         {c.name}
                       </option>
                     ))}
                   </select>
 
-                  <div className="input-group" style={{ flex: 1, margin: 0 }}>
+                  <div className="auth-input-group" style={{ flex: 1, margin: 0 }}>
                     <Phone size={18} className="input-icon" />
                     <input
                       type="tel"
+                      className="auth-input"
                       placeholder="Phone (e.g. 8926268902)"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
@@ -499,8 +446,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
+                  className="auth-submit-btn btn-phone"
                   disabled={loading || !phoneNumber.trim() || !phoneUsername.trim()}
                 >
                   {loading ? (
@@ -508,26 +454,27 @@ export default function AuthModal({
                   ) : (
                     <>
                       <ArrowRight size={18} />
-                      <span>Send 6-Digit SMS Code to Phone</span>
+                      <span>Send 6-Digit SMS Code</span>
                     </>
                   )}
                 </button>
               </form>
             ) : (
               <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '12px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                <div className="auth-guide-text">
                   Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#60a5fa' }}>{countryCode} {phoneNumber}</strong>:
                 </div>
 
-                <div className="input-group">
+                <div className="auth-input-group">
                   <Key size={18} className="input-icon" />
                   <input
                     type="text"
+                    className="auth-input"
                     maxLength={6}
-                    placeholder="Enter 6-digit code received via SMS"
+                    placeholder="• • • • • •"
                     value={phoneOtpInput}
                     onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, ''))}
-                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
+                    style={{ letterSpacing: '8px', fontSize: '1.25rem', fontWeight: '700', textAlign: 'center' }}
                     disabled={loading}
                     autoFocus
                     required
@@ -536,8 +483,8 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', marginBottom: '10px' }}
+                  className="auth-submit-btn btn-phone"
+                  style={{ marginBottom: '10px' }}
                   disabled={loading || phoneOtpInput.trim().length !== 6}
                 >
                   {loading ? (
@@ -545,16 +492,16 @@ export default function AuthModal({
                   ) : (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>Verify SMS Code & Enter SadiSocial</span>
+                      <span>Verify & Launch SadiSocial</span>
                     </>
                   )}
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                   <button
                     type="button"
                     onClick={() => { setPhoneOtpStep(1); setPhoneOtpInput(''); }}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
                     ← Change Number
                   </button>
@@ -567,11 +514,12 @@ export default function AuthModal({
                       background: 'none',
                       border: 'none',
                       color: phoneCooldown > 0 ? '#64748b' : '#60a5fa',
-                      fontSize: '0.76rem',
+                      fontSize: '0.78rem',
+                      fontWeight: '500',
                       cursor: phoneCooldown > 0 ? 'default' : 'pointer'
                     }}
                   >
-                    {phoneCooldown > 0 ? `Resend SMS in ${phoneCooldown}s` : 'Resend SMS Code'}
+                    {phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Resend SMS Code'}
                   </button>
                 </div>
               </form>
@@ -581,17 +529,18 @@ export default function AuthModal({
 
         {/* ── TAB: EMAIL OTP ── */}
         {activeTab === 'email' && (
-          <div style={{ margin: '0 20px' }}>
+          <div className="auth-form-container">
             {emailOtpStep === 1 ? (
               <form onSubmit={handleSendEmailOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Receive a 6-digit verification code directly to your email inbox:
+                <div className="auth-guide-text">
+                  Receive a 6-digit verification code directly to your private email inbox:
                 </div>
 
-                <div className="input-group">
+                <div className="auth-input-group">
                   <User size={18} className="input-icon" />
                   <input
                     type="text"
+                    className="auth-input"
                     placeholder="Choose your Username..."
                     value={emailUsername}
                     onChange={(e) => setEmailUsername(e.target.value)}
@@ -600,10 +549,11 @@ export default function AuthModal({
                   />
                 </div>
 
-                <div className="input-group">
+                <div className="auth-input-group">
                   <Mail size={18} className="input-icon" />
                   <input
                     type="email"
+                    className="auth-input"
                     placeholder="Enter your Email (e.g. user@gmail.com)"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
@@ -614,8 +564,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}
+                  className="auth-submit-btn btn-email"
                   disabled={loading || !emailInput.trim() || !emailUsername.trim()}
                 >
                   {loading ? (
@@ -623,26 +572,27 @@ export default function AuthModal({
                   ) : (
                     <>
                       <ArrowRight size={18} />
-                      <span>Send 6-Digit Code to Email</span>
+                      <span>Send 6-Digit Email Code</span>
                     </>
                   )}
                 </button>
               </form>
             ) : (
               <form onSubmit={handleVerifyEmailOtp} className="auth-form" style={{ padding: 0 }}>
-                <div style={{ marginBottom: '12px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
-                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#a78bfa' }}>{emailInput}</strong>:
+                <div className="auth-guide-text">
+                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#c084fc' }}>{emailInput}</strong>:
                 </div>
 
-                <div className="input-group">
+                <div className="auth-input-group">
                   <Key size={18} className="input-icon" />
                   <input
                     type="text"
+                    className="auth-input"
                     maxLength={6}
-                    placeholder="Enter 6-digit email code"
+                    placeholder="• • • • • •"
                     value={emailOtpInput}
                     onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, ''))}
-                    style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
+                    style={{ letterSpacing: '8px', fontSize: '1.25rem', fontWeight: '700', textAlign: 'center' }}
                     disabled={loading}
                     autoFocus
                     required
@@ -651,8 +601,8 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="primary-btn"
-                  style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', marginBottom: '10px' }}
+                  className="auth-submit-btn btn-email"
+                  style={{ marginBottom: '10px' }}
                   disabled={loading || emailOtpInput.trim().length !== 6}
                 >
                   {loading ? (
@@ -665,11 +615,11 @@ export default function AuthModal({
                   )}
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                   <button
                     type="button"
                     onClick={() => { setEmailOtpStep(1); setEmailOtpInput(''); }}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
                     ← Change Email
                   </button>
@@ -681,8 +631,9 @@ export default function AuthModal({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: emailCooldown > 0 ? '#64748b' : '#a78bfa',
-                      fontSize: '0.76rem',
+                      color: emailCooldown > 0 ? '#64748b' : '#c084fc',
+                      fontSize: '0.78rem',
+                      fontWeight: '500',
                       cursor: emailCooldown > 0 ? 'default' : 'pointer'
                     }}
                   >
@@ -694,39 +645,42 @@ export default function AuthModal({
           </div>
         )}
 
-        {/* ── TAB: QUICK CREATE ── */}
+        {/* ── TAB: QUICK START ── */}
         {activeTab === 'create' && (
-          <div style={{ margin: '0 20px' }}>
-            <div className="preset-section" style={{ marginBottom: '12px' }}>
-              <span className="section-label" style={{ fontSize: '0.76rem' }}>1-Click Demo Accounts:</span>
-              <div className="preset-grid">
+          <div className="auth-form-container">
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Instant 1-Click Demo Profiles:
+              </div>
+              <div className="auth-presets-grid">
                 {presets.map(p => (
                   <button
                     key={p.name}
                     type="button"
-                    className={`preset-card ${activeUsername === p.name ? 'active' : ''}`}
+                    className={`auth-preset-item ${activeUsername === p.name ? 'active' : ''}`}
                     onClick={() => handlePresetSelect(p.name)}
                     disabled={loading}
                   >
-                    <div className="avatar-circle" style={{ backgroundColor: p.color }}>
+                    <div className="auth-preset-avatar" style={{ backgroundColor: p.color, boxShadow: `0 0 12px ${p.color}50` }}>
                       {p.name[0]}
                     </div>
-                    <div className="preset-info">
-                      <div className="preset-name">{p.name}</div>
-                      <div className="preset-role">{p.role}</div>
-                    </div>
+                    <span className="auth-preset-name">{p.name}</span>
+                    <span className="auth-preset-tag">{p.role}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="divider" style={{ margin: '12px 0' }}><span>OR CHOOSE YOUR USERNAME</span></div>
+            <div className="divider" style={{ margin: '14px 0', color: '#64748b', fontSize: '0.72rem', letterSpacing: '0.5px' }}>
+              <span>OR CUSTOM USERNAME</span>
+            </div>
 
             <form onSubmit={handleCreateSubmit} className="auth-form" style={{ padding: 0 }}>
-              <div className="input-group">
+              <div className="auth-input-group">
                 <User size={18} className="input-icon" />
                 <input
                   type="text"
+                  className="auth-input"
                   placeholder="Enter username (e.g. Sadi, Alex)..."
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
@@ -735,10 +689,11 @@ export default function AuthModal({
                 />
               </div>
 
-              <div className="input-group">
+              <div className="auth-input-group">
                 <Lock size={18} className="input-icon" />
                 <input
                   type="password"
+                  className="auth-input"
                   placeholder="Optional: Master backup password"
                   value={passphraseInput}
                   onChange={(e) => setPassphraseInput(e.target.value)}
@@ -748,8 +703,7 @@ export default function AuthModal({
 
               <button
                 type="submit"
-                className="primary-btn"
-                style={{ background: 'linear-gradient(135deg, #ee7882, #e05663)' }}
+                className="auth-submit-btn btn-create"
                 disabled={loading || !usernameInput.trim()}
               >
                 {loading ? (
@@ -757,7 +711,7 @@ export default function AuthModal({
                 ) : (
                   <>
                     <Key size={18} />
-                    <span>Create & Generate 12-Word Master Vault</span>
+                    <span>Create & Generate 12-Word Vault</span>
                   </>
                 )}
               </button>
@@ -767,56 +721,30 @@ export default function AuthModal({
 
         {/* ── TAB: RESTORE ── */}
         {activeTab === 'restore' && (
-          <div style={{ margin: '0 20px' }}>
-            <div style={{
-              display: 'flex',
-              background: 'rgba(255, 255, 255, 0.04)',
-              borderRadius: '10px',
-              padding: '3px',
-              marginBottom: '14px',
-              gap: '4px'
-            }}>
+          <div className="auth-form-container">
+            <div className="auth-restore-switch">
               <button
                 type="button"
+                className={`auth-restore-pill ${restoreMode === 'mnemonic' ? 'active' : ''}`}
                 onClick={() => setRestoreMode('mnemonic')}
-                style={{
-                  flex: 1,
-                  padding: '6px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontSize: '0.75rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  background: restoreMode === 'mnemonic' ? '#10b981' : 'transparent',
-                  color: '#ffffff'
-                }}
               >
                 12-Word Seed Phrase
               </button>
               <button
                 type="button"
+                className={`auth-restore-pill ${restoreMode === 'passphrase' ? 'active' : ''}`}
                 onClick={() => setRestoreMode('passphrase')}
-                style={{
-                  flex: 1,
-                  padding: '6px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontSize: '0.75rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  background: restoreMode === 'passphrase' ? '#10b981' : 'transparent',
-                  color: '#ffffff'
-                }}
               >
                 Password Backup
               </button>
             </div>
 
             <form onSubmit={handleRestoreSubmit} className="auth-form" style={{ padding: 0 }}>
-              <div className="input-group">
+              <div className="auth-input-group">
                 <User size={18} className="input-icon" />
                 <input
                   type="text"
+                  className="auth-input"
                   placeholder="Enter your account username..."
                   value={restoreUsername}
                   onChange={(e) => setRestoreUsername(e.target.value)}
@@ -825,33 +753,29 @@ export default function AuthModal({
                 />
               </div>
 
-              <div className="input-group">
-                <FileText size={18} className="input-icon" />
+              <div className="auth-input-group">
+                <FileText size={18} className="input-icon" style={{ top: '22px' }} />
                 <textarea
                   rows={3}
+                  className="auth-input"
                   placeholder={restoreMode === 'mnemonic' ? "Enter your 12 words separated by spaces (e.g. ocean tiger galaxy crystal silver...)" : "Enter your cloud backup password..."}
                   value={restoreSeedInput}
                   onChange={(e) => setRestoreSeedInput(e.target.value)}
                   disabled={loading}
                   required
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#f8fafc',
-                    fontSize: '0.84rem',
-                    width: '100%',
-                    padding: '8px 0',
-                    outline: 'none',
-                    resize: 'none',
-                    lineHeight: '1.4'
+                    minHeight: '84px',
+                    fontFamily: restoreMode === 'mnemonic' ? 'var(--font-mono, monospace)' : 'inherit',
+                    fontSize: '0.82rem',
+                    lineHeight: '1.45',
+                    resize: 'none'
                   }}
                 />
               </div>
 
               <button
                 type="submit"
-                className="primary-btn"
-                style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                className="auth-submit-btn btn-restore"
                 disabled={loading || !restoreUsername.trim() || !restoreSeedInput.trim()}
               >
                 {loading ? (
@@ -868,20 +792,21 @@ export default function AuthModal({
         )}
 
         {authError && (
-          <div className="auth-error-banner" style={{ margin: '14px 20px 0' }}>
-            <AlertTriangle size={16} />
+          <div className="auth-error-banner">
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
             <span>{authError}</span>
           </div>
         )}
 
-        <div className="auth-footer" style={{ marginTop: '16px', padding: '0 20px 16px' }}>
+        <div className="auth-footer">
           <button
             type="button"
-            className="engine-settings-trigger"
+            className="auth-engine-pill"
             onClick={onOpenEngineSettings}
-            style={{ fontSize: '0.76rem' }}
+            title="Configure Backend Engine Connection"
           >
-            <Server size={13} color={engineOnline ? '#10b981' : '#ef4444'} />
+            <span className={`auth-engine-dot ${engineOnline ? 'online' : 'offline'}`} />
+            <Server size={13} />
             <span>Backend Engine: {engineOnline ? 'Connected' : 'Offline / Settings'}</span>
           </button>
         </div>

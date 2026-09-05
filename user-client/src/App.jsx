@@ -567,7 +567,7 @@ export default function App() {
           setIsGroupChatOpen(false);
         }}
         engineOnline={engineOnline}
-        hideBottomNav={isAnyChatActive}
+        hideBottomNav={!currentUser || showAuthModal || isAnyChatActive}
         unreadChatsCount={unreadChatsCount}
         unreadGroupsCount={unreadGroupsCount}
       />
@@ -632,6 +632,7 @@ export default function App() {
             serverUrl={serverUrl}
             onOpenEngineSettings={() => setShowEngineModal(true)}
             engineOnline={engineOnline}
+            onClose={currentUser ? () => setShowAuthModal(false) : null}
           />
         ) : (
           <>
