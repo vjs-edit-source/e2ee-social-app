@@ -424,7 +424,7 @@ export default function AuthModal({
                     disabled={loading}
                   >
                     {COUNTRY_CODES.map(c => (
-                      <option key={c.code} value={c.code} style={{ background: '#131826', color: '#ffffff' }}>
+                      <option key={c.code} value={c.code} style={{ background: '#190a0f', color: '#ffffff' }}>
                         {c.name}
                       </option>
                     ))}
@@ -446,7 +446,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="auth-submit-btn btn-phone"
+                  className="auth-submit-btn"
                   disabled={loading || !phoneNumber.trim() || !phoneUsername.trim()}
                 >
                   {loading ? (
@@ -462,7 +462,7 @@ export default function AuthModal({
             ) : (
               <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
                 <div className="auth-guide-text">
-                  Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#60a5fa' }}>{countryCode} {phoneNumber}</strong>:
+                  Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#ee7882' }}>{countryCode} {phoneNumber}</strong>:
                 </div>
 
                 <div className="auth-input-group">
@@ -483,7 +483,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="auth-submit-btn btn-phone"
+                  className="auth-submit-btn"
                   style={{ marginBottom: '10px' }}
                   disabled={loading || phoneOtpInput.trim().length !== 6}
                 >
@@ -513,7 +513,7 @@ export default function AuthModal({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: phoneCooldown > 0 ? '#64748b' : '#60a5fa',
+                      color: phoneCooldown > 0 ? '#64748b' : '#ee7882',
                       fontSize: '0.78rem',
                       fontWeight: '500',
                       cursor: phoneCooldown > 0 ? 'default' : 'pointer'
@@ -564,7 +564,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="auth-submit-btn btn-email"
+                  className="auth-submit-btn"
                   disabled={loading || !emailInput.trim() || !emailUsername.trim()}
                 >
                   {loading ? (
@@ -580,7 +580,7 @@ export default function AuthModal({
             ) : (
               <form onSubmit={handleVerifyEmailOtp} className="auth-form" style={{ padding: 0 }}>
                 <div className="auth-guide-text">
-                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#c084fc' }}>{emailInput}</strong>:
+                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#ee7882' }}>{emailInput}</strong>:
                 </div>
 
                 <div className="auth-input-group">
@@ -601,7 +601,7 @@ export default function AuthModal({
 
                 <button
                   type="submit"
-                  className="auth-submit-btn btn-email"
+                  className="auth-submit-btn"
                   style={{ marginBottom: '10px' }}
                   disabled={loading || emailOtpInput.trim().length !== 6}
                 >
@@ -631,7 +631,7 @@ export default function AuthModal({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: emailCooldown > 0 ? '#64748b' : '#c084fc',
+                      color: emailCooldown > 0 ? '#64748b' : '#ee7882',
                       fontSize: '0.78rem',
                       fontWeight: '500',
                       cursor: emailCooldown > 0 ? 'default' : 'pointer'
@@ -703,7 +703,7 @@ export default function AuthModal({
 
               <button
                 type="submit"
-                className="auth-submit-btn btn-create"
+                className="auth-submit-btn"
                 disabled={loading || !usernameInput.trim()}
               >
                 {loading ? (
@@ -775,7 +775,7 @@ export default function AuthModal({
 
               <button
                 type="submit"
-                className="auth-submit-btn btn-restore"
+                className="auth-submit-btn"
                 disabled={loading || !restoreUsername.trim() || !restoreSeedInput.trim()}
               >
                 {loading ? (

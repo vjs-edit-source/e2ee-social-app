@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { ShieldCheck, Copy, Check, Download, AlertTriangle, X, Key, Sparkles } from 'lucide-react';
 
 export default function MnemonicVaultModal({ mnemonicWords = [], username = '', onClose, onConfirmed = null }) {
@@ -31,7 +31,7 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
     <div style={{
       position: 'fixed',
       inset: 0,
-      background: 'rgba(5, 8, 22, 0.88)',
+      background: 'radial-gradient(circle at 50% 20%, rgba(224, 108, 117, 0.16) 0%, rgba(16, 5, 8, 0.95) 75%, rgba(10, 3, 5, 0.98) 100%)',
       backdropFilter: 'blur(16px)',
       display: 'flex',
       alignItems: 'center',
@@ -40,14 +40,14 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
       padding: '16px'
     }}>
       <div style={{
-        background: '#0f172a',
-        border: '1px solid rgba(238, 120, 130, 0.4)',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(238, 120, 130, 0.15)',
-        borderRadius: '24px',
+        background: 'linear-gradient(170deg, #1e0c13 0%, #15070d 100%)',
+        border: '1px solid rgba(224, 108, 117, 0.25)',
+        boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.85), 0 0 40px rgba(224, 108, 117, 0.12)',
+        borderRadius: '28px',
         width: '100%',
         maxWidth: '460px',
         padding: '28px 24px',
-        color: '#f8fafc',
+        color: '#ffffff',
         position: 'relative'
       }}>
         {onClose && (
@@ -57,15 +57,15 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
               position: 'absolute',
               top: '18px',
               right: '18px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: 'none',
+              background: 'rgba(224, 108, 117, 0.1)',
+              border: '1px solid rgba(224, 108, 117, 0.25)',
               borderRadius: '50%',
               width: '32px',
               height: '32px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#94a3b8',
+              color: '#e5b3b8',
               cursor: 'pointer'
             }}
           >
@@ -79,8 +79,8 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
             width: '54px',
             height: '54px',
             borderRadius: '16px',
-            background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.2), rgba(16, 185, 129, 0.2))',
-            border: '1px solid rgba(238, 120, 130, 0.4)',
+            background: 'linear-gradient(135deg, rgba(224, 108, 117, 0.25), rgba(16, 5, 8, 0.6))',
+            border: '1px solid rgba(224, 108, 117, 0.4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -91,8 +91,8 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
           <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 6px', color: '#ffffff' }}>
             Secret Recovery Phrase
           </h3>
-          <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: 0 }}>
-            These 12 words are the <strong>master master key</strong> to your identity and end-to-end encrypted chats.
+          <p style={{ fontSize: '0.82rem', color: '#e5b3b8', margin: 0 }}>
+            These 12 words are the <strong>master key</strong> to your identity and end-to-end encrypted chats.
           </p>
         </div>
 
@@ -101,8 +101,8 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
           gap: '8px',
-          background: 'rgba(0, 0, 0, 0.4)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: '#0c0406',
+          border: '1px solid rgba(224, 108, 117, 0.18)',
           borderRadius: '16px',
           padding: '14px',
           marginBottom: '18px'
@@ -111,8 +111,8 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
             <div
               key={idx}
               style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
+                background: 'rgba(224, 108, 117, 0.08)',
+                border: '1px solid rgba(224, 108, 117, 0.14)',
                 borderRadius: '10px',
                 padding: '8px 10px',
                 display: 'flex',
@@ -120,8 +120,8 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
                 gap: '6px'
               }}
             >
-              <span style={{ fontSize: '0.7rem', color: '#64748b', fontFamily: 'monospace' }}>{idx + 1}.</span>
-              <span style={{ fontSize: '0.84rem', fontWeight: '600', color: '#f8fafc', letterSpacing: '0.3px' }}>{word}</span>
+              <span style={{ fontSize: '0.7rem', color: '#997075', fontFamily: 'monospace' }}>{idx + 1}.</span>
+              <span style={{ fontSize: '0.84rem', fontWeight: '600', color: '#ffffff', letterSpacing: '0.3px' }}>{word}</span>
             </div>
           ))}
         </div>

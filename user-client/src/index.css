@@ -349,6 +349,10 @@ body.chat-open-locked {
    SADISOCIAL IDENTITY & SETUP MODAL (PREMIUM CYBER-GLASS DESIGN)
    ══════════════════════════════════════════════════════════════════════════════ */
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   SADISOCIAL IDENTITY & SETUP MODAL (EXACT SADISOCIAL WINE/ROSE THEME)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .auth-modal-overlay {
   position: fixed;
   inset: 0;
@@ -356,7 +360,7 @@ body.chat-open-locked {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 15%, rgba(238, 120, 130, 0.15) 0%, rgba(10, 15, 29, 0.94) 75%, rgba(4, 7, 18, 0.98) 100%);
+  background: radial-gradient(circle at 50% 15%, rgba(224, 108, 117, 0.16) 0%, rgba(16, 5, 8, 0.95) 75%, rgba(10, 3, 5, 0.98) 100%);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 16px;
@@ -379,15 +383,15 @@ body.chat-open-locked {
   position: relative;
   width: 100%;
   max-width: 440px;
-  background: linear-gradient(170deg, rgba(26, 32, 54, 0.96) 0%, rgba(14, 18, 34, 0.98) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(170deg, #1e0c13 0%, #15070d 100%);
+  border: 1px solid rgba(224, 108, 117, 0.2);
   border-radius: 28px;
   box-shadow: 
-    0 25px 60px -12px rgba(0, 0, 0, 0.8),
-    0 0 45px rgba(238, 120, 130, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    0 25px 60px -12px rgba(0, 0, 0, 0.85),
+    0 0 45px rgba(224, 108, 117, 0.12),
+    inset 0 1px 0 rgba(224, 108, 117, 0.2);
   padding: 28px 22px 20px;
-  color: #f8fafc;
+  color: var(--text-main);
   overflow: hidden;
 }
 
@@ -398,7 +402,7 @@ body.chat-open-locked {
   left: 20%;
   right: 20%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #ee7882, #60a5fa, transparent);
+  background: linear-gradient(90deg, transparent, #ee7882, #e06c75, transparent);
   border-radius: 2px;
 }
 
@@ -409,9 +413,9 @@ body.chat-open-locked {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: #94a3b8;
+  border: 1px solid rgba(224, 108, 117, 0.25);
+  background: rgba(224, 108, 117, 0.08);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -421,9 +425,9 @@ body.chat-open-locked {
 }
 
 .auth-modal-close-btn:hover {
-  background: rgba(238, 120, 130, 0.2);
-  border-color: rgba(238, 120, 130, 0.4);
-  color: #f8fafc;
+  background: rgba(224, 108, 117, 0.25);
+  border-color: #ee7882;
+  color: #ffffff;
   transform: rotate(90deg);
 }
 
@@ -437,12 +441,12 @@ body.chat-open-locked {
   height: 58px;
   margin: 0 auto 12px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(238, 120, 130, 0.2) 0%, rgba(96, 165, 250, 0.2) 100%);
-  border: 1px solid rgba(238, 120, 130, 0.35);
+  background: linear-gradient(135deg, rgba(224, 108, 117, 0.25) 0%, rgba(16, 5, 8, 0.6) 100%);
+  border: 1px solid rgba(224, 108, 117, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 24px rgba(238, 120, 130, 0.25);
+  box-shadow: 0 8px 24px rgba(224, 108, 117, 0.25);
 }
 
 .auth-header h2 {
@@ -450,9 +454,7 @@ body.chat-open-locked {
   font-weight: 800;
   letter-spacing: -0.5px;
   margin: 0 0 6px 0;
-  background: linear-gradient(135deg, #ffffff 30%, #cbd5e1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-main);
 }
 
 .auth-header-badge {
@@ -461,9 +463,9 @@ body.chat-open-locked {
   gap: 6px;
   padding: 3px 10px;
   border-radius: 20px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  background: rgba(224, 108, 117, 0.12);
+  border: 1px solid rgba(224, 108, 117, 0.25);
+  color: #ee7882;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.2px;
@@ -473,15 +475,15 @@ body.chat-open-locked {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
+  background: #ee7882;
+  box-shadow: 0 0 8px #ee7882;
 }
 
 .auth-tabs-nav {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: rgba(10, 14, 26, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 4, 6, 0.75);
+  border: 1px solid rgba(224, 108, 117, 0.15);
   border-radius: 16px;
   padding: 4px;
   margin-bottom: 20px;
@@ -501,42 +503,21 @@ body.chat-open-locked {
   cursor: pointer;
   border: 1px solid transparent;
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-muted);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
 }
 
 .auth-tab-btn:hover:not(.active) {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  background: rgba(224, 108, 117, 0.08);
 }
 
-.auth-tab-btn.active.tab-phone {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #60a5fa;
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.2);
-}
-
-.auth-tab-btn.active.tab-email {
-  background: rgba(139, 92, 246, 0.18);
-  border-color: rgba(139, 92, 246, 0.4);
-  color: #c084fc;
-  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.2);
-}
-
-.auth-tab-btn.active.tab-create {
-  background: rgba(238, 120, 130, 0.18);
-  border-color: rgba(238, 120, 130, 0.4);
+.auth-tab-btn.active {
+  background: rgba(224, 108, 117, 0.22);
+  border-color: rgba(224, 108, 117, 0.45);
   color: #ee7882;
-  box-shadow: 0 4px 14px rgba(238, 120, 130, 0.2);
-}
-
-.auth-tab-btn.active.tab-restore {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: rgba(16, 185, 129, 0.4);
-  color: #34d399;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 14px rgba(224, 108, 117, 0.25);
 }
 
 .auth-form-container {
@@ -545,7 +526,7 @@ body.chat-open-locked {
 
 .auth-guide-text {
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   margin-bottom: 14px;
   line-height: 1.45;
 }
@@ -560,7 +541,7 @@ body.chat-open-locked {
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  color: #64748b;
+  color: var(--text-subtle);
   pointer-events: none;
   transition: color 0.2s ease;
 }
@@ -572,23 +553,23 @@ body.chat-open-locked {
 .auth-input {
   width: 100%;
   padding: 12px 14px 12px 42px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-input);
+  border: 1px solid rgba(224, 108, 117, 0.2);
   border-radius: 14px;
-  color: #f8fafc;
+  color: var(--text-main);
   font-size: 0.9rem;
   outline: none;
   transition: all 0.2s ease;
 }
 
 .auth-input::placeholder {
-  color: #64748b;
+  color: var(--text-subtle);
 }
 
 .auth-input:focus {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(238, 120, 130, 0.6);
-  box-shadow: 0 0 0 3px rgba(238, 120, 130, 0.15);
+  background: #14060a;
+  border-color: #ee7882;
+  box-shadow: 0 0 0 3px rgba(224, 108, 117, 0.2);
 }
 
 .auth-phone-row {
@@ -599,9 +580,9 @@ body.chat-open-locked {
 
 .auth-country-select {
   width: 125px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
+  background: var(--bg-input);
+  border: 1px solid rgba(224, 108, 117, 0.2);
+  color: var(--text-main);
   border-radius: 14px;
   padding: 12px 8px;
   font-size: 0.82rem;
@@ -612,8 +593,8 @@ body.chat-open-locked {
 }
 
 .auth-country-select:focus {
-  border-color: rgba(96, 165, 250, 0.6);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+  border-color: #ee7882;
+  box-shadow: 0 0 0 3px rgba(224, 108, 117, 0.2);
 }
 
 .auth-submit-btn {
@@ -631,6 +612,8 @@ body.chat-open-locked {
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
+  background: linear-gradient(135deg, #ee7882 0%, #e06c75 100%);
+  box-shadow: 0 4px 20px rgba(224, 108, 117, 0.35);
 }
 
 .auth-submit-btn:disabled {
@@ -643,30 +626,11 @@ body.chat-open-locked {
 .auth-submit-btn:not(:disabled):hover {
   transform: translateY(-1px);
   filter: brightness(1.08);
+  box-shadow: 0 6px 24px rgba(224, 108, 117, 0.45);
 }
 
 .auth-submit-btn:not(:disabled):active {
   transform: scale(0.98);
-}
-
-.auth-submit-btn.btn-phone {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.35);
-}
-
-.auth-submit-btn.btn-email {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
-}
-
-.auth-submit-btn.btn-create {
-  background: linear-gradient(135deg, #ee7882 0%, #e05663 100%);
-  box-shadow: 0 4px 20px rgba(238, 120, 130, 0.35);
-}
-
-.auth-submit-btn.btn-restore {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
 }
 
 .auth-presets-grid {
@@ -681,23 +645,23 @@ body.chat-open-locked {
   flex-direction: column;
   align-items: center;
   padding: 10px 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
+  border: 1px solid rgba(224, 108, 117, 0.15);
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .auth-preset-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(238, 120, 130, 0.4);
+  background: rgba(224, 108, 117, 0.12);
+  border-color: #ee7882;
   transform: translateY(-2px);
 }
 
 .auth-preset-item.active {
-  background: rgba(238, 120, 130, 0.15);
+  background: rgba(224, 108, 117, 0.2);
   border-color: #ee7882;
-  box-shadow: 0 0 14px rgba(238, 120, 130, 0.25);
+  box-shadow: 0 0 14px rgba(224, 108, 117, 0.25);
 }
 
 .auth-preset-avatar {
@@ -716,18 +680,18 @@ body.chat-open-locked {
 .auth-preset-name {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-main);
 }
 
 .auth-preset-tag {
   font-size: 0.65rem;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .auth-restore-switch {
   display: flex;
-  background: rgba(10, 14, 26, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 4, 6, 0.75);
+  border: 1px solid rgba(224, 108, 117, 0.15);
   border-radius: 12px;
   padding: 3px;
   margin-bottom: 14px;
@@ -743,14 +707,14 @@ body.chat-open-locked {
   font-weight: 600;
   cursor: pointer;
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-muted);
   transition: all 0.2s ease;
 }
 
 .auth-restore-pill.active {
-  background: #10b981;
+  background: #e06c75;
   color: #ffffff;
-  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 10px rgba(224, 108, 117, 0.4);
 }
 
 .auth-error-banner {
@@ -759,8 +723,8 @@ body.chat-open-locked {
   gap: 8px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
   color: #fca5a5;
   font-size: 0.8rem;
   margin-top: 14px;
@@ -778,9 +742,9 @@ body.chat-open-locked {
   gap: 7px;
   padding: 6px 14px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  background: rgba(224, 108, 117, 0.08);
+  border: 1px solid rgba(224, 108, 117, 0.18);
+  color: var(--text-muted);
   font-size: 0.74rem;
   font-weight: 500;
   cursor: pointer;
@@ -788,9 +752,9 @@ body.chat-open-locked {
 }
 
 .auth-engine-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #f8fafc;
+  background: rgba(224, 108, 117, 0.16);
+  border-color: #ee7882;
+  color: #ffffff;
 }
 
 .auth-engine-dot {
