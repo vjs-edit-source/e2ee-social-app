@@ -80,6 +80,21 @@ function broadcast(data, excludeUsername = null) {
   }
 }
 
+// Helper to broadcast WS messages to group members only (or everyone if public community)
+function broadcastToGroup(group, data, excludeUsername = null) {
+  if (!group) return;
+  if (group.isCommunity) {
+    broadcast(data, excludeUsername);
+  } else {
+    const members = new Set(group.members || (group.creator ? [group.creator] : []));
+    for (const m of members) {
+      if (m !== excludeUsername) {
+        sendToUser(m, data);
+      }
+    }
+  }
+}
+
 // Helper to get active online users Set
 function getOnlineUsersSet() {
   const online = new Set();
@@ -301,7 +316,7 @@ app.post('/api/groups', (req, res) => {
   }
 
   const group = db.addGroup(name, description, isCommunity, creator, members, avatarColor, avatarUrl);
-  broadcast({ type: 'NEW_GROUP', group });
+  broadcastToGroup(group, { type: 'NEW_GROUP', group });
   notifyInspector();
 
   res.json({ success: true, group });
@@ -328,7 +343,8 @@ app.post('/api/groups/:groupId/members', (req, res) => {
   const group = db.addGroupMember(req.params.groupId, username);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_MEMBER_JOINED', groupId: group.id, username });
+  sendToUser(username, { type: 'NEW_GROUP', group });
+  broadcastToGroup(group, { type: 'GROUP_MEMBER_JOINED', groupId: group.id, username, group });
   notifyInspector();
 
   res.json({ success: true, group });
@@ -347,7 +363,7 @@ app.post('/api/groups/:groupId/messages', (req, res) => {
   const msg = db.addGroupMessage(groupId, sender, ciphertext, iv, keyEnvelopes, mediaId);
   if (!msg || !group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({
+  broadcastToGroup(group, {
     type: 'GROUP_MESSAGE',
     groupId,
     groupName: group.name,
@@ -376,7 +392,7 @@ app.patch('/api/groups/:groupId/settings', (req, res) => {
   const group = db.updateGroupSettings(groupId, newSettings);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -394,7 +410,7 @@ app.patch('/api/groups/:groupId/permissions', (req, res) => {
   const group = db.updateGroupPermissions(groupId, permissions);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -407,7 +423,7 @@ app.patch('/api/groups/:groupId/info', (req, res) => {
   const group = db.updateGroupInfo(groupId, { name, description, avatarColor, avatarUrl });
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -420,7 +436,7 @@ app.post('/api/groups/:groupId/pin', (req, res) => {
   const group = db.setGroupPinnedMessage(groupId, messageId);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -433,7 +449,7 @@ app.patch('/api/groups/:groupId/members/:username/role', (req, res) => {
   const group = db.updateMemberRole(groupId, username, role);
   if (!group) return res.status(400).json({ error: 'Failed to update member role' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -445,7 +461,8 @@ app.delete('/api/groups/:groupId/members/:username', (req, res) => {
   const group = db.removeGroupMember(groupId, username);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
-  broadcast({ type: 'GROUP_UPDATED', group });
+  sendToUser(username, { type: 'GROUP_REMOVED', groupId: group.id });
+  broadcastToGroup(group, { type: 'GROUP_UPDATED', group });
   notifyInspector();
   res.json({ success: true, group });
 });
@@ -463,7 +480,7 @@ app.post('/api/groups/:groupId/polls', (req, res) => {
   if (!poll) return res.status(404).json({ error: 'Group not found' });
 
   const updatedGroup = db.getGroup(groupId);
-  broadcast({ type: 'GROUP_UPDATED', group: updatedGroup });
+  broadcastToGroup(updatedGroup, { type: 'GROUP_UPDATED', group: updatedGroup });
   notifyInspector();
   res.json({ success: true, poll, group: updatedGroup });
 });
@@ -481,7 +498,7 @@ app.post('/api/groups/:groupId/polls/:pollId/vote', (req, res) => {
   if (!poll) return res.status(404).json({ error: 'Poll not found' });
 
   const updatedGroup = db.getGroup(groupId);
-  broadcast({ type: 'GROUP_UPDATED', group: updatedGroup });
+  broadcastToGroup(updatedGroup, { type: 'GROUP_UPDATED', group: updatedGroup });
   notifyInspector();
   res.json({ success: true, poll, group: updatedGroup });
 });

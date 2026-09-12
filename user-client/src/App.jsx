@@ -85,24 +85,85 @@ export default function App() {
   // In-App Notification & Unread Count State
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
   const [unreadGroupsCount, setUnreadGroupsCount] = useState(0);
-  const [unreadGroupMap, setUnreadGroupMap] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(`sadisocial_unread_groups_${currentUser?.username}`) || '{}');
-    } catch (e) {
-      return {};
-    }
-  });
+  const [unreadGroupMap, setUnreadGroupMap] = useState({});
+  const [userGroups, setUserGroups] = useState([]);
+  const userGroupsRef = useRef([]);
+  userGroupsRef.current = userGroups;
 
-  // Keep total unread groups count synchronized
+  const [activeGroupId, setActiveGroupId] = useState(null);
+  const activeGroupIdRef = useRef(null);
+  activeGroupIdRef.current = activeGroupId;
+
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  // Fetch user groups to maintain strict group membership for notifications
+  const loadUserGroups = async (customServerUrl, targetUsername) => {
+    const sUrl = customServerUrl || serverUrl;
+    const uName = targetUsername || currentUser?.username;
+    if (!uName) {
+      setUserGroups([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${sUrl}/api/groups?user=${encodeURIComponent(uName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserGroups(data);
+        // Prune any unread count entries for groups user is not actually in
+        const validGroupIds = new Set(data.map(g => g.id));
+        setUnreadGroupMap(prev => {
+          let hasOrphan = false;
+          const cleaned = {};
+          for (const [gid, count] of Object.entries(prev)) {
+            if (validGroupIds.has(gid)) {
+              cleaned[gid] = count;
+            } else {
+              hasOrphan = true;
+            }
+          }
+          return hasOrphan ? cleaned : prev;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load user groups in App:', err);
+    }
+  };
+
+  // Load user groups & saved unreads whenever user or server changes
   useEffect(() => {
-    const total = Object.values(unreadGroupMap).reduce((sum, count) => sum + (Number(count) || 0), 0);
+    if (!currentUser?.username) {
+      setUnreadGroupMap({});
+      setUserGroups([]);
+      return;
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(`sadisocial_unread_groups_${currentUser.username}`) || '{}');
+      setUnreadGroupMap(saved);
+    } catch (e) {
+      setUnreadGroupMap({});
+    }
+    loadUserGroups(serverUrl, currentUser.username);
+  }, [currentUser?.username, serverUrl]);
+
+  // Keep total unread groups count synchronized and persist clean map
+  useEffect(() => {
+    const validGroupIds = new Set(userGroups.map(g => g.id));
+    const cleanedMap = {};
+    let total = 0;
+    for (const [gid, count] of Object.entries(unreadGroupMap)) {
+      if (userGroups.length === 0 || validGroupIds.has(gid)) {
+        cleanedMap[gid] = count;
+        total += (Number(count) || 0);
+      }
+    }
     setUnreadGroupsCount(total);
     if (currentUser?.username) {
       try {
-        localStorage.setItem(`sadisocial_unread_groups_${currentUser.username}`, JSON.stringify(unreadGroupMap));
+        localStorage.setItem(`sadisocial_unread_groups_${currentUser.username}`, JSON.stringify(cleanedMap));
       } catch (e) {}
     }
-  }, [unreadGroupMap, currentUser]);
+  }, [unreadGroupMap, currentUser?.username, userGroups]);
 
   const handleClearGroupUnread = (groupId) => {
     if (!groupId) return;
@@ -348,11 +409,30 @@ export default function App() {
                   } catch (e) {}
                 }
               }
+            } else if (data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED' || data.type === 'GROUP_UPDATED') {
+              loadUserGroups();
+            } else if (data.type === 'GROUP_REMOVED') {
+              if (data.groupId) {
+                handleClearGroupUnread(data.groupId);
+              }
+              loadUserGroups();
             } else if (data.type === 'GROUP_MESSAGE') {
               const msg = data.message;
               const groupId = data.groupId;
               const groupName = data.groupName || 'Community';
               const sender = data.sender || msg?.sender;
+
+              // Security & Privacy check: Current user MUST be an actual member of this group (or public community)
+              const isMember = userGroupsRef.current.some(g => g.id === groupId);
+              if (!data.isCommunity && !isMember) {
+                // User is NOT in this private group! Ignore message, do not increment unread or notify!
+                return;
+              }
+
+              // If user is currently looking at this group chat, don't increment unread or notify
+              if (activeTabRef.current === 'groups' && activeGroupIdRef.current === groupId) {
+                return;
+              }
 
               if (sender && sender !== currentUser?.username) {
                 playNotificationChime();
@@ -433,10 +513,27 @@ export default function App() {
     };
   }, [currentUser?.username, wsUrl]);
 
+  const handleGroupChatStateChange = (groupIdOrBool) => {
+    if (typeof groupIdOrBool === 'string') {
+      setActiveGroupId(groupIdOrBool);
+      setIsGroupChatOpen(true);
+      handleClearGroupUnread(groupIdOrBool);
+    } else if (typeof groupIdOrBool === 'boolean') {
+      setIsGroupChatOpen(groupIdOrBool);
+      if (!groupIdOrBool) setActiveGroupId(null);
+    } else if (!groupIdOrBool) {
+      setActiveGroupId(null);
+      setIsGroupChatOpen(false);
+    }
+  };
+
   // Reset chat states when switching tabs
   useEffect(() => {
     if (activeTab !== 'messages') setIsDMChatOpen(false);
-    if (activeTab !== 'groups') setIsGroupChatOpen(false);
+    if (activeTab !== 'groups') {
+      setIsGroupChatOpen(false);
+      setActiveGroupId(null);
+    }
   }, [activeTab]);
 
   const isAnyChatActive = (activeTab === 'messages' && isDMChatOpen) || (activeTab === 'groups' && isGroupChatOpen);
@@ -677,7 +774,7 @@ export default function App() {
                 wsClient={wsClient}
                 unreadGroupMap={unreadGroupMap}
                 onClearGroupUnread={handleClearGroupUnread}
-                onGroupChatStateChange={setIsGroupChatOpen}
+                onGroupChatStateChange={handleGroupChatStateChange}
               />
             )}
 

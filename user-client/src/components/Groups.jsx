@@ -263,9 +263,12 @@ export default function Groups({
   // Notify parent component of chat state (to hide floating bottom nav when inside a group chat)
   useEffect(() => {
     if (onGroupChatStateChange) {
-      onGroupChatStateChange(!!selectedGroup);
+      onGroupChatStateChange(selectedGroup ? selectedGroup.id : null);
     }
-  }, [selectedGroup, onGroupChatStateChange]);
+    if (selectedGroup && onClearGroupUnread) {
+      onClearGroupUnread(selectedGroup.id);
+    }
+  }, [selectedGroup, onGroupChatStateChange, onClearGroupUnread]);
 
   // Live timer tick every second for countdowns
   useEffect(() => {
@@ -327,10 +330,15 @@ export default function Groups({
     const handleMessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'GROUP_UPDATED') {
+        if (data.type === 'GROUP_UPDATED' || data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED') {
           loadGroups();
           if (selectedGroup && data.group?.id === selectedGroup.id) {
             setSelectedGroup(data.group);
+          }
+        } else if (data.type === 'GROUP_REMOVED') {
+          loadGroups();
+          if (selectedGroup && data.groupId === selectedGroup.id) {
+            setSelectedGroup(null);
           }
         } else if (data.type === 'GROUP_MESSAGE' && data.groupId === selectedGroup?.id) {
           setMessages(prev => {
