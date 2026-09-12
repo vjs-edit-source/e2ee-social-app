@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Search
 } from 'lucide-react';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
   importPublicKey,
   deriveSharedAESKey,
@@ -1371,7 +1372,9 @@ export default function DirectMessages({
           )}
 
           <div className="dm-attach-info">
-            <span className="file-format-tag">{getFileFormatBadge(attachedMedia.originalName || attachedMedia.name, attachedMedia.mimeType || attachedMedia.type)}</span>
+            <span className="file-format-tag" title={attachedMedia.originalName || attachedMedia.name}>
+              {formatTruncatedFileName(attachedMedia.originalName || attachedMedia.name, 14)}
+            </span>
             <span className="file-size">({((attachedMedia.fileSize || attachedMedia.size || 0) / 1024).toFixed(1)} KB)</span>
           </div>
 

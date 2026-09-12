@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Lock, CheckCircle2, X, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FileText, Lock, CheckCircle2, X, Loader2, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { encryptMediaBuffer } from '../crypto/e2ee';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -64,11 +65,13 @@ async function optimizeImageForEncryption(file) {
   });
 }
 
-export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, serverUrl }) {
+export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, serverUrl, variant = 'default' }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [encrypting, setEncrypting] = useState(false);
   const [encryptedMediaId, setEncryptedMediaId] = useState(null);
+  const imageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Clean up object URL on unmount or file clear
   useEffect(() => {
@@ -171,21 +174,59 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
   };
 
   return (
-    <div className="media-uploader-box">
+    <div className={`media-uploader-box ${variant === 'master' ? 'master-mode' : ''}`}>
       {!selectedFile ? (
-        <label className="upload-dropzone" onClick={(e) => e.stopPropagation()}>
-          <FileText size={18} color="#3b82f6" />
-          <span>Attach file (photos, docs, videos)</span>
-          <input
-            type="file"
-            accept="*"
-            onChange={handleFileSelect}
-            onClick={(e) => e.stopPropagation()}
-            hidden
-          />
-        </label>
+        variant === 'master' ? (
+          <div className="master-media-triggers" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              className="master-action-btn media-btn"
+              onClick={(e) => { e.stopPropagation(); imageInputRef.current?.click(); }}
+              title="Add Photo or Video"
+            >
+              <ImageIcon size={18} color="#34d399" />
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*,video/*"
+              onChange={handleFileSelect}
+              onClick={(e) => e.stopPropagation()}
+              hidden
+            />
+
+            <button
+              type="button"
+              className="master-action-btn file-btn"
+              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+              title="Attach Document or File"
+            >
+              <Paperclip size={18} color="#a78bfa" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="*"
+              onChange={handleFileSelect}
+              onClick={(e) => e.stopPropagation()}
+              hidden
+            />
+          </div>
+        ) : (
+          <label className="upload-dropzone" onClick={(e) => e.stopPropagation()}>
+            <FileText size={18} color="#3b82f6" />
+            <span>Attach file (photos, docs, videos)</span>
+            <input
+              type="file"
+              accept="*"
+              onChange={handleFileSelect}
+              onClick={(e) => e.stopPropagation()}
+              hidden
+            />
+          </label>
+        )
       ) : (
-        <div className="file-preview-card">
+        <div className="file-preview-card master-attached-chip">
           {/* Mini preview for images only */}
           {previewUrl ? (
             <img src={previewUrl} alt="Attached thumbnail" className="mini-attached-thumbnail" />
@@ -193,9 +234,13 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
             <Lock size={14} color="#10b981" />
           )}
 
-          <div className="file-info">
-            <span className="file-format-tag">{getFileFormatBadge(selectedFile.name, selectedFile.type)}</span>
-            <span className="file-size">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+          <div className="file-info" style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+            <span className="file-name" style={{ fontWeight: 600, fontSize: '0.78rem', color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={selectedFile.name}>
+              {formatTruncatedFileName(selectedFile.name, 14)}
+            </span>
+            <span className="file-size" style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+              {getFileFormatBadge(selectedFile.name, selectedFile.type)} • {(selectedFile.size / 1024).toFixed(1)} KB
+            </span>
           </div>
 
           {encrypting ? (
@@ -206,7 +251,7 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
           ) : (
             <div className="status-badge ready">
               <CheckCircle2 size={13} />
-              <span>Ready</span>
+              <span>Encrypted</span>
             </div>
           )}
 

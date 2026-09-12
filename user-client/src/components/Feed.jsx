@@ -1,5 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Lock, Unlock, Image as ImageIcon, ShieldCheck, Loader2, Globe, Users, Check } from 'lucide-react';
+import {
+  Send,
+  Lock,
+  Unlock,
+  Image as ImageIcon,
+  ShieldCheck,
+  Loader2,
+  Globe,
+  Users,
+  Check,
+  Smile,
+  Hash,
+  Type,
+  Eye,
+  EyeOff,
+  Clock,
+  Sparkles,
+  Bold,
+  Italic,
+  Quote,
+  Code,
+  List,
+  X,
+  Paperclip,
+  FileText,
+  RotateCcw
+} from 'lucide-react';
 import {
   generatePostKey,
   encryptText,
@@ -12,9 +38,21 @@ import {
   importRawAESKey
 } from '../crypto/e2ee';
 import { localSearchIndex } from '../search/searchIndex';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import StatusTray from './StatusTray';
+
+const POPULAR_EMOJIS = [
+  '❤️', '🔥', '👍', '😂', '🎉', '🚀', '✨', '🔒',
+  '👏', '💡', '👀', '💯', '🙌', '🛡️', '💬', '⚡',
+  '🌟', '💎', '🌈', '☕', '🥳', '😎', '🤝', '🎯'
+];
+
+const POPULAR_TOPICS = [
+  '#General', '#Privacy', '#ZeroKnowledge', '#Crypto',
+  '#Tech', '#News', '#Discussion', '#Ideas', '#Update'
+];
 
 export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [posts, setPosts] = useState([]);
@@ -27,9 +65,54 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [publishing, setPublishing] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
 
+  // New rich writing & master toolbar state
+  const [activeTool, setActiveTool] = useState(null); // 'emoji' | 'topics' | 'format' | 'expiry' | null
+  const [showPreview, setShowPreview] = useState(false);
+  const [postExpiry, setPostExpiry] = useState(0); // 0 = permanent, 86400 = 24h, 604800 = 7d
+  const textareaRef = useRef(null);
+
   const decryptedPostsCache = useRef({});
   const decryptedMediaCache = useRef({});
   const pendingMediaFetches = useRef(new Set());
+
+  const insertAtCursor = (prefix, suffix = '') => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setNewPostText(prev => prev + prefix + suffix);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = newPostText;
+    const selectedText = text.substring(start, end);
+    const replacement = prefix + selectedText + suffix;
+    const updated = text.substring(0, start) + replacement + text.substring(end);
+    setNewPostText(updated);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = selectedText ? start + replacement.length : start + prefix.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 10);
+  };
+
+  const handleInsertEmoji = (emoji) => {
+    insertAtCursor(emoji);
+  };
+
+  const handleInsertTopic = (topic) => {
+    setNewPostText(prev => {
+      const trimmed = prev.trim();
+      if (!trimmed) return topic + ' ';
+      if (trimmed.endsWith(topic)) return prev;
+      return `${trimmed} ${topic} `;
+    });
+    setTimeout(() => textareaRef.current?.focus(), 10);
+  };
+
+  const toggleTool = (toolName) => {
+    setActiveTool(prev => (prev === toolName ? null : toolName));
+  };
 
   const loadPosts = async () => {
     try {
@@ -106,6 +189,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
               let mediaKeyB64 = null;
               let originalName = null;
               let mimeType = null;
+              let expiresIn = null;
 
               try {
                 const parsed = JSON.parse(decryptedRaw);
@@ -114,6 +198,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   mediaKeyB64 = parsed.mediaKeyB64;
                   originalName = parsed.originalName;
                   mimeType = parsed.mimeType;
+                  expiresIn = parsed.expiresIn || null;
                 }
               } catch (e) {}
 
@@ -123,6 +208,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                 mediaKeyB64,
                 originalName,
                 mimeType,
+                expiresIn,
                 isPublic: post.isPublic !== false && Boolean(post.postKeyB64),
                 postKey
               };
@@ -240,7 +326,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
         text: hasText ? newPostText.trim() : '',
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
-        mimeType: hasMedia ? attachedMedia.mimeType : null
+        mimeType: hasMedia ? attachedMedia.mimeType : null,
+        expiresIn: postExpiry > 0 ? postExpiry : undefined
       });
 
       const { ciphertext, iv } = await encryptText(postKey, payloadString);
@@ -292,6 +379,9 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       if (data.success) {
         setNewPostText('');
         setAttachedMedia(null);
+        setActiveTool(null);
+        setShowPreview(false);
+        setPostExpiry(0);
         setUploaderKey(k => k + 1);
         await loadPosts();
       }
@@ -319,7 +409,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
           {currentUser.avatarUrl ? (
             <img
               src={currentUser.avatarUrl}
-              alt={currentUser.username}
+              alt={currentUser.displayName || currentUser.username}
               className="user-avatar"
               style={{
                 width: '36px',
@@ -331,7 +421,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             />
           ) : (
             <div className="user-avatar" style={{ backgroundColor: currentUser.avatarColor }}>
-              {currentUser.username[0].toUpperCase()}
+              {(currentUser.displayName || currentUser.username)[0].toUpperCase()}
             </div>
           )}
           <div className="header-title">
@@ -345,15 +435,185 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
         <form onSubmit={handlePublishPost}>
           <textarea
-            placeholder={`What's on your mind, ${currentUser.username}?`}
+            ref={textareaRef}
+            placeholder={`What's on your mind, ${currentUser.displayName || currentUser.username}?`}
             value={newPostText}
             onChange={(e) => setNewPostText(e.target.value)}
+            maxLength={1000}
             rows={3}
             disabled={publishing}
           />
 
-          <div className="post-actions-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Quick Emojis Drawer */}
+          {activeTool === 'emoji' && (
+            <div className="feed-tool-drawer feed-emoji-drawer">
+              <div className="drawer-header">
+                <span>Quick Reactions & Emojis</span>
+                <button type="button" className="drawer-close-btn" onClick={() => setActiveTool(null)}><X size={14} /></button>
+              </div>
+              <div className="emoji-grid">
+                {POPULAR_EMOJIS.map(emoji => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className="quick-emoji-btn"
+                    onClick={() => handleInsertEmoji(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Hashtag / Topics Drawer */}
+          {activeTool === 'topics' && (
+            <div className="feed-tool-drawer feed-topics-drawer">
+              <div className="drawer-header">
+                <span>Community Topics & Tags</span>
+                <button type="button" className="drawer-close-btn" onClick={() => setActiveTool(null)}><X size={14} /></button>
+              </div>
+              <div className="topics-chip-list">
+                {POPULAR_TOPICS.map(topic => (
+                  <button
+                    key={topic}
+                    type="button"
+                    className="topic-chip-btn"
+                    onClick={() => handleInsertTopic(topic)}
+                  >
+                    {topic}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Markdown Formatting Drawer */}
+          {activeTool === 'format' && (
+            <div className="feed-tool-drawer feed-format-drawer">
+              <div className="drawer-header">
+                <span>Quick Markdown Tools</span>
+                <button type="button" className="drawer-close-btn" onClick={() => setActiveTool(null)}><X size={14} /></button>
+              </div>
+              <div className="format-tools-row">
+                <button type="button" className="format-tool-btn" onClick={() => insertAtCursor('**', '**')} title="Bold">
+                  <Bold size={13} /> <span>Bold</span>
+                </button>
+                <button type="button" className="format-tool-btn" onClick={() => insertAtCursor('*', '*')} title="Italic">
+                  <Italic size={13} /> <span>Italic</span>
+                </button>
+                <button type="button" className="format-tool-btn" onClick={() => insertAtCursor('> ')} title="Quote">
+                  <Quote size={13} /> <span>Quote</span>
+                </button>
+                <button type="button" className="format-tool-btn" onClick={() => insertAtCursor('`', '`')} title="Inline Code">
+                  <Code size={13} /> <span>Code</span>
+                </button>
+                <button type="button" className="format-tool-btn" onClick={() => insertAtCursor('- ')} title="Bullet List">
+                  <List size={13} /> <span>List</span>
+                </button>
+                {newPostText && (
+                  <button type="button" className="format-tool-btn danger" onClick={() => setNewPostText('')} title="Clear text">
+                    <RotateCcw size={13} /> <span>Reset</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Disappearing Timer Drawer */}
+          {activeTool === 'expiry' && (
+            <div className="feed-tool-drawer feed-expiry-drawer">
+              <div className="drawer-header">
+                <span>Disappearing Post Timer</span>
+                <button type="button" className="drawer-close-btn" onClick={() => setActiveTool(null)}><X size={14} /></button>
+              </div>
+              <div className="expiry-options-row">
+                <button
+                  type="button"
+                  className={`expiry-opt-btn ${postExpiry === 0 ? 'active' : ''}`}
+                  onClick={() => setPostExpiry(0)}
+                >
+                  <ShieldCheck size={14} />
+                  <span>Permanent (Never)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`expiry-opt-btn ${postExpiry === 86400 ? 'active' : ''}`}
+                  onClick={() => setPostExpiry(86400)}
+                >
+                  <Clock size={14} />
+                  <span>24 Hours</span>
+                </button>
+                <button
+                  type="button"
+                  className={`expiry-opt-btn ${postExpiry === 604800 ? 'active' : ''}`}
+                  onClick={() => setPostExpiry(604800)}
+                >
+                  <Clock size={14} />
+                  <span>7 Days</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Live Post Preview Box */}
+          {showPreview && (newPostText.trim() || attachedMedia) && (
+            <div className="feed-live-preview-box">
+              <div className="preview-banner">
+                <Eye size={13} />
+                <span>Live Post Preview (How other members will see it)</span>
+              </div>
+              <div className="preview-card-inner">
+                <div className="post-author-row">
+                  {currentUser.avatarUrl ? (
+                    <img src={currentUser.avatarUrl} alt={currentUser.displayName || currentUser.username} className="author-avatar" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                  ) : (
+                    <div className="author-avatar" style={{ width: '32px', height: '32px', fontSize: '0.8rem', backgroundColor: currentUser.avatarColor || '#3b82f6' }}>
+                      {(currentUser.displayName || currentUser.username)[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="author-meta">
+                    <span className="author-name">{currentUser.displayName || currentUser.username}</span>
+                    <span className="post-time">Just now • Live Preview</span>
+                  </div>
+                  <div className="encryption-pill" style={{ display: 'flex', gap: '4px' }}>
+                    <span className="pill success">
+                      {isPublicPost ? <Globe size={11} /> : <Lock size={11} />}
+                      {isPublicPost ? 'Public' : 'Private'}
+                    </span>
+                    {postExpiry > 0 && (
+                      <span className="pill expiry-pill">
+                        <Clock size={11} />
+                        {postExpiry === 86400 ? '24h' : '7d'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {newPostText.trim() && (
+                  <div className="post-content" style={{ marginTop: '10px' }}>
+                    <p className="decrypted-text" style={{ whiteSpace: 'pre-wrap' }}>{newPostText}</p>
+                  </div>
+                )}
+
+                {attachedMedia && (
+                  <div className="preview-media-chip" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <ImageIcon size={15} color="#34d399" />
+                    <span style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: 500 }}>
+                      {formatTruncatedFileName(attachedMedia.originalName, 14)}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: '#10b981', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <Check size={12} /> Encrypted
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Master Toolbar */}
+          <div className="feed-master-toolbar">
+            <div className="feed-master-tools-left">
               <MediaUploader
                 key={uploaderKey}
                 sharedKey={null}
@@ -361,8 +621,61 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                 onUploadStateChange={setMediaUploading}
                 uploaderName={currentUser.username}
                 serverUrl={serverUrl}
+                variant="master"
               />
 
+              <button
+                type="button"
+                className={`master-action-btn ${activeTool === 'emoji' ? 'active' : ''}`}
+                onClick={() => toggleTool('emoji')}
+                title="Insert Emojis & Reactions"
+              >
+                <Smile size={18} color="#f59e0b" />
+              </button>
+
+              <button
+                type="button"
+                className={`master-action-btn ${activeTool === 'topics' ? 'active' : ''}`}
+                onClick={() => toggleTool('topics')}
+                title="Add Topic Hashtags"
+              >
+                <Hash size={18} color="#38bdf8" />
+              </button>
+
+              <button
+                type="button"
+                className={`master-action-btn ${activeTool === 'format' ? 'active' : ''}`}
+                onClick={() => toggleTool('format')}
+                title="Markdown Formatting Tools"
+              >
+                <Type size={18} color="#ec4899" />
+              </button>
+
+              <button
+                type="button"
+                className={`master-action-btn ${activeTool === 'expiry' ? 'active' : ''} ${postExpiry > 0 ? 'has-badge' : ''}`}
+                onClick={() => toggleTool('expiry')}
+                title={postExpiry > 0 ? `Expires in ${postExpiry === 86400 ? '24h' : '7d'}` : "Post Expiration Timer"}
+              >
+                <Clock size={18} color={postExpiry > 0 ? '#10b981' : '#94a3b8'} />
+                {postExpiry > 0 && (
+                  <span className="master-tool-badge">
+                    {postExpiry === 86400 ? '24h' : '7d'}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className={`master-action-btn ${showPreview ? 'active' : ''}`}
+                onClick={() => setShowPreview(prev => !prev)}
+                title={showPreview ? "Hide Preview" : "Live Post Preview"}
+              >
+                {showPreview ? <EyeOff size={18} color="#a855f7" /> : <Eye size={18} color="#a855f7" />}
+              </button>
+            </div>
+
+            <div className="feed-master-tools-right">
               <button
                 type="button"
                 onClick={() => setIsPublicPost(prev => !prev)}
@@ -385,30 +698,34 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                 {isPublicPost ? <Globe size={12} /> : <Lock size={12} />}
                 <span>{isPublicPost ? 'Public Post' : 'Private'}</span>
               </button>
-            </div>
 
-            <button
-              type="submit"
-              className="primary-btn publish-btn"
-              disabled={!canPublish}
-            >
-              {publishing ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Posting...</span>
-                </>
-              ) : mediaUploading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Securing...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  <span>Post</span>
-                </>
-              )}
-            </button>
+              <span className={`char-count-pill ${newPostText.length > 900 ? 'warning' : ''}`}>
+                {newPostText.length}/1000
+              </span>
+
+              <button
+                type="submit"
+                className="master-publish-btn"
+                disabled={!canPublish}
+              >
+                {publishing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Posting...</span>
+                  </>
+                ) : mediaUploading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Securing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    <span>Post</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -452,7 +769,13 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                     <span className="post-time">{new Date(post.timestamp).toLocaleTimeString()}</span>
                   </div>
 
-                  <div className="encryption-pill">
+                  <div className="encryption-pill" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {decState.expiresIn ? (
+                      <span className="pill expiry-pill" title={`Disappearing post: ${decState.expiresIn === 86400 ? '24 Hours' : '7 Days'}`}>
+                        <Clock size={11} />
+                        {decState.expiresIn === 86400 ? '24h' : '7d'}
+                      </span>
+                    ) : null}
                     {decState.isPublic ? (
                       <span className="pill success" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.3)' }} title="Public Community Post">
                         <Globe size={12} />

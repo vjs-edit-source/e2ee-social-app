@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileCode, Download, Image as ImageIcon, FileText, Film, Music, File, CheckCircle2 } from 'lucide-react';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 
 function getFormatDisplayLabel(fileName, mimeType) {
   const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toUpperCase() : '';
@@ -70,7 +71,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
       <div className="post-media-container">
         <img src={objectUrl} alt={formatLabel} className="post-media-img" loading="lazy" />
         <div className="file-download-bar">
-          <span className="file-name-pill">{formatLabel}</span>
+          <span className="file-name-pill" title={fileName}>{formatTruncatedFileName(fileName, 14)}</span>
           <button className="download-btn" onClick={handleDownload} type="button">
             <Download size={14} />
             <span>Download</span>
@@ -88,8 +89,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <ImageIcon size={22} color="#ec4899" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
-              <span className="file-type-subtitle">Samsung Photo Format</span>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
+              <span className="file-type-subtitle">Photo Format</span>
             </div>
           </div>
           <button className="primary-btn download-btn-card" onClick={handleDownload} type="button">
@@ -109,7 +110,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <FileCode size={22} color="#10b981" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
               <span className="file-type-subtitle">Document</span>
             </div>
           </div>
@@ -133,7 +134,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
       <div className="post-media-container">
         <video controls src={objectUrl} className="post-media-img" preload="metadata" />
         <div className="file-download-bar">
-          <span className="file-name-pill">{formatLabel}</span>
+          <span className="file-name-pill" title={fileName}>{formatTruncatedFileName(fileName, 14)}</span>
           <button className="download-btn" onClick={handleDownload} type="button">
             <Download size={14} />
             <span>Download</span>
@@ -151,7 +152,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <Music size={22} color="#8b5cf6" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
               <span className="file-type-subtitle">Audio</span>
             </div>
           </div>
@@ -169,7 +170,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <FileText size={22} color="#f43f5e" />
             <div>
-              <div className="file-title-text">PDF Document</div>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
               <span className="file-type-subtitle">Encrypted PDF File</span>
             </div>
           </div>
@@ -189,7 +190,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
         <div className="attachment-title">
           <FileText size={22} color="#3b82f6" />
           <div>
-            <div className="file-title-text">{formatLabel}</div>
+            <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
             <span className="file-type-subtitle">Encrypted File Attachment</span>
           </div>
         </div>

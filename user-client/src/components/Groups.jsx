@@ -40,6 +40,7 @@ import {
   Circle,
   Phone
 } from 'lucide-react';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
   encryptPost,
   decryptPost,
@@ -1655,7 +1656,7 @@ export default function Groups({
           <div className="dm-attached-preview-card">
             <Lock size={14} color="#10b981" />
             <div className="dm-attach-info">
-              <span className="file-format-tag">{attachedMedia.originalName}</span>
+              <span className="file-format-tag" title={attachedMedia.originalName}>{formatTruncatedFileName(attachedMedia.originalName, 14)}</span>
               <span className="file-size">({(attachedMedia.fileSize / 1024).toFixed(1)} KB)</span>
             </div>
             <button className="remove-file-btn" onClick={clearAttachment} type="button">
