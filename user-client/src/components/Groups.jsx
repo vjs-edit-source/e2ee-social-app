@@ -135,6 +135,7 @@ export default function Groups({
   const decryptedMediaCache = useRef({});
   const groupFileInputRef = useRef(null);
   const editGroupFileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
 
   // Message Action Popup state & touch/long-press tracking
   const [activePopupMsg, setActivePopupMsg] = useState(null);
@@ -386,18 +387,18 @@ export default function Groups({
               currentUser.keyPair.privateKey
             );
 
-            let text = dec.text;
-            let isVoice = false;
-            let voiceDuration = 0;
-            let replyTo = null;
+            let text = dec.text || '';
+            let isVoice = dec.isVoice || false;
+            let voiceDuration = dec.voiceDuration || 0;
+            let replyTo = dec.replyTo || null;
 
             try {
-              const parsed = JSON.parse(dec.text);
-              if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.isVoice !== undefined)) {
-                text = parsed.text || '';
-                isVoice = !!parsed.isVoice;
-                voiceDuration = parsed.voiceDuration || 0;
-                replyTo = parsed.replyTo || null;
+              const parsed = JSON.parse(dec.rawText || dec.text);
+              if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.isVoice !== undefined || parsed.replyTo !== undefined)) {
+                if (parsed.text !== undefined) text = parsed.text || '';
+                if (parsed.isVoice !== undefined) isVoice = !!parsed.isVoice;
+                if (parsed.voiceDuration !== undefined) voiceDuration = parsed.voiceDuration || 0;
+                if (parsed.replyTo !== undefined) replyTo = parsed.replyTo || null;
               }
             } catch (e) {}
 
@@ -637,6 +638,20 @@ export default function Groups({
       if (!res.ok) throw new Error('Failed to send voice note');
       const data = await res.json();
 
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+      decryptedMsgCache.current[data.message.id] = {
+        text: '',
+        mediaKey: uploadData.media.mediaKeyB64 || mediaKeyB64,
+        mediaId: uploadData.media.id,
+        isVoice: true,
+        voiceDuration: duration,
+        replyTo: sentReplyTo
+      };
+      setDecryptedMsgMap(prev => ({
+        ...prev,
+        [data.message.id]: decryptedMsgCache.current[data.message.id]
+      }));
+
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev;
         return [...prev, data.message];
@@ -715,6 +730,20 @@ export default function Groups({
 
       if (!res.ok) throw new Error('Failed to send message');
       const data = await res.json();
+
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+      decryptedMsgCache.current[data.message.id] = {
+        text: inputMessage.trim(),
+        mediaKey: attachedMedia?.mediaKeyB64 || null,
+        mediaId: attachedMedia?.mediaId || null,
+        isVoice: false,
+        voiceDuration: 0,
+        replyTo: sentReplyTo
+      };
+      setDecryptedMsgMap(prev => ({
+        ...prev,
+        [data.message.id]: decryptedMsgCache.current[data.message.id]
+      }));
 
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev;
@@ -1350,8 +1379,12 @@ export default function Groups({
                       onTouchEnd={handleTouchEnd}
                       onTouchCancel={handleTouchEnd}
                     >
-                      {!isMine && isFirstInSequence && (
-                        <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {isMine ? (
+                        <div className="group-msg-author mine">
+                          <span>{currentUser.displayName || currentUser.username} (You)</span>
+                        </div>
+                      ) : (
+                        <div className="group-msg-author" style={{ color: authorColor }}>
                           {authorUser?.avatarUrl ? (
                             <img
                               src={authorUser.avatarUrl}
@@ -1372,20 +1405,30 @@ export default function Groups({
                         </div>
                       )}
 
-                      {/* Quoted Reply Context (if any) */}
+                      {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
                       {msgMeta.replyTo && (
                         <div
-                          style={{
-                            padding: '4px 8px',
-                            background: 'rgba(0, 0, 0, 0.25)',
-                            borderLeft: '3px solid #ee7882',
-                            borderRadius: '4px',
-                            marginBottom: '6px',
-                            fontSize: '0.74rem'
+                          className="msg-quoted-reply"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (msgMeta.replyTo?.id && messageRefs.current[msgMeta.replyTo.id]) {
+                              messageRefs.current[msgMeta.replyTo.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              const targetEl = messageRefs.current[msgMeta.replyTo.id];
+                              targetEl.classList.add('highlight-flash');
+                              setTimeout(() => targetEl.classList.remove('highlight-flash'), 1200);
+                            }
                           }}
+                          title="Click to jump to replied message"
                         >
-                          <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
-                          <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <CornerUpLeft size={11} color="#ee7882" />
+                            <span style={{ fontWeight: '700', color: '#ee7882' }}>
+                              {msgMeta.replyTo.sender === currentUser.username ? 'You' : `@${msgMeta.replyTo.sender}`}
+                            </span>
+                          </div>
+                          <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
+                            {msgMeta.replyTo.text || 'Attachment'}
+                          </span>
                         </div>
                       )}
 
@@ -1506,28 +1549,25 @@ export default function Groups({
 
         {/* Reply Context Preview Banner */}
         {replyingTo && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 16px',
-              background: 'rgba(15, 23, 42, 0.95)',
-              borderLeft: '4px solid #ee7882',
-              fontSize: '0.8rem',
-              color: '#cbd5e1'
-            }}
-          >
-            <div>
-              <span style={{ fontWeight: 'bold', color: '#ee7882' }}>Replying to @{replyingTo.sender}: </span>
-              <span>{replyingTo.text.slice(0, 45)}...</span>
+          <div className="chat-reply-preview-bar">
+            <div className="reply-preview-left">
+              <CornerUpLeft size={16} color="#ee7882" className="reply-preview-icon" />
+              <div className="reply-preview-content">
+                <span className="reply-preview-author">
+                  Replying to {replyingTo.sender === currentUser.username ? 'yourself' : `@${replyingTo.sender}`}
+                </span>
+                <span className="reply-preview-snippet">
+                  {typeof replyingTo.text === 'string' ? replyingTo.text : 'Attachment'}
+                </span>
+              </div>
             </div>
             <button
               type="button"
+              className="reply-preview-close"
               onClick={() => setReplyingTo(null)}
-              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              title="Cancel reply"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         )}
@@ -1564,6 +1604,7 @@ export default function Groups({
                 </label>
 
                 <input
+                  ref={messageInputRef}
                   type="text"
                   placeholder={`Message ${selectedGroup.name}...`}
                   value={inputMessage}
@@ -2291,11 +2332,14 @@ export default function Groups({
             anchorRect={activePopupMsg.anchorRect}
             onClose={() => setActivePopupMsg(null)}
             onReact={(emoji) => toggleGroupReaction(activePopupMsg.msg.id, emoji)}
-            onReply={() => setReplyingTo({
-              id: activePopupMsg.msg.id,
-              sender: activePopupMsg.msg.sender,
-              text: activePopupMsg.msgMeta.text || (activePopupMsg.msgMeta.isVoice ? 'Voice Note' : 'Attachment')
-            })}
+            onReply={() => {
+              setReplyingTo({
+                id: activePopupMsg.msg.id,
+                sender: activePopupMsg.msg.sender,
+                text: activePopupMsg.msgMeta?.text || (activePopupMsg.msgMeta?.isVoice ? '🎤 Voice Note' : (activePopupMsg.msg?.mediaId ? '📷 Attachment' : 'Message'))
+              });
+              setTimeout(() => messageInputRef.current?.focus(), 60);
+            }}
             onPin={() => handleTogglePin(activePopupMsg.msg.id)}
             isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
             isModerator={isModerator}

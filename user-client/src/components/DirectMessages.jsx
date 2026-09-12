@@ -128,6 +128,8 @@ export default function DirectMessages({
   const isAtBottomRef = useRef(true);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const prevMsgCountRef = useRef(0);
+  const messageRefs = useRef({});
+  const messageInputRef = useRef(null);
 
   // In-chat search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -685,6 +687,20 @@ export default function DirectMessages({
       });
       const msgData = await msgRes.json();
       if (msgData.success) {
+        const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+        decryptedMsgCache.current[msgData.message.id] = {
+          text: '',
+          mediaId: uploadData.media.id,
+          mediaKeyB64: uploadData.media.mediaKeyB64 || mediaKeyB64,
+          isVoice: true,
+          voiceDuration: duration,
+          replyTo: sentReplyTo,
+          isLegacyExpired: false
+        };
+        setDecryptedMsgMap(prev => ({
+          ...prev,
+          [msgData.message.id]: decryptedMsgCache.current[msgData.message.id]
+        }));
         setMessages(prev => [...prev, msgData.message]);
         setIsRecordingVoice(false);
         setReplyingTo(null);
@@ -720,6 +736,8 @@ export default function DirectMessages({
 
       const ratchetKey = await deriveRatchetMessageKey(sharedKey, currentSeq);
 
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+
       // Bundle text + media payload + quoted reply into end-to-end encrypted ratchet payload
       const payloadString = JSON.stringify({
         text: hasText ? inputMessage.trim() : '',
@@ -727,7 +745,7 @@ export default function DirectMessages({
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
         mimeType: hasMedia ? attachedMedia.mimeType : null,
-        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+        replyTo: sentReplyTo
       });
 
       const { ciphertext, iv } = await encryptText(ratchetKey, payloadString);
@@ -750,6 +768,21 @@ export default function DirectMessages({
 
       const data = await res.json();
       if (data.success) {
+        decryptedMsgCache.current[data.message.id] = {
+          text: hasText ? inputMessage.trim() : '',
+          mediaId: hasMedia ? attachedMedia.mediaId : null,
+          mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
+          originalName: hasMedia ? attachedMedia.originalName : null,
+          mimeType: hasMedia ? attachedMedia.mimeType : null,
+          isVoice: false,
+          voiceDuration: 0,
+          replyTo: sentReplyTo,
+          isLegacyExpired: false
+        };
+        setDecryptedMsgMap(prev => ({
+          ...prev,
+          [data.message.id]: decryptedMsgCache.current[data.message.id]
+        }));
         setInputMessage('');
         clearAttachment();
         setReplyingTo(null);
@@ -1079,7 +1112,10 @@ export default function DirectMessages({
                   </div>
                 )}
 
-                <div className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}>
+                <div
+                  ref={el => (messageRefs.current[msg.id] = el)}
+                  className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
+                >
                   <div
                     className="message-bubble"
                     style={{ position: 'relative' }}
@@ -1089,20 +1125,34 @@ export default function DirectMessages({
                     onTouchEnd={handleTouchEnd}
                     onTouchCancel={handleTouchEnd}
                   >
-                    {/* Quoted Reply Context (if any) */}
+                    <div className={`dm-msg-author ${isMine ? 'mine' : ''}`}>
+                      <span>{isMine ? `${currentUser.displayName || currentUser.username} (You)` : (activePeer?.displayName || activePeer?.username)}</span>
+                    </div>
+
+                    {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
                     {msgMeta.replyTo && (
                       <div
-                        style={{
-                          padding: '4px 8px',
-                          background: 'rgba(0, 0, 0, 0.2)',
-                          borderLeft: '3px solid #ee7882',
-                          borderRadius: '4px',
-                          marginBottom: '6px',
-                          fontSize: '0.74rem'
+                        className="msg-quoted-reply"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (msgMeta.replyTo?.id && messageRefs.current[msgMeta.replyTo.id]) {
+                            messageRefs.current[msgMeta.replyTo.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            const targetEl = messageRefs.current[msgMeta.replyTo.id];
+                            targetEl.classList.add('highlight-flash');
+                            setTimeout(() => targetEl.classList.remove('highlight-flash'), 1200);
+                          }
                         }}
+                        title="Click to jump to replied message"
                       >
-                        <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
-                        <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CornerUpLeft size={11} color="#ee7882" />
+                          <span style={{ fontWeight: '700', color: '#ee7882' }}>
+                            {msgMeta.replyTo.sender === currentUser.username ? 'You' : `@${msgMeta.replyTo.sender}`}
+                          </span>
+                        </div>
+                        <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
+                          {msgMeta.replyTo.text || 'Attachment'}
+                        </span>
                       </div>
                     )}
 
@@ -1223,28 +1273,25 @@ export default function DirectMessages({
 
       {/* Reply Preview Context Banner */}
       {replyingTo && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 16px',
-            background: 'rgba(15, 23, 42, 0.95)',
-            borderLeft: '4px solid #ee7882',
-            fontSize: '0.8rem',
-            color: '#cbd5e1'
-          }}
-        >
-          <div>
-            <span style={{ fontWeight: 'bold', color: '#ee7882' }}>Replying to @{replyingTo.sender}: </span>
-            <span>{replyingTo.text.slice(0, 45)}...</span>
+        <div className="chat-reply-preview-bar">
+          <div className="reply-preview-left">
+            <CornerUpLeft size={16} color="#ee7882" className="reply-preview-icon" />
+            <div className="reply-preview-content">
+              <span className="reply-preview-author">
+                Replying to {replyingTo.sender === currentUser.username ? 'yourself' : `@${replyingTo.sender}`}
+              </span>
+              <span className="reply-preview-snippet">
+                {typeof replyingTo.text === 'string' ? replyingTo.text : 'Attachment'}
+              </span>
+            </div>
           </div>
           <button
             type="button"
+            className="reply-preview-close"
             onClick={() => setReplyingTo(null)}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+            title="Cancel reply"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       )}
@@ -1302,6 +1349,7 @@ export default function DirectMessages({
           </label>
 
           <input
+            ref={messageInputRef}
             type="text"
             placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${activePeer.displayName || activePeer.username}...`}
             value={inputMessage}
@@ -1352,11 +1400,14 @@ export default function DirectMessages({
           anchorRect={activePopupMsg.anchorRect}
           onClose={() => setActivePopupMsg(null)}
           onReact={(emoji) => toggleReaction(activePopupMsg.msg.id, emoji)}
-          onReply={() => setReplyingTo({
-            id: activePopupMsg.msg.id,
-            sender: activePopupMsg.msg.sender,
-            text: activePopupMsg.msgMeta.text || (activePopupMsg.msgMeta.isVoice ? 'Voice Note' : 'Attachment')
-          })}
+          onReply={() => {
+            setReplyingTo({
+              id: activePopupMsg.msg.id,
+              sender: activePopupMsg.msg.sender,
+              text: activePopupMsg.msgMeta?.text || (activePopupMsg.msgMeta?.isVoice ? '🎤 Voice Note' : (activePopupMsg.msg?.mediaId ? '📷 Attachment' : 'Message'))
+            });
+            setTimeout(() => messageInputRef.current?.focus(), 60);
+          }}
           onStar={() => toggleStar(activePopupMsg.msg)}
           isStarred={starredIds.has(activePopupMsg.msg.id)}
         />

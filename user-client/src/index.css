@@ -5810,3 +5810,163 @@ input:checked + .toggle-slider:before {
   opacity: 0.85;
   font-weight: 600;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   QUOTED REPLIES & REPLY PREVIEW BANNER
+   ══════════════════════════════════════════════════════════════════════════════ */
+.chat-reply-preview-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 7px 14px !important;
+  background: rgba(22, 7, 13, 0.98) !important;
+  border-top: 1px solid rgba(224, 108, 117, 0.25) !important;
+  border-left: 4px solid #ee7882 !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  z-index: 90 !important;
+  animation: slideUpFade 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reply-preview-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+.reply-preview-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.reply-preview-author {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  color: #ee7882 !important;
+  letter-spacing: 0.2px !important;
+  line-height: 1.2 !important;
+}
+
+.reply-preview-snippet {
+  font-size: 0.74rem !important;
+  color: #cbd5e1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.reply-preview-close {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.reply-preview-close:hover {
+  color: #ffffff !important;
+  background: rgba(224, 108, 117, 0.2) !important;
+}
+
+/* Quoted Reply inside Message Bubble */
+.msg-quoted-reply {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 5px 8px !important;
+  border-left: 3px solid #ee7882 !important;
+  border-radius: 6px !important;
+  margin-bottom: 4px !important;
+  font-size: 0.72rem !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease, opacity 0.15s ease !important;
+  user-select: none !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.message-bubble-row.mine .msg-quoted-reply {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-left-color: #ffffff !important;
+}
+
+.message-bubble-row.peer .msg-quoted-reply {
+  background: rgba(224, 108, 117, 0.12) !important;
+}
+
+.msg-quoted-reply:hover {
+  opacity: 0.85 !important;
+}
+
+/* Author Labels on Message Bubbles */
+.group-msg-author {
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.group-msg-author.mine {
+  color: rgba(255, 255, 255, 0.8) !important;
+  font-size: 0.68rem !important;
+  justify-content: flex-end !important;
+}
+
+.dm-msg-author {
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  opacity: 0.9 !important;
+}
+
+.dm-msg-author.mine {
+  color: rgba(255, 255, 255, 0.8) !important;
+  justify-content: flex-end !important;
+}
+
+/* Flash animation when jumping to replied message */
+@keyframes highlightFlash {
+  0% {
+    background-color: rgba(238, 120, 130, 0.45);
+    box-shadow: 0 0 18px rgba(238, 120, 130, 0.6);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.highlight-flash {
+  animation: highlightFlash 1.2s ease-out !important;
+  border-radius: 14px !important;
+}

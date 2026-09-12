@@ -518,23 +518,38 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
     const parsed = JSON.parse(decryptedRaw);
     if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.mediaKey !== undefined)) {
       let innerText = parsed.text || '';
+      let replyTo = parsed.replyTo || null;
+      let isVoice = !!parsed.isVoice;
+      let voiceDuration = parsed.voiceDuration || 0;
+
       try {
         const nestedParsed = JSON.parse(innerText);
-        if (nestedParsed && typeof nestedParsed === 'object' && nestedParsed.text !== undefined) {
-          innerText = nestedParsed.text;
+        if (nestedParsed && typeof nestedParsed === 'object') {
+          if (nestedParsed.text !== undefined) innerText = nestedParsed.text;
+          if (nestedParsed.replyTo !== undefined) replyTo = nestedParsed.replyTo;
+          if (nestedParsed.isVoice !== undefined) isVoice = !!nestedParsed.isVoice;
+          if (nestedParsed.voiceDuration !== undefined) voiceDuration = nestedParsed.voiceDuration;
         }
       } catch (e) {}
 
       return {
         text: innerText,
-        mediaKey: parsed.mediaKey || null
+        mediaKey: parsed.mediaKey || null,
+        replyTo,
+        isVoice,
+        voiceDuration,
+        rawText: parsed.text || ''
       };
     }
   } catch (e) {}
 
   return {
     text: decryptedRaw,
-    mediaKey: null
+    mediaKey: null,
+    replyTo: null,
+    isVoice: false,
+    voiceDuration: 0,
+    rawText: decryptedRaw
   };
 }
 
