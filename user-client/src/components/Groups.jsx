@@ -36,7 +36,9 @@ import {
   CornerUpLeft,
   Star,
   Smile,
-  ChevronDown
+  ChevronDown,
+  Circle,
+  Phone
 } from 'lucide-react';
 import {
   encryptPost,
@@ -1063,6 +1065,17 @@ export default function Groups({
 
   // ── ACTIVE GROUP CONVERSATION VIEW ───────────────────────────
   if (selectedGroup) {
+    const groupMemberNames = selectedGroup.isCommunity
+      ? allUsers.map(u => u.username)
+      : (selectedGroup.members && selectedGroup.members.length > 0 ? selectedGroup.members : [selectedGroup.creator]);
+
+    const activeGroupMembers = groupMemberNames.filter(mName => {
+      const u = allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+      return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
+    });
+
+    const activeGroupCount = activeGroupMembers.length;
+
     return (
       <div className="group-chat-fullscreen">
         {/* Sleek Horizontal Top Chat Header */}
@@ -1117,11 +1130,23 @@ export default function Groups({
                   </span>
                 )}
               </div>
-              <span className="group-meta-subtitle">
-                {selectedGroup.isCommunity
-                  ? 'Public Community • Created by @' + selectedGroup.creator
-                  : `${selectedGroup.members?.length || 1} members • Created by @${selectedGroup.creator}`}
-              </span>
+              <div className="group-meta-subtitle">
+                {activeGroupCount > 0 ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.72rem' }}>
+                    <Circle size={6} color="#10b981" fill="#10b981" />
+                    <span>{activeGroupCount} {activeGroupCount === 1 ? 'person' : 'people'} active now</span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>•</span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                      {selectedGroup.isCommunity ? 'Public Community' : `${groupMemberNames.length} members`}
+                    </span>
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%' }} title={groupMemberNames.join(', ')}>
+                    <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
+                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 6).join(', ')}{groupMemberNames.length > 6 ? ` +${groupMemberNames.length - 6} more` : ''}</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1713,7 +1738,7 @@ export default function Groups({
                   onClick={() => setDrawerTab('members')}
                 >
                   <Users size={14} />
-                  <span>Members</span>
+                  <span>Members ({drawerMemberList.length}){activeGroupCount > 0 ? ` • ${activeGroupCount} active` : ''}</span>
                 </button>
                 <button
                   className={`drawer-tab-btn ${drawerTab === 'settings' ? 'active' : ''}`}
@@ -1755,27 +1780,46 @@ export default function Groups({
                       const isOwner = m === selectedGroup.creator;
                       const mRole = selectedGroup.roles?.[m] || (isOwner ? 'admin' : 'member');
                       const isSelf = m === currentUser.username;
+                      const isMemberActive = u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
 
                       return (
                         <div key={m} className="drawer-member-item">
-                          {u?.avatarUrl ? (
-                            <img
-                              src={u.avatarUrl}
-                              alt={m}
-                              className="avatar-circle"
-                              style={{
-                                width: '36px',
-                                height: '36px',
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                border: `1.5px solid ${u.avatarColor || '#3b82f6'}`
-                              }}
-                            />
-                          ) : (
-                            <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
-                              {m[0].toUpperCase()}
-                            </div>
-                          )}
+                          <div style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                            {u?.avatarUrl ? (
+                              <img
+                                src={u.avatarUrl}
+                                alt={m}
+                                className="avatar-circle"
+                                style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: `1.5px solid ${u.avatarColor || '#3b82f6'}`
+                                }}
+                              />
+                            ) : (
+                              <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
+                                {m[0].toUpperCase()}
+                              </div>
+                            )}
+                            {isMemberActive && (
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '0px',
+                                  right: '0px',
+                                  width: '10px',
+                                  height: '10px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#10b981',
+                                  border: '2px solid #1a0a11',
+                                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)'
+                                }}
+                                title="Active now"
+                              />
+                            )}
+                          </div>
                           <div className="drawer-member-info">
                             <div className="member-name-row">
                               <span className="drawer-member-name">{u?.displayName || m} {isSelf && '(You)'}</span>
@@ -1783,9 +1827,23 @@ export default function Groups({
                               {!isOwner && mRole === 'admin' && <span className="role-tag-badge admin"><Shield size={10} /> Admin</span>}
                               {!isOwner && mRole === 'moderator' && <span className="role-tag-badge mod">Mod</span>}
                             </div>
-                            <span className="member-sub-info">
-                              {isOwner ? 'Main Administrator (Founder)' : (mRole === 'admin' ? 'Co-Administrator' : (mRole === 'moderator' ? 'Moderator' : 'Member'))}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '1px' }}>
+                              <span className="member-sub-info">
+                                {isOwner ? 'Main Administrator (Founder)' : (mRole === 'admin' ? 'Co-Administrator' : (mRole === 'moderator' ? 'Moderator' : 'Member'))}
+                              </span>
+                              {isMemberActive && (
+                                <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <Circle size={5} color="#10b981" fill="#10b981" />
+                                  <span>Active now</span>
+                                </span>
+                              )}
+                              {u?.phoneNumber && (
+                                <span style={{ fontSize: '0.68rem', color: '#ee7882', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <Phone size={9} />
+                                  <span>{u.phoneNumber}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {/* 3-Dots Governance Menu (Owner & Admins can promote/demote/kick) */}
@@ -2445,7 +2503,12 @@ export default function Groups({
           {filteredGroups.map(group => {
             const isGroupOwner = group.creator === currentUser.username;
             const groupRole = group.roles?.[currentUser.username] || (isGroupOwner ? 'admin' : 'member');
-            const memberNames = group.isCommunity ? allUsers.map(u => u.username) : group.members || [];
+            const memberNames = group.isCommunity ? allUsers.map(u => u.username) : group.members || [group.creator];
+            const activeCardMembers = memberNames.filter(mName => {
+              const u = allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+              return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
+            });
+            const cardActiveCount = activeCardMembers.length;
             const previewMembers = memberNames.slice(0, 4);
 
             return (
@@ -2512,6 +2575,25 @@ export default function Groups({
                       </div>
                     </div>
 
+                    {/* Active Count OR Members Names at bottom of Group/Community Name */}
+                    <div style={{ margin: '3px 0 5px', fontSize: '0.73rem', minWidth: 0 }}>
+                      {cardActiveCount > 0 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600 }}>
+                          <Circle size={6} color="#10b981" fill="#10b981" />
+                          <span>{cardActiveCount} active now</span>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>•</span>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                            {group.isCommunity ? 'Public' : `${memberNames.length} members`}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={memberNames.join(', ')}>
+                          <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
+                          <span>{memberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 4).join(', ')}{memberNames.length > 4 ? ` +${memberNames.length - 4}` : ''}</span>
+                        </span>
+                      )}
+                    </div>
+
                     {/* Member Avatars Stack */}
                     <div className="group-card-members-row">
                       <div className="member-avatar-stack">
@@ -2551,7 +2633,9 @@ export default function Groups({
                         })}
                       </div>
                       <span className="group-card-members-count">
-                        {group.isCommunity ? 'Public Discovery' : `${memberNames.length} ${memberNames.length === 1 ? 'member' : 'members'}`}
+                        {cardActiveCount > 0
+                          ? `${cardActiveCount} online`
+                          : (group.isCommunity ? 'Public Discovery' : `${memberNames.length} ${memberNames.length === 1 ? 'member' : 'members'}`)}
                       </span>
                     </div>
                   </div>

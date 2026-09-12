@@ -904,6 +904,12 @@ export default function DirectMessages({
                       )}
                     </div>
 
+                    {/* Contact Number / Handle below Name */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px' }}>
+                      <Phone size={11} color="#ee7882" />
+                      <span>{peer.phoneNumber ? peer.phoneNumber : `@${peer.username}`}</span>
+                    </div>
+
                     {/* Middle Row: Decrypted Last Message Preview */}
                     <div style={{
                       fontSize: '0.82rem',
@@ -987,6 +993,10 @@ export default function DirectMessages({
             )}
             <div>
               <h4>{activePeer.displayName || activePeer.username}</h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 3px' }}>
+                <Phone size={11} color="#ee7882" />
+                <span>{activePeer.phoneNumber ? activePeer.phoneNumber : `@${activePeer.username}`}</span>
+              </div>
               <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Circle size={7} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} />
                 <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
