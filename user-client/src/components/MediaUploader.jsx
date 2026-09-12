@@ -225,7 +225,7 @@ const MediaUploader = forwardRef(function MediaUploader(
           </div>
         ) : (
           <label className="upload-dropzone" onClick={(e) => e.stopPropagation()}>
-            <FileText size={18} color="#3b82f6" />
+            <FileText size={18} color="#e06c75" />
             <span>Attach file (photos, docs, videos)</span>
           </label>
         )

@@ -420,7 +420,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                 height: '36px',
                 borderRadius: '50%',
                 objectFit: 'cover',
-                border: `2px solid ${currentUser.avatarColor || '#3b82f6'}`
+                border: `2px solid ${currentUser.avatarColor || '#e06c75'}`
               }}
             />
           ) : (
@@ -572,7 +572,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   {currentUser.avatarUrl ? (
                     <img src={currentUser.avatarUrl} alt={currentUser.displayName || currentUser.username} className="author-avatar" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
                   ) : (
-                    <div className="author-avatar" style={{ width: '32px', height: '32px', fontSize: '0.8rem', backgroundColor: currentUser.avatarColor || '#3b82f6' }}>
+                    <div className="author-avatar" style={{ width: '32px', height: '32px', fontSize: '0.8rem', backgroundColor: currentUser.avatarColor || '#e06c75' }}>
                       {(currentUser.displayName || currentUser.username)[0].toUpperCase()}
                     </div>
                   )}
@@ -661,8 +661,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   onClick={() => toggleTool('topics')}
                   title="Community Topics & Hashtags"
                 >
-                  <div className="dock-icon-circle" style={{ background: 'rgba(56, 189, 248, 0.15)' }}>
-                    <Hash size={16} color="#38bdf8" />
+                  <div className="dock-icon-circle" style={{ background: 'rgba(224, 108, 117, 0.15)' }}>
+                    <Hash size={16} color="#ee7882" />
                   </div>
                   <span className="dock-tool-label">Topics</span>
                 </button>
@@ -697,8 +697,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   onClick={() => setShowPreview(prev => !prev)}
                   title={showPreview ? "Hide Preview" : "Live Post Preview"}
                 >
-                  <div className="dock-icon-circle" style={{ background: 'rgba(192, 132, 252, 0.15)' }}>
-                    {showPreview ? <EyeOff size={16} color="#c084fc" /> : <Eye size={16} color="#c084fc" />}
+                  <div className="dock-icon-circle" style={{ background: 'rgba(224, 108, 117, 0.15)' }}>
+                    {showPreview ? <EyeOff size={16} color="#ee7882" /> : <Eye size={16} color="#ee7882" />}
                   </div>
                   <span className="dock-tool-label">{showPreview ? 'Hide' : 'Preview'}</span>
                 </button>
@@ -758,13 +758,13 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   fontSize: '0.72rem',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  border: isPublicPost ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
-                  background: isPublicPost ? 'rgba(59, 130, 246, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                  color: isPublicPost ? '#60a5fa' : '#fbbf24'
+                  border: isPublicPost ? '1px solid rgba(224, 108, 117, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+                  background: isPublicPost ? 'rgba(224, 108, 117, 0.14)' : 'rgba(245, 158, 11, 0.12)',
+                  color: isPublicPost ? '#ee7882' : '#fbbf24'
                 }}
                 title="Toggle post visibility"
               >
-                {isPublicPost ? <Globe size={12} /> : <Lock size={12} />}
+                {isPublicPost ? <Globe size={12} color="#ee7882" /> : <Lock size={12} />}
                 <span>{isPublicPost ? 'Public Post' : 'Private'}</span>
               </button>
 
@@ -825,11 +825,11 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                         height: '36px',
                         borderRadius: '50%',
                         objectFit: 'cover',
-                        border: `1.5px solid ${authorObj.avatarColor || '#3b82f6'}`
+                        border: `1.5px solid ${authorObj.avatarColor || '#e06c75'}`
                       }}
                     />
                   ) : (
-                    <div className="author-avatar" style={{ backgroundColor: authorObj.avatarColor || '#3b82f6' }}>
+                    <div className="author-avatar" style={{ backgroundColor: authorObj.avatarColor || '#e06c75' }}>
                       {post.author[0].toUpperCase()}
                     </div>
                   )}
@@ -846,8 +846,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                       </span>
                     ) : null}
                     {decState.isPublic ? (
-                      <span className="pill success" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.3)' }} title="Public Community Post">
-                        <Globe size={12} />
+                      <span className="pill success" style={{ background: 'rgba(224, 108, 117, 0.15)', color: '#ee7882', borderColor: 'rgba(224, 108, 117, 0.3)' }} title="Public Community Post">
+                        <Globe size={12} color="#ee7882" />
                         Public
                       </span>
                     ) : decState.success ? (
@@ -912,7 +912,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   <div className="key-envelopes-info">
                     {decState.isPublic ? (
                       <>
-                        <Globe size={14} color="#60a5fa" />
+                        <Globe size={14} color="#ee7882" />
                         <span>Public Community Post • Visible to all members</span>
                       </>
                     ) : (
