@@ -905,9 +905,11 @@ export default function DirectMessages({
                     </div>
 
                     {/* Contact Number / Handle below Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px' }}>
-                      <Phone size={11} color="#ee7882" />
-                      <span>{peer.phoneNumber ? peer.phoneNumber : `@${peer.username}`}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px', minWidth: 0 }}>
+                      <Phone size={11} color="#ee7882" style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {peer.phoneNumber ? peer.phoneNumber : `@${peer.username}`}
+                      </span>
                     </div>
 
                     {/* Middle Row: Decrypted Last Message Preview */}
@@ -966,65 +968,114 @@ export default function DirectMessages({
   return (
     <div className="dm-chat-screen">
       {/* Chat Header with Call Buttons & In-Chat Search */}
+      {/* Chat Header with Call Buttons & In-Chat Search */}
       <div className="chat-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
           <button className="back-btn" onClick={() => setSelectedPeer(null)} title="Back to contacts">
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
 
-          <div className="peer-profile">
+          <div className="peer-profile" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
             {activePeer.avatarUrl ? (
               <img
                 src={activePeer.avatarUrl}
                 alt={activePeer.username}
                 className="avatar-circle"
                 style={{
-                  width: '38px',
-                  height: '38px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '50%',
                   objectFit: 'cover',
-                  border: `1.5px solid ${activePeer.avatarColor || '#3b82f6'}`
+                  border: `2px solid ${activePeer.avatarColor || '#ee7882'}`,
+                  flexShrink: 0
                 }}
               />
             ) : (
-              <div className="avatar-circle" style={{ backgroundColor: activePeer.avatarColor }}>
+              <div
+                className="avatar-circle"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: activePeer.avatarColor || '#e06c75',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  color: '#ffffff',
+                  fontSize: '1rem',
+                  flexShrink: 0
+                }}
+              >
                 {activePeer.username[0].toUpperCase()}
               </div>
             )}
-            <div>
-              <h4>{activePeer.displayName || activePeer.username}</h4>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 3px' }}>
-                <Phone size={11} color="#ee7882" />
-                <span>{activePeer.phoneNumber ? activePeer.phoneNumber : `@${activePeer.username}`}</span>
+            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {/* Row 1: Name + Rounded Contact Pill */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
+                  {activePeer.displayName || activePeer.username}
+                </h4>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    fontSize: '0.68rem',
+                    color: '#ee7882',
+                    background: 'rgba(238, 120, 130, 0.12)',
+                    border: '1px solid rgba(238, 120, 130, 0.25)',
+                    borderRadius: '12px',
+                    padding: '1px 7px',
+                    fontWeight: 500,
+                    flexShrink: 0,
+                    maxWidth: '140px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={activePeer.phoneNumber || `@${activePeer.username}`}
+                >
+                  <Phone size={10} color="#ee7882" />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activePeer.phoneNumber ? activePeer.phoneNumber : `@${activePeer.username}`}
+                  </span>
+                </span>
               </div>
-              <span className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Circle size={7} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} />
-                <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
-                <span style={{ opacity: 0.5 }}>•</span>
-                <ShieldCheck size={12} color="#10b981" />
-                <span>End-to-end encrypted</span>
-              </span>
+
+              {/* Row 2: Status & E2EE */}
+              <div className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Circle size={6} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                <span style={{ color: isPeerActive ? '#34d399' : '#94a3b8', fontWeight: isPeerActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
+                </span>
+                <span style={{ opacity: 0.4, flexShrink: 0 }}>•</span>
+                <ShieldCheck size={11} color="#10b981" style={{ flexShrink: 0 }} />
+                <span style={{ color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>End-to-end encrypted</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Header Action Buttons: Call & In-Chat Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <button
             type="button"
             className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}
             onClick={() => { setShowSearchBar(s => !s); setSearchQuery(''); }}
             style={{
-              background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-              border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(255, 255, 255, 0.15)'}`,
+              background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+              border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
               borderRadius: '50%',
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               color: showSearchBar ? '#ee7882' : '#cbd5e1',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: showSearchBar ? '0 0 10px rgba(238, 120, 130, 0.3)' : 'none'
             }}
             title="Search messages in this chat"
           >
@@ -1035,16 +1086,18 @@ export default function DirectMessages({
             type="button"
             onClick={() => onStartCall && onStartCall(activePeer, false)}
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(52, 211, 153, 0.12)',
+              border: '1px solid rgba(52, 211, 153, 0.3)',
               borderRadius: '50%',
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               color: '#34d399',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
             }}
             title="Encrypted Audio Call"
           >
@@ -1054,16 +1107,18 @@ export default function DirectMessages({
             type="button"
             onClick={() => onStartCall && onStartCall(activePeer, true)}
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(96, 165, 250, 0.12)',
+              border: '1px solid rgba(96, 165, 250, 0.3)',
               borderRadius: '50%',
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               color: '#60a5fa',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
             }}
             title="Encrypted Video Call"
           >
@@ -1337,69 +1392,68 @@ export default function DirectMessages({
         </div>
       )}
 
-      {/* Input Form with Attachment & Voice Note Recorder */}
-      {isRecordingVoice ? (
-        <div style={{ padding: '8px 12px' }}>
-          <VoiceNoteRecorder
-            onSend={handleSendVoiceNote}
-            onCancel={() => setIsRecordingVoice(false)}
-          />
-        </div>
-      ) : (
-        <form onSubmit={handleSendMessage} className="chat-input-form">
-          <label className="dm-paperclip-btn" title="Attach encrypted file (photos, docs, videos)">
-            <Paperclip size={18} />
-            <input
-              type="file"
-              accept="*"
-              onChange={handleFileSelect}
-              onClick={(e) => { e.target.value = null; }}
-              hidden
+      {/* ── SLEEK FLOATING MESSAGE BAR ── */}
+      <div className="group-chat-bottom-bar dm-bottom-bar">
+        {isRecordingVoice ? (
+          <div style={{ width: '100%' }}>
+            <VoiceNoteRecorder
+              onSend={handleSendVoiceNote}
+              onCancel={() => setIsRecordingVoice(false)}
             />
-          </label>
+          </div>
+        ) : (
+          <form onSubmit={handleSendMessage} className="group-chat-input-capsule dm-input-capsule">
+            <label className="msg-bar-attach-btn" title="Attach encrypted file (photos, docs, videos)">
+              <Paperclip size={18} />
+              <input
+                type="file"
+                accept="*"
+                onChange={handleFileSelect}
+                onClick={(e) => { e.target.value = null; }}
+                hidden
+              />
+            </label>
 
-          <input
-            ref={messageInputRef}
-            type="text"
-            placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${activePeer.displayName || activePeer.username}...`}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            disabled={sending}
-          />
+            <input
+              ref={messageInputRef}
+              type="text"
+              placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${activePeer.displayName || activePeer.username}...`}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              disabled={sending}
+              className="msg-bar-text-input"
+            />
 
-          {/* Voice Note Button */}
-          {!inputMessage.trim() && !attachedMedia ? (
-            <button
-              type="button"
-              onClick={() => setIsRecordingVoice(true)}
-              className="primary-btn send-dm-btn"
-              style={{ background: 'rgba(238, 120, 130, 0.2)', border: '1px solid rgba(238, 120, 130, 0.4)', color: '#ee7882' }}
-              title="Record Voice Note"
-            >
-              <Mic size={16} />
-            </button>
-          ) : (
-            <button type="submit" className="primary-btn send-dm-btn" disabled={!canSend}>
-              {sending ? (
-                <>
+            {/* Voice Note Button or Send Button */}
+            {!inputMessage.trim() && !attachedMedia ? (
+              <button
+                type="button"
+                onClick={() => setIsRecordingVoice(true)}
+                className="msg-bar-send-btn"
+                style={{ background: 'rgba(238, 120, 130, 0.22)', color: '#ee7882', border: '1px solid rgba(238, 120, 130, 0.35)' }}
+                title="Record Voice Note"
+              >
+                <Mic size={17} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="msg-bar-send-btn"
+                disabled={!canSend}
+                title="Send Message"
+              >
+                {sending ? (
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Sending...</span>
-                </>
-              ) : mediaUploading ? (
-                <>
+                ) : mediaUploading ? (
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Securing...</span>
-                </>
-              ) : (
-                <>
+                ) : (
                   <Send size={16} />
-                  <span>Send</span>
-                </>
-              )}
-            </button>
-          )}
-        </form>
-      )}
+                )}
+              </button>
+            )}
+          </form>
+        )}
+      </div>
 
       {/* Message Long-press / Right-click Action Popup */}
       {activePopupMsg && (

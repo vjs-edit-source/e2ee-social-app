@@ -1088,7 +1088,7 @@ export default function Groups({
       <div className="group-chat-fullscreen">
         {/* Sleek Horizontal Top Chat Header */}
         <div className="group-chat-header">
-          <div className="header-left">
+          <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
             <button className="chat-back-btn" onClick={() => setSelectedGroup(null)} title="Back to Groups">
               <ArrowLeft size={18} />
             </button>
@@ -1099,38 +1099,54 @@ export default function Groups({
                 alt={selectedGroup.name}
                 className="avatar-circle group-avatar-header"
                 style={{
-                  width: '38px',
-                  height: '38px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '50%',
                   objectFit: 'cover',
                   cursor: 'pointer',
-                  border: `1.5px solid ${selectedGroup.avatarColor || '#e06c75'}`
+                  border: `2px solid ${selectedGroup.avatarColor || '#e06c75'}`,
+                  flexShrink: 0
                 }}
                 onClick={() => setShowMembersDrawer(true)}
               />
             ) : (
               <div
                 className="avatar-circle group-avatar-header"
-                style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75' }}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: selectedGroup.avatarColor || '#e06c75',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  fontSize: '1rem'
+                }}
                 onClick={() => setShowMembersDrawer(true)}
               >
                 {selectedGroup.isCommunity ? <Globe size={18} /> : selectedGroup.name[0].toUpperCase()}
               </div>
             )}
 
-            <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings">
-              <div className="group-name-row">
-                <span className="group-title">{selectedGroup.name}</span>
-                {selectedGroup.isCommunity && <span className="group-tag community">Public</span>}
-                {isCreator && <span className="group-tag creator"><Crown size={10} /> Owner</span>}
-                {!isCreator && isAdmin && <span className="group-tag admin"><Shield size={10} /> Admin</span>}
+            <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings" style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer' }}>
+              <div className="group-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                <span className="group-title" style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
+                  {selectedGroup.name}
+                </span>
+                {selectedGroup.isCommunity && <span className="group-tag community" style={{ borderRadius: '12px', flexShrink: 0 }}>Public</span>}
+                {isCreator && <span className="group-tag creator" style={{ borderRadius: '12px', flexShrink: 0 }}><Crown size={10} /> Owner</span>}
+                {!isCreator && isAdmin && <span className="group-tag admin" style={{ borderRadius: '12px', flexShrink: 0 }}><Shield size={10} /> Admin</span>}
                 {groupPerms.sendMessages === false && (
-                  <span className="group-tag announcement" title="Broadcast channel">
+                  <span className="group-tag announcement" title="Broadcast channel" style={{ borderRadius: '12px', flexShrink: 0 }}>
                     <Megaphone size={10} /> Broadcast
                   </span>
                 )}
                 {selectedGroup.settings?.disappearingTimer > 0 && (
-                  <span className="group-tag timer" title="Disappearing messages active">
+                  <span className="group-tag timer" title="Disappearing messages active" style={{ borderRadius: '12px', flexShrink: 0 }}>
                     <Flame size={10} color="#fbbf24" />
                     {selectedGroup.settings.disappearingTimer >= 3600
                       ? `${selectedGroup.settings.disappearingTimer / 3600}h`
@@ -1138,31 +1154,47 @@ export default function Groups({
                   </span>
                 )}
               </div>
-              <div className="group-meta-subtitle">
+              <div className="group-meta-subtitle" style={{ minWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeGroupCount > 0 ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.72rem' }}>
-                    <Circle size={6} color="#10b981" fill="#10b981" />
-                    <span>{activeGroupCount} {activeGroupCount === 1 ? 'person' : 'people'} active now</span>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>•</span>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.72rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Circle size={6} color="#10b981" fill="#10b981" style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {activeGroupCount} {activeGroupCount === 1 ? 'person' : 'people'} active now
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, flexShrink: 0 }}>•</span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {selectedGroup.isCommunity ? 'Public Community' : `${groupMemberNames.length} members`}
                     </span>
                   </span>
                 ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%' }} title={groupMemberNames.join(', ')}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.join(', ')}>
                     <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
-                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 6).join(', ')}{groupMemberNames.length > 6 ? ` +${groupMemberNames.length - 6} more` : ''}</span>
+                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 5).join(', ')}{groupMemberNames.length > 5 ? ` +${groupMemberNames.length - 5} more` : ''}</span>
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}
               onClick={() => { setShowSearchBar(s => !s); setSearchQuery(''); setShowHeaderMenu(false); }}
               title="Search messages"
+              style={{
+                background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
+                borderRadius: '50%',
+                width: '38px',
+                height: '38px',
+                color: showSearchBar ? '#ee7882' : '#cbd5e1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: showSearchBar ? '0 0 10px rgba(238, 120, 130, 0.3)' : 'none'
+              }}
             >
               <Search size={17} />
             </button>
@@ -1173,6 +1205,19 @@ export default function Groups({
                 className={`header-icon-btn ${showHeaderMenu ? 'active' : ''}`}
                 onClick={() => setShowHeaderMenu(s => !s)}
                 title="Group actions"
+                style={{
+                  background: showHeaderMenu ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                  border: `1px solid ${showHeaderMenu ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
+                  borderRadius: '50%',
+                  width: '38px',
+                  height: '38px',
+                  color: showHeaderMenu ? '#ee7882' : '#cbd5e1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
               >
                 <MoreVertical size={18} />
               </button>
@@ -1651,10 +1696,10 @@ export default function Groups({
                     type="button"
                     onClick={() => setIsRecordingVoice(true)}
                     className="msg-bar-send-btn"
-                    style={{ background: 'rgba(238, 120, 130, 0.25)', color: '#ee7882' }}
+                    style={{ background: 'rgba(238, 120, 130, 0.22)', color: '#ee7882', border: '1px solid rgba(238, 120, 130, 0.35)' }}
                     title="Record voice note"
                   >
-                    <Mic size={16} />
+                    <Mic size={17} />
                   </button>
                 ) : (
                   <button

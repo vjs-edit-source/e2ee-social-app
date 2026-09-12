@@ -1276,24 +1276,23 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border-color);
+  padding: 12px 14px;
+  background: rgba(25, 10, 15, 0.45);
+  border: 1px solid rgba(238, 120, 130, 0.1);
   color: var(--text-main);
   text-align: left;
   cursor: pointer;
   width: 100%;
-  transition: background 0.18s ease;
-  border-radius: 0;
-}
-
-.dm-contact-card:last-child {
-  border-bottom: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 16px;
+  margin-bottom: 6px;
 }
 
 .dm-contact-card:hover {
-  background-color: var(--bg-card-hover);
+  background-color: rgba(238, 120, 130, 0.12);
+  border-color: rgba(238, 120, 130, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .contact-avatar {
@@ -1534,14 +1533,16 @@ textarea:focus {
 .chat-header {
   display: flex !important;
   align-items: center !important;
+  justify-content: space-between !important;
   gap: 12px !important;
   padding: 8px 16px !important;
-  background-color: rgba(14, 5, 8, 0.98) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border-bottom: 1px solid var(--border-color) !important;
+  background-color: rgba(14, 5, 8, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-bottom: 1px solid rgba(238, 120, 130, 0.15) !important;
   flex-shrink: 0 !important;
-  height: 56px !important;
+  min-height: 60px !important;
+  height: auto !important;
   z-index: 10 !important;
 }
 
@@ -1555,13 +1556,14 @@ textarea:focus {
 }
 
 .peer-profile h4 {
-  font-size: 0.94rem !important;
+  font-size: 0.96rem !important;
   font-weight: 700 !important;
   color: #ffffff !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   margin: 0 !important;
+  min-width: 0 !important;
 }
 
 .handshake-status {
@@ -1573,6 +1575,7 @@ textarea:focus {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+  min-width: 0 !important;
 }
 
 .key-details-badge code {
@@ -2966,7 +2969,7 @@ textarea:focus {
 .group-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 18px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -2991,7 +2994,7 @@ textarea:focus {
 .group-card-avatar {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
+  border-radius: 50%;
   font-size: 1.15rem;
   flex-shrink: 0;
   display: flex;
@@ -3006,6 +3009,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
 }
 
 .group-card-name-row {
@@ -3013,6 +3017,7 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .group-card-name-row h4 {
@@ -3022,6 +3027,7 @@ textarea:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .group-card-badges {
@@ -3034,8 +3040,8 @@ textarea:focus {
 .group-role-badge {
   font-size: 0.62rem;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -3056,8 +3062,8 @@ textarea:focus {
 .group-type-badge {
   font-size: 0.62rem;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
   text-transform: uppercase;
 }
 
@@ -3451,14 +3457,15 @@ textarea:focus {
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 10px !important;
+  gap: 12px !important;
   padding: 8px 16px !important;
-  background-color: rgba(14, 5, 8, 0.98) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border-bottom: 1px solid var(--border-color) !important;
+  background-color: rgba(14, 5, 8, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-bottom: 1px solid rgba(238, 120, 130, 0.15) !important;
   flex-shrink: 0 !important;
-  height: 56px !important;
+  min-height: 60px !important;
+  height: auto !important;
   z-index: 10 !important;
 }
 
@@ -3473,24 +3480,25 @@ textarea:focus {
 }
 
 .chat-back-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  width: 34px;
-  height: 34px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(238, 120, 130, 0.18);
+  color: #cbd5e1;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chat-back-btn:hover {
-  color: var(--text-main);
-  background-color: var(--bg-card-hover);
-  border-color: var(--accent-primary);
+  color: #ee7882;
+  background-color: rgba(238, 120, 130, 0.16);
+  border-color: rgba(238, 120, 130, 0.4);
+  transform: scale(1.04);
 }
 
 .header-info {
@@ -3498,16 +3506,17 @@ textarea:focus {
   flex-direction: column !important;
   justify-content: center;
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   gap: 2px;
   cursor: pointer;
 }
 
 .group-avatar-header {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 700;
   flex-shrink: 0;
   cursor: pointer;
@@ -3516,20 +3525,21 @@ textarea:focus {
 .group-name-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex-wrap: nowrap;
   overflow: hidden;
   min-width: 0;
 }
 
 .group-title {
-  font-size: 0.94rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .group-meta-subtitle {
@@ -3538,14 +3548,15 @@ textarea:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.3;
+  min-width: 0;
 }
 
 .group-tag {
-  font-size: 0.62rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -4022,10 +4033,10 @@ textarea:focus {
 /* ── Floating Capsule Message Bar & Broadcast Banner ── */
 .group-chat-bottom-bar {
   padding: 10px 16px max(12px, env(safe-area-inset-bottom, 12px)) 16px !important;
-  background-color: rgba(14, 5, 8, 0.98) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border-top: 1px solid var(--border-color) !important;
+  background-color: rgba(14, 5, 8, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-top: 1px solid rgba(238, 120, 130, 0.15) !important;
   flex-shrink: 0 !important;
   width: 100% !important;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
@@ -4036,34 +4047,40 @@ textarea:focus {
 .group-chat-input-capsule {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: 9999px;
-  padding: 5px 8px 5px 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  gap: 8px;
+  background: rgba(25, 10, 15, 0.7) !important;
+  border: 1px solid rgba(238, 120, 130, 0.22) !important;
+  border-radius: 9999px !important;
+  padding: 4px 6px 4px 10px !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .group-chat-input-capsule:focus-within {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(224, 108, 117, 0.2);
+  border-color: #ee7882 !important;
+  background: rgba(25, 10, 15, 0.92) !important;
+  box-shadow: 0 0 0 2px rgba(238, 120, 130, 0.25), 0 4px 16px rgba(0, 0, 0, 0.4) !important;
 }
 
 .msg-bar-attach-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: #94a3b8;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  transition: color 0.15s;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
   flex-shrink: 0;
 }
 
 .msg-bar-attach-btn:hover {
   color: #ee7882;
+  background: rgba(238, 120, 130, 0.12);
+  transform: scale(1.05);
 }
 
 .msg-bar-text-input {
@@ -4071,9 +4088,9 @@ textarea:focus {
   background: transparent;
   border: none;
   color: var(--text-main);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   outline: none;
-  padding: 6px 4px;
+  padding: 6px 6px;
   min-width: 0;
 }
 
@@ -4093,12 +4110,13 @@ textarea:focus {
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(224, 108, 117, 0.4);
-  transition: transform 0.15s, opacity 0.15s;
+  box-shadow: 0 2px 10px rgba(238, 120, 130, 0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .msg-bar-send-btn:hover:not(:disabled) {
-  transform: scale(1.05);
+  transform: scale(1.06);
+  box-shadow: 0 3px 14px rgba(238, 120, 130, 0.6);
 }
 
 .msg-bar-send-btn:disabled {
