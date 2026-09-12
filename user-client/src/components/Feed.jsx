@@ -24,7 +24,8 @@ import {
   X,
   Paperclip,
   FileText,
-  RotateCcw
+  RotateCcw,
+  LayoutGrid
 } from 'lucide-react';
 import {
   generatePostKey,
@@ -66,10 +67,12 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [uploaderKey, setUploaderKey] = useState(0);
 
   // New rich writing & master toolbar state
+  const [showToolsDock, setShowToolsDock] = useState(false);
   const [activeTool, setActiveTool] = useState(null); // 'emoji' | 'topics' | 'format' | 'expiry' | null
   const [showPreview, setShowPreview] = useState(false);
   const [postExpiry, setPostExpiry] = useState(0); // 0 = permanent, 86400 = 24h, 604800 = 7d
   const textareaRef = useRef(null);
+  const uploaderRef = useRef(null);
 
   const decryptedPostsCache = useRef({});
   const decryptedMediaCache = useRef({});
@@ -380,6 +383,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
         setNewPostText('');
         setAttachedMedia(null);
         setActiveTool(null);
+        setShowToolsDock(false);
         setShowPreview(false);
         setPostExpiry(0);
         setUploaderKey(k => k + 1);
@@ -611,68 +615,133 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             </div>
           )}
 
-          {/* Master Toolbar */}
+          {/* Master Tools Action Dock (opens when clicking the ONE master launcher icon) */}
+          {showToolsDock && (
+            <div className="feed-master-tools-dock">
+              <div className="dock-tools-container">
+                <button
+                  type="button"
+                  className="dock-tool-item"
+                  onClick={() => uploaderRef.current?.openImagePicker()}
+                  title="Add Photos or Videos"
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(52, 211, 153, 0.15)' }}>
+                    <ImageIcon size={16} color="#34d399" />
+                  </div>
+                  <span className="dock-tool-label">Photos</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dock-tool-item"
+                  onClick={() => uploaderRef.current?.openFilePicker()}
+                  title="Attach Document or File"
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(167, 139, 250, 0.15)' }}>
+                    <Paperclip size={16} color="#a78bfa" />
+                  </div>
+                  <span className="dock-tool-label">Document</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`dock-tool-item ${activeTool === 'emoji' ? 'active' : ''}`}
+                  onClick={() => toggleTool('emoji')}
+                  title="Insert Emojis & Reactions"
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
+                    <Smile size={16} color="#f59e0b" />
+                  </div>
+                  <span className="dock-tool-label">Emojis</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`dock-tool-item ${activeTool === 'topics' ? 'active' : ''}`}
+                  onClick={() => toggleTool('topics')}
+                  title="Community Topics & Hashtags"
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(56, 189, 248, 0.15)' }}>
+                    <Hash size={16} color="#38bdf8" />
+                  </div>
+                  <span className="dock-tool-label">Topics</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`dock-tool-item ${activeTool === 'format' ? 'active' : ''}`}
+                  onClick={() => toggleTool('format')}
+                  title="Markdown Formatting Tools"
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(236, 72, 153, 0.15)' }}>
+                    <Type size={16} color="#ec4899" />
+                  </div>
+                  <span className="dock-tool-label">Format</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`dock-tool-item ${activeTool === 'expiry' || postExpiry > 0 ? 'active' : ''}`}
+                  onClick={() => toggleTool('expiry')}
+                  title={postExpiry > 0 ? `Expires in ${postExpiry === 86400 ? '24h' : '7d'}` : "Post Expiration Timer"}
+                >
+                  <div className="dock-icon-circle" style={{ background: postExpiry > 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.08)' }}>
+                    <Clock size={16} color={postExpiry > 0 ? '#10b981' : '#cbd5e1'} />
+                  </div>
+                  <span className="dock-tool-label">{postExpiry > 0 ? (postExpiry === 86400 ? '24h' : '7d') : 'Timer'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`dock-tool-item ${showPreview ? 'active' : ''}`}
+                  onClick={() => setShowPreview(prev => !prev)}
+                  title={showPreview ? "Hide Preview" : "Live Post Preview"}
+                >
+                  <div className="dock-icon-circle" style={{ background: 'rgba(192, 132, 252, 0.15)' }}>
+                    {showPreview ? <EyeOff size={16} color="#c084fc" /> : <Eye size={16} color="#c084fc" />}
+                  </div>
+                  <span className="dock-tool-label">{showPreview ? 'Hide' : 'Preview'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dock-close-btn"
+                  onClick={() => setShowToolsDock(false)}
+                  title="Close tools menu"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Master Bottom Toolbar */}
           <div className="feed-master-toolbar">
             <div className="feed-master-tools-left">
+              {/* THE ONE MASTER ICON ("like 3 dot, but not 3 dot exactly" -> 4-dot LayoutGrid launcher) */}
+              <button
+                type="button"
+                className={`feed-master-launcher-btn ${showToolsDock ? 'active' : ''} ${Boolean(activeTool || showPreview || postExpiry > 0 || attachedMedia) ? 'has-active' : ''}`}
+                onClick={() => setShowToolsDock(prev => !prev)}
+                title="Post Tools & Attachments"
+              >
+                <LayoutGrid size={18} />
+                {Boolean(activeTool || showPreview || postExpiry > 0 || attachedMedia) && (
+                  <span className="master-launcher-dot" />
+                )}
+              </button>
+
+              {/* Hidden file uploader triggers + attached file chip if present */}
               <MediaUploader
+                ref={uploaderRef}
                 key={uploaderKey}
                 sharedKey={null}
                 onMediaEncrypted={setAttachedMedia}
                 onUploadStateChange={setMediaUploading}
                 uploaderName={currentUser.username}
                 serverUrl={serverUrl}
-                variant="master"
+                variant="hidden"
               />
-
-              <button
-                type="button"
-                className={`master-action-btn ${activeTool === 'emoji' ? 'active' : ''}`}
-                onClick={() => toggleTool('emoji')}
-                title="Insert Emojis & Reactions"
-              >
-                <Smile size={18} color="#f59e0b" />
-              </button>
-
-              <button
-                type="button"
-                className={`master-action-btn ${activeTool === 'topics' ? 'active' : ''}`}
-                onClick={() => toggleTool('topics')}
-                title="Add Topic Hashtags"
-              >
-                <Hash size={18} color="#38bdf8" />
-              </button>
-
-              <button
-                type="button"
-                className={`master-action-btn ${activeTool === 'format' ? 'active' : ''}`}
-                onClick={() => toggleTool('format')}
-                title="Markdown Formatting Tools"
-              >
-                <Type size={18} color="#ec4899" />
-              </button>
-
-              <button
-                type="button"
-                className={`master-action-btn ${activeTool === 'expiry' ? 'active' : ''} ${postExpiry > 0 ? 'has-badge' : ''}`}
-                onClick={() => toggleTool('expiry')}
-                title={postExpiry > 0 ? `Expires in ${postExpiry === 86400 ? '24h' : '7d'}` : "Post Expiration Timer"}
-              >
-                <Clock size={18} color={postExpiry > 0 ? '#10b981' : '#94a3b8'} />
-                {postExpiry > 0 && (
-                  <span className="master-tool-badge">
-                    {postExpiry === 86400 ? '24h' : '7d'}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                className={`master-action-btn ${showPreview ? 'active' : ''}`}
-                onClick={() => setShowPreview(prev => !prev)}
-                title={showPreview ? "Hide Preview" : "Live Post Preview"}
-              >
-                {showPreview ? <EyeOff size={18} color="#a855f7" /> : <Eye size={18} color="#a855f7" />}
-              </button>
             </div>
 
             <div className="feed-master-tools-right">

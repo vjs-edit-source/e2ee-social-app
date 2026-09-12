@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { FileText, Lock, CheckCircle2, X, Loader2, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { encryptMediaBuffer } from '../crypto/e2ee';
 import { formatTruncatedFileName } from '../utils/fileUtils';
@@ -65,13 +65,22 @@ async function optimizeImageForEncryption(file) {
   });
 }
 
-export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, serverUrl, variant = 'default' }) {
+const MediaUploader = forwardRef(function MediaUploader(
+  { sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, serverUrl, variant = 'default' },
+  ref
+) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [encrypting, setEncrypting] = useState(false);
   const [encryptedMediaId, setEncryptedMediaId] = useState(null);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    openImagePicker: () => imageInputRef.current?.click(),
+    openFilePicker: () => fileInputRef.current?.click(),
+    clearFile: () => clearFile()
+  }));
 
   // Clean up object URL on unmount or file clear
   useEffect(() => {
@@ -175,8 +184,26 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
 
   return (
     <div className={`media-uploader-box ${variant === 'master' ? 'master-mode' : ''}`}>
+      {/* Hidden inputs accessible via imperative ref in all variants */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*,video/*"
+        onChange={handleFileSelect}
+        onClick={(e) => e.stopPropagation()}
+        hidden
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="*"
+        onChange={handleFileSelect}
+        onClick={(e) => e.stopPropagation()}
+        hidden
+      />
+
       {!selectedFile ? (
-        variant === 'master' ? (
+        variant === 'hidden' ? null : variant === 'master' ? (
           <div className="master-media-triggers" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
               type="button"
@@ -186,14 +213,6 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
             >
               <ImageIcon size={18} color="#34d399" />
             </button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*,video/*"
-              onChange={handleFileSelect}
-              onClick={(e) => e.stopPropagation()}
-              hidden
-            />
 
             <button
               type="button"
@@ -203,26 +222,11 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
             >
               <Paperclip size={18} color="#a78bfa" />
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="*"
-              onChange={handleFileSelect}
-              onClick={(e) => e.stopPropagation()}
-              hidden
-            />
           </div>
         ) : (
           <label className="upload-dropzone" onClick={(e) => e.stopPropagation()}>
             <FileText size={18} color="#3b82f6" />
             <span>Attach file (photos, docs, videos)</span>
-            <input
-              type="file"
-              accept="*"
-              onChange={handleFileSelect}
-              onClick={(e) => e.stopPropagation()}
-              hidden
-            />
           </label>
         )
       ) : (
@@ -262,4 +266,6 @@ export default function MediaUploader({ sharedKey, onMediaEncrypted, onUploadSta
       )}
     </div>
   );
-}
+});
+
+export default MediaUploader;
