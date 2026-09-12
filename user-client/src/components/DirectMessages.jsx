@@ -33,6 +33,8 @@ import { localSearchIndex } from '../search/searchIndex';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
+import MessageActionPopup from './MessageActionPopup';
+import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -63,16 +65,6 @@ function formatLastSeen(lastSeenDateStr, isOnline) {
   return `Last seen ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
 }
 
-function formatMessageTime(isoString) {
-  if (!isoString) return '';
-  const date = new Date(isoString);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  if (isToday) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
 
 export default function DirectMessages({
   currentUser,
@@ -135,6 +127,45 @@ export default function DirectMessages({
   const isAtBottomRef = useRef(true);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const prevMsgCountRef = useRef(0);
+
+  // Message Action Popup state & touch/long-press tracking
+  const [activePopupMsg, setActivePopupMsg] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleTouchStart = (msg, msgMeta, e) => {
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+    }
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(35);
+      setActivePopupMsg({ msg, msgMeta });
+    }, 450);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      const dx = Math.abs(t.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(t.clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
+  const handleContextMenu = (msg, msgMeta, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    setActivePopupMsg({ msg, msgMeta });
+  };
 
   const handleScrollFeed = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -951,149 +982,126 @@ export default function DirectMessages({
             <span>Only you and {activePeer.displayName || activePeer.username} can read messages, listen to voice notes, and view shared media.</span>
           </div>
         ) : (
-          messages.map(msg => {
+          messages.map((msg, index) => {
             const isMine = msg.sender === currentUser.username;
             const msgMeta = decryptedMsgMap[msg.id] || { text: 'Decrypting message...' };
             const mediaDecrypted = msgMeta.mediaId ? decryptedMediaMap[msgMeta.mediaId] : null;
             const isStarred = starredIds.has(msg.id);
             const msgReactions = reactionsMap[msg.id] || {};
 
+            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const showDateSeparator = !prevMsg || getDateKey(msg.timestamp) !== getDateKey(prevMsg.timestamp);
+
             return (
-              <div key={msg.id} className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}>
-                <div className="message-bubble" style={{ position: 'relative' }}>
-                  {/* Quoted Reply Context (if any) */}
-                  {msgMeta.replyTo && (
-                    <div
-                      style={{
-                        padding: '4px 8px',
-                        background: 'rgba(0, 0, 0, 0.2)',
-                        borderLeft: '3px solid #ee7882',
-                        borderRadius: '4px',
-                        marginBottom: '6px',
-                        fontSize: '0.74rem'
-                      }}
-                    >
-                      <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
-                      <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
-                    </div>
-                  )}
-
-                  {/* Message Text (if any) */}
-                  {msgMeta.text ? (
-                    msgMeta.isLegacyExpired ? (
-                      <div className="msg-text legacy-expired">
-                        <Lock size={12} />
-                        <span>Encrypted in an earlier session</span>
-                      </div>
-                    ) : (
-                      <div className="msg-text">{msgMeta.text}</div>
-                    )
-                  ) : null}
-
-                  {/* Encrypted Voice Note Player (if voice message) */}
-                  {msgMeta.isVoice && (
-                    <div style={{ margin: '4px 0' }}>
-                      {mediaDecrypted ? (
-                        <VoiceWaveformPlayer
-                          src={mediaDecrypted.objectUrl}
-                          duration={msgMeta.voiceDuration}
-                          isMine={isMine}
-                        />
-                      ) : (
-                        <div className="dm-media-decrypting">
-                          <Loader2 size={14} className="animate-spin" color="#ee7882" />
-                          <span>Decrypting voice note...</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Decrypted Media Attachment (if present and not voice) */}
-                  {msgMeta.mediaId && !msgMeta.isVoice && (
-                    <div className="dm-media-attachment-container">
-                      {mediaDecrypted ? (
-                        <EncryptedAttachmentViewer
-                          objectUrl={mediaDecrypted.objectUrl}
-                          originalName={mediaDecrypted.originalName || msgMeta.originalName}
-                          mimeType={mediaDecrypted.mimeType || msgMeta.mimeType}
-                          mediaId={msgMeta.mediaId}
-                        />
-                      ) : (
-                        <div className="dm-media-decrypting">
-                          <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                          <span>Decrypting attachment...</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Message Footer: Timestamp, Star, & Actions */}
-                  <div className="msg-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Unlock size={10} color="#10b981" />
-                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {isStarred && <Star size={11} color="#fbbf24" fill="#fbbf24" style={{ marginLeft: '4px' }} />}
-                    </div>
-
-                    {/* Quick Reactions & Reply Actions */}
-                    <div className="msg-hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {['❤️', '🔥', '👍'].map(emoji => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => toggleReaction(msg.id, emoji)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '0 2px' }}
-                          title={`React ${emoji}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={() => setReplyingTo({ id: msg.id, sender: msg.sender, text: msgMeta.text || (msgMeta.isVoice ? 'Voice Note' : 'Attachment') })}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px' }}
-                        title="Reply"
-                      >
-                        <CornerUpLeft size={12} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleStar(msg)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: isStarred ? '#fbbf24' : '#94a3b8', padding: '0 2px' }}
-                        title={isStarred ? 'Unstar' : 'Star message'}
-                      >
-                        <Star size={12} fill={isStarred ? '#fbbf24' : 'none'} />
-                      </button>
-                    </div>
+              <React.Fragment key={msg.id}>
+                {showDateSeparator && (
+                  <div className="chat-date-separator">
+                    <span className="chat-date-pill">{formatDateSeparator(msg.timestamp)}</span>
                   </div>
+                )}
 
-                  {/* Reaction Badges Container */}
-                  {Object.keys(msgReactions).length > 0 && (
-                    <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-                      {Object.entries(msgReactions).map(([emoji, count]) => (
-                        <span
-                          key={emoji}
-                          onClick={() => toggleReaction(msg.id, emoji)}
-                          style={{
-                            fontSize: '0.72rem',
-                            background: 'rgba(0,0,0,0.3)',
-                            padding: '1px 5px',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '2px'
-                          }}
-                        >
-                          {emoji} {count > 1 && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{count}</span>}
-                        </span>
-                      ))}
+                <div className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}>
+                  <div
+                    className="message-bubble"
+                    style={{ position: 'relative' }}
+                    onContextMenu={(e) => handleContextMenu(msg, msgMeta, e)}
+                    onTouchStart={(e) => handleTouchStart(msg, msgMeta, e)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchEnd}
+                  >
+                    {/* Quoted Reply Context (if any) */}
+                    {msgMeta.replyTo && (
+                      <div
+                        style={{
+                          padding: '4px 8px',
+                          background: 'rgba(0, 0, 0, 0.2)',
+                          borderLeft: '3px solid #ee7882',
+                          borderRadius: '4px',
+                          marginBottom: '6px',
+                          fontSize: '0.74rem'
+                        }}
+                      >
+                        <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
+                        <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                      </div>
+                    )}
+
+                    {/* Message Text (if any) */}
+                    {msgMeta.text ? (
+                      msgMeta.isLegacyExpired ? (
+                        <div className="msg-text legacy-expired">
+                          <Lock size={12} />
+                          <span>Encrypted in an earlier session</span>
+                        </div>
+                      ) : (
+                        <div className="msg-text">{msgMeta.text}</div>
+                      )
+                    ) : null}
+
+                    {/* Encrypted Voice Note Player (if voice message) */}
+                    {msgMeta.isVoice && (
+                      <div style={{ margin: '4px 0' }}>
+                        {mediaDecrypted ? (
+                          <VoiceWaveformPlayer
+                            src={mediaDecrypted.objectUrl}
+                            duration={msgMeta.voiceDuration}
+                            isMine={isMine}
+                          />
+                        ) : (
+                          <div className="dm-media-decrypting">
+                            <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                            <span>Decrypting voice note...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Decrypted Media Attachment (if present and not voice) */}
+                    {msgMeta.mediaId && !msgMeta.isVoice && (
+                      <div className="dm-media-attachment-container">
+                        {mediaDecrypted ? (
+                          <EncryptedAttachmentViewer
+                            objectUrl={mediaDecrypted.objectUrl}
+                            originalName={mediaDecrypted.originalName || msgMeta.originalName}
+                            mimeType={mediaDecrypted.mimeType || msgMeta.mimeType}
+                            mediaId={msgMeta.mediaId}
+                          />
+                        ) : (
+                          <div className="dm-media-decrypting">
+                            <Loader2 size={14} className="animate-spin" color="#f59e0b" />
+                            <span>Decrypting attachment...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Minimal Message Footer: Timestamp & Star */}
+                    <div className="msg-meta-minimal">
+                      <span className="msg-bubble-time">{formatMessageTime(msg.timestamp)}</span>
+                      {isStarred && <Star size={10} color="#fbbf24" fill="#fbbf24" style={{ marginLeft: '3px' }} />}
                     </div>
-                  )}
+
+                    {/* Reaction Badges Container */}
+                    {Object.keys(msgReactions).length > 0 && (
+                      <div className="msg-reaction-badges">
+                        {Object.entries(msgReactions).map(([emoji, count]) => (
+                          <span
+                            key={emoji}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleReaction(msg.id, emoji);
+                            }}
+                            className="msg-reaction-badge-pill"
+                          >
+                            {emoji} {count > 1 && <span className="reaction-count">{count}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </React.Fragment>
             );
           })
         )}
@@ -1254,6 +1262,24 @@ export default function DirectMessages({
             </button>
           )}
         </form>
+      )}
+
+      {/* Message Long-press / Right-click Action Popup */}
+      {activePopupMsg && (
+        <MessageActionPopup
+          message={activePopupMsg.msg}
+          msgMeta={activePopupMsg.msgMeta}
+          isMine={activePopupMsg.msg.sender === currentUser.username}
+          onClose={() => setActivePopupMsg(null)}
+          onReact={(emoji) => toggleReaction(activePopupMsg.msg.id, emoji)}
+          onReply={() => setReplyingTo({
+            id: activePopupMsg.msg.id,
+            sender: activePopupMsg.msg.sender,
+            text: activePopupMsg.msgMeta.text || (activePopupMsg.msgMeta.isVoice ? 'Voice Note' : 'Attachment')
+          })}
+          onStar={() => toggleStar(activePopupMsg.msg)}
+          isStarred={starredIds.has(activePopupMsg.msg.id)}
+        />
       )}
     </div>
   );

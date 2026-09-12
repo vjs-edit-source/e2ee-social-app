@@ -47,6 +47,8 @@ import {
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
+import MessageActionPopup from './MessageActionPopup';
+import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { localSearchIndex } from '../search/searchIndex';
 
 export default function Groups({
@@ -133,6 +135,45 @@ export default function Groups({
   const decryptedMediaCache = useRef({});
   const groupFileInputRef = useRef(null);
   const editGroupFileInputRef = useRef(null);
+
+  // Message Action Popup state & touch/long-press tracking
+  const [activePopupMsg, setActivePopupMsg] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleTouchStart = (msg, msgMeta, e) => {
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+    }
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(35);
+      setActivePopupMsg({ msg, msgMeta });
+    }, 450);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      const dx = Math.abs(t.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(t.clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
+  const handleContextMenu = (msg, msgMeta, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    setActivePopupMsg({ msg, msgMeta });
+  };
 
   const handleScrollFeed = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -1240,7 +1281,7 @@ export default function Groups({
               )}
             </div>
           ) : (
-            visibleMessages.map(msg => {
+            visibleMessages.map((msg, index) => {
               const isMine = msg.sender === currentUser.username;
               const msgMeta = decryptedMsgMap[msg.id] || { text: 'Decrypting...', mediaKey: null };
               const mediaDecrypted = msg.mediaId ? decryptedMediaMap[msg.mediaId] : null;
@@ -1250,166 +1291,149 @@ export default function Groups({
               const isPinned = selectedGroup.pinnedMessageId === msg.id;
               const msgReactions = groupReactionsMap[msg.id] || {};
 
+              // Date separator check
+              const currentMsgDateKey = getDateKey(msg.timestamp);
+              const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
+              const prevMsgDateKey = prevMsg ? getDateKey(prevMsg.timestamp) : null;
+              const showDateSeparator = !prevMsgDateKey || currentMsgDateKey !== prevMsgDateKey;
+
               return (
-                <div
-                  key={msg.id}
-                  ref={el => (messageRefs.current[msg.id] = el)}
-                  className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
-                >
-                  <div className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`} style={{ position: 'relative' }}>
-                    {!isMine && (
-                      <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {authorUser?.avatarUrl ? (
-                          <img
-                            src={authorUser.avatarUrl}
-                            alt={msg.sender}
-                            style={{
-                              width: '18px',
-                              height: '18px',
-                              borderRadius: '50%',
-                              objectFit: 'cover',
-                              border: `1px solid ${authorColor}`
-                            }}
-                          />
-                        ) : null}
-                        <span>{authorUser?.displayName || msg.sender}</span>
-                        {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
-                        {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
-                        {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
-                      </div>
-                    )}
+                <React.Fragment key={msg.id}>
+                  {showDateSeparator && (
+                    <div className="chat-date-separator">
+                      <span className="chat-date-pill">
+                        {formatDateSeparator(msg.timestamp)}
+                      </span>
+                    </div>
+                  )}
 
-                    {/* Quoted Reply Context (if any) */}
-                    {msgMeta.replyTo && (
-                      <div
-                        style={{
-                          padding: '4px 8px',
-                          background: 'rgba(0, 0, 0, 0.25)',
-                          borderLeft: '3px solid #ee7882',
-                          borderRadius: '4px',
-                          marginBottom: '6px',
-                          fontSize: '0.74rem'
-                        }}
-                      >
-                        <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
-                        <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
-                      </div>
-                    )}
-
-                    {/* Text */}
-                    {msgMeta.text && (
-                      <div className="msg-text">{msgMeta.text}</div>
-                    )}
-
-                    {/* Voice Note Player (if voice message) */}
-                    {msgMeta.isVoice && (
-                      <div style={{ margin: '4px 0' }}>
-                        {mediaDecrypted ? (
-                          <VoiceWaveformPlayer
-                            src={mediaDecrypted.objectUrl}
-                            duration={msgMeta.voiceDuration}
-                            isMine={isMine}
-                          />
-                        ) : (
-                          <div className="dm-media-decrypting">
-                            <Loader2 size={14} className="animate-spin" color="#ee7882" />
-                            <span>Decrypting voice note...</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Media Attachment (if not voice) */}
-                    {msg.mediaId && !msgMeta.isVoice && (
-                      <div className="dm-media-attachment-container">
-                        {mediaDecrypted ? (
-                          <EncryptedAttachmentViewer
-                            objectUrl={mediaDecrypted.objectUrl}
-                            mimeType={mediaDecrypted.mimeType}
-                            mediaId={msg.mediaId}
-                          />
-                        ) : (
-                          <div className="dm-media-decrypting">
-                            <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                            <span>Decrypting attachment...</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="msg-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <div className="msg-meta-left" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ShieldCheck size={10} color="#10b981" />
-                        <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-
-                      {msg.expiresAt && (
-                        <span className="msg-timer-badge">
-                          <Flame size={10} color="#fbbf24" />
-                          <span>{remainingTimeStr}</span>
-                        </span>
+                  <div
+                    ref={el => (messageRefs.current[msg.id] = el)}
+                    className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
+                  >
+                    <div
+                      className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}
+                      style={{ position: 'relative' }}
+                      onContextMenu={(e) => handleContextMenu(msg, msgMeta, e)}
+                      onTouchStart={(e) => handleTouchStart(msg, msgMeta, e)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      onTouchCancel={handleTouchEnd}
+                    >
+                      {!isMine && (
+                        <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {authorUser?.avatarUrl ? (
+                            <img
+                              src={authorUser.avatarUrl}
+                              alt={msg.sender}
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: `1px solid ${authorColor}`
+                              }}
+                            />
+                          ) : null}
+                          <span>{authorUser?.displayName || msg.sender}</span>
+                          {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
+                          {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
+                          {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
+                        </div>
                       )}
 
-                      {/* Quick Reactions & Reply Action Bar */}
-                      <div className="msg-hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {['❤️', '🔥', '👍'].map(emoji => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => toggleGroupReaction(msg.id, emoji)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '0 2px' }}
-                            title={`React ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => setReplyingTo({ id: msg.id, sender: msg.sender, text: msgMeta.text || (msgMeta.isVoice ? 'Voice Note' : 'Attachment') })}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px' }}
-                          title="Reply"
+                      {/* Quoted Reply Context (if any) */}
+                      {msgMeta.replyTo && (
+                        <div
+                          style={{
+                            padding: '4px 8px',
+                            background: 'rgba(0, 0, 0, 0.25)',
+                            borderLeft: '3px solid #ee7882',
+                            borderRadius: '4px',
+                            marginBottom: '6px',
+                            fontSize: '0.74rem'
+                          }}
                         >
-                          <CornerUpLeft size={12} />
-                        </button>
+                          <span style={{ fontWeight: 'bold', color: '#ee7882' }}>@{msgMeta.replyTo.sender}: </span>
+                          <span style={{ color: '#cbd5e1' }}>{msgMeta.replyTo.text}</span>
+                        </div>
+                      )}
 
-                        {isModerator && (
-                          <button
-                            className={`pin-msg-btn ${isPinned ? 'pinned' : ''}`}
-                            onClick={() => handleTogglePin(msg.id)}
-                            title={isPinned ? 'Unpin message' : 'Pin message'}
-                          >
-                            <Pin size={11} />
-                          </button>
+                      {/* Text */}
+                      {msgMeta.text && (
+                        <div className="msg-text">{msgMeta.text}</div>
+                      )}
+
+                      {/* Voice Note Player (if voice message) */}
+                      {msgMeta.isVoice && (
+                        <div style={{ margin: '4px 0' }}>
+                          {mediaDecrypted ? (
+                            <VoiceWaveformPlayer
+                              src={mediaDecrypted.objectUrl}
+                              duration={msgMeta.voiceDuration}
+                              isMine={isMine}
+                            />
+                          ) : (
+                            <div className="dm-media-decrypting">
+                              <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                              <span>Decrypting voice note...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Media Attachment (if not voice) */}
+                      {msg.mediaId && !msgMeta.isVoice && (
+                        <div className="dm-media-attachment-container">
+                          {mediaDecrypted ? (
+                            <EncryptedAttachmentViewer
+                              objectUrl={mediaDecrypted.objectUrl}
+                              mimeType={mediaDecrypted.mimeType}
+                              mediaId={msg.mediaId}
+                            />
+                          ) : (
+                            <div className="dm-media-decrypting">
+                              <Loader2 size={14} className="animate-spin" color="#f59e0b" />
+                              <span>Decrypting attachment...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Minimal Message Footer: Time + Disappearing Timer + Pinned indicator */}
+                      <div className="msg-meta-minimal">
+                        <span className="msg-bubble-time">{formatMessageTime(msg.timestamp)}</span>
+                        {msg.expiresAt && (
+                          <span className="msg-timer-badge" style={{ marginLeft: '4px' }}>
+                            <Flame size={10} color="#fbbf24" />
+                            <span>{remainingTimeStr}</span>
+                          </span>
+                        )}
+                        {isPinned && (
+                          <Pin size={10} color="#ee7882" style={{ marginLeft: '4px' }} title="Pinned Message" />
                         )}
                       </div>
-                    </div>
 
-                    {/* Reaction Badges */}
-                    {Object.keys(msgReactions).length > 0 && (
-                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-                        {Object.entries(msgReactions).map(([emoji, count]) => (
-                          <span
-                            key={emoji}
-                            onClick={() => toggleGroupReaction(msg.id, emoji)}
-                            style={{
-                              fontSize: '0.72rem',
-                              background: 'rgba(0,0,0,0.3)',
-                              padding: '1px 5px',
-                              borderRadius: '10px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '2px'
-                            }}
-                          >
-                            {emoji} {count > 1 && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{count}</span>}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                      {/* Reaction Badges Container */}
+                      {Object.keys(msgReactions).length > 0 && (
+                        <div className="msg-reaction-badges">
+                          {Object.entries(msgReactions).map(([emoji, count]) => (
+                            <span
+                              key={emoji}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleGroupReaction(msg.id, emoji);
+                              }}
+                              className="msg-reaction-badge-pill"
+                            >
+                              {emoji} {count > 1 && <span className="reaction-count">{count}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </React.Fragment>
               );
             })
           )}
@@ -2226,6 +2250,25 @@ export default function Groups({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Message Long-press / Right-click Action Popup */}
+        {activePopupMsg && (
+          <MessageActionPopup
+            message={activePopupMsg.msg}
+            msgMeta={activePopupMsg.msgMeta}
+            isMine={activePopupMsg.msg.sender === currentUser.username}
+            onClose={() => setActivePopupMsg(null)}
+            onReact={(emoji) => toggleGroupReaction(activePopupMsg.msg.id, emoji)}
+            onReply={() => setReplyingTo({
+              id: activePopupMsg.msg.id,
+              sender: activePopupMsg.msg.sender,
+              text: activePopupMsg.msgMeta.text || (activePopupMsg.msgMeta.isVoice ? 'Voice Note' : 'Attachment')
+            })}
+            onPin={() => handleTogglePin(activePopupMsg.msg.id)}
+            isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
+            isModerator={isModerator}
+          />
         )}
       </div>
     );
