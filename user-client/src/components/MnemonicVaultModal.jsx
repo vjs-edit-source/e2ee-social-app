@@ -16,7 +16,7 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
   };
 
   const handleDownload = () => {
-    const text = `SadiSocial Zero-Knowledge Secret Recovery Phrase\nAccount: @${username}\nGenerated: ${new Date().toISOString()}\n\n12-Word Master Recovery Phrase:\n${phraseString}\n\nWARNING: Keep this file offline and secure. Anyone with these 12 words can access your end-to-end encrypted identity.`;
+    const text = `SadiSocial Zero-Knowledge Secret Recovery Phrase\nGenerated: ${new Date().toISOString()}\n\n12-Word Master Recovery Phrase:\n${phraseString}\n\nWARNING: Keep this file offline and secure. Anyone with these 12 words can access your end-to-end encrypted identity.`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

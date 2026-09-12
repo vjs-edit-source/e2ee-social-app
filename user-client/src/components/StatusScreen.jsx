@@ -332,10 +332,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                         </div>
                       )}
                       <div className="status-card-author-meta">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <span className="status-card-author-name">{authorUser?.displayName || status.author}</span>
-                          <span style={{ fontSize: '0.68rem', color: '#ee7882', opacity: 0.85 }}>@{status.author}</span>
-                        </div>
+                        <span className="status-card-author-name">{authorUser?.displayName || status.author}</span>
                         <span className="status-card-time">{timeAgo(status.timestamp)}</span>
                       </div>
                     </div>

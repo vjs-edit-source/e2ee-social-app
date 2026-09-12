@@ -1167,9 +1167,9 @@ export default function Groups({
                     </span>
                   </span>
                 ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.join(', ')}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
                     <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
-                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 5).join(', ')}{groupMemberNames.length > 5 ? ` +${groupMemberNames.length - 5} more` : ''}</span>
+                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : (allUsers.find(u => u.username === m)?.displayName || m)).slice(0, 5).join(', ')}{groupMemberNames.length > 5 ? ` +${groupMemberNames.length - 5} more` : ''}</span>
                   </span>
                 )}
               </div>
@@ -1460,7 +1460,6 @@ export default function Groups({
                       {isMine ? (
                         <div className="group-msg-author mine">
                           <span>{currentUser.displayName || currentUser.username} (You)</span>
-                          <span style={{ fontSize: '0.68rem', opacity: 0.65, marginLeft: '4px' }}>@{currentUser.username}</span>
                         </div>
                       ) : (
                         <div className="group-msg-author" style={{ color: authorColor }}>
@@ -1478,7 +1477,6 @@ export default function Groups({
                             />
                           ) : null}
                           <span style={{ fontWeight: 600 }}>{authorUser?.displayName || msg.sender}</span>
-                          <span style={{ fontSize: '0.68rem', opacity: 0.75, marginLeft: '4px', color: '#94a3b8', fontWeight: 400 }}>@{msg.sender}</span>
                           {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
                           {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
                           {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
@@ -1503,7 +1501,7 @@ export default function Groups({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <CornerUpLeft size={11} color="#ee7882" />
                             <span style={{ fontWeight: '700', color: '#ee7882' }}>
-                              {msgMeta.replyTo.sender === currentUser.username ? 'You' : `@${msgMeta.replyTo.sender}`}
+                              {msgMeta.replyTo.sender === currentUser.username ? 'You' : (allUsers.find(u => u.username === msgMeta.replyTo.sender)?.displayName || msgMeta.replyTo.sender)}
                             </span>
                           </div>
                           <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
@@ -1634,7 +1632,7 @@ export default function Groups({
               <CornerUpLeft size={16} color="#ee7882" className="reply-preview-icon" />
               <div className="reply-preview-content">
                 <span className="reply-preview-author">
-                  Replying to {replyingTo.sender === currentUser.username ? 'yourself' : `@${replyingTo.sender}`}
+                  Replying to {replyingTo.sender === currentUser.username ? 'yourself' : (allUsers.find(u => u.username === replyingTo.sender)?.displayName || replyingTo.sender)}
                 </span>
                 <span className="reply-preview-snippet">
                   {typeof replyingTo.text === 'string' ? replyingTo.text : 'Attachment'}
@@ -1765,7 +1763,7 @@ export default function Groups({
               {/* Creator Banner */}
               <div className="drawer-creator-banner">
                 <Crown size={14} color="#fbbf24" />
-                <span>Founded by <strong>@{selectedGroup.creator}</strong> {isCreator && '(You - Main Admin)'}</span>
+                <span>Founded by <strong>{allUsers.find(u => u.username === selectedGroup.creator)?.displayName || selectedGroup.creator}</strong> {isCreator && '(You - Main Admin)'}</span>
               </div>
 
               {selectedGroup.description && (
@@ -1878,7 +1876,6 @@ export default function Groups({
                           <div className="drawer-member-info">
                             <div className="member-name-row">
                               <span className="drawer-member-name">{u?.displayName || m} {isSelf && '(You)'}</span>
-                              <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85, fontWeight: 500 }}>@{m}</span>
                               {isOwner && <span className="role-tag-badge creator"><Crown size={10} /> Creator</span>}
                               {!isOwner && mRole === 'admin' && <span className="role-tag-badge admin"><Shield size={10} /> Admin</span>}
                               {!isOwner && mRole === 'moderator' && <span className="role-tag-badge mod">Mod</span>}
@@ -2187,7 +2184,7 @@ export default function Groups({
                         <ShieldCheck size={18} color="#10b981" />
                         <div>
                           <h5>Group Rules &amp; Permissions</h5>
-                          <p>These governance rules are configured by Main Admin <strong>@{selectedGroup.creator}</strong>.</p>
+                          <p>These governance rules are configured by Main Admin <strong>{allUsers.find(u => u.username === selectedGroup.creator)?.displayName || selectedGroup.creator}</strong>.</p>
                         </div>
                       </div>
 
@@ -2419,10 +2416,7 @@ export default function Groups({
                           {user.username[0].toUpperCase()}
                         </div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                        <span className="member-name">{user.displayName || user.username}</span>
-                        <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85 }}>@{user.username}</span>
-                      </div>
+                      <span className="member-name">{user.displayName || user.username}</span>
                       <button className="add-btn-badge" type="button">
                         <Plus size={14} />
                         <span>Add</span>
@@ -2646,9 +2640,9 @@ export default function Groups({
                           </span>
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={memberNames.join(', ')}>
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={memberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
                           <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
-                          <span>{memberNames.map(m => m === currentUser.username ? 'You' : m).slice(0, 4).join(', ')}{memberNames.length > 4 ? ` +${memberNames.length - 4}` : ''}</span>
+                          <span>{memberNames.map(m => m === currentUser.username ? 'You' : (allUsers.find(u => u.username === m)?.displayName || m)).slice(0, 4).join(', ')}{memberNames.length > 4 ? ` +${memberNames.length - 4}` : ''}</span>
                         </span>
                       )}
                     </div>
@@ -2884,10 +2878,7 @@ export default function Groups({
                               {user.username[0].toUpperCase()}
                             </div>
                           )}
-                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                            <span className="member-select-name">{user.displayName || user.username}</span>
-                            <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85 }}>@{user.username}</span>
-                          </div>
+                          <span className="member-select-name">{user.displayName || user.username}</span>
                           {isSelected && <CheckCircle2 size={16} color="#10b981" />}
                         </div>
                       );

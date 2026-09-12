@@ -563,37 +563,6 @@ export default function SettingsScreen({
             </div>
           </div>
 
-          {/* Username (Zero-Knowledge Identity) */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '8px', fontWeight: '600' }}>
-              Account Username (Zero-Knowledge Identity)
-            </label>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '12px',
-              padding: '12px 16px',
-              gap: '10px'
-            }}>
-              <User size={18} color="#64748b" />
-              <input
-                type="text"
-                value={`@${currentUser?.username}`}
-                disabled
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '0.9rem',
-                  width: '100%',
-                  outline: 'none',
-                  cursor: 'not-allowed'
-                }}
-              />
-            </div>
-          </div>
 
           {/* Display Name */}
           <div style={{ marginBottom: '16px' }}>

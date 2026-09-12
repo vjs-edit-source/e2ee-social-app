@@ -448,10 +448,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                     </div>
                   )}
                   <div className="author-meta">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="author-name">{authorObj.displayName || post.author}</span>
-                      <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85, fontWeight: 500 }}>@{post.author}</span>
-                    </div>
+                    <span className="author-name">{authorObj.displayName || post.author}</span>
                     <span className="post-time">{new Date(post.timestamp).toLocaleTimeString()}</span>
                   </div>
 

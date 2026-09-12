@@ -296,7 +296,7 @@ export default function App() {
         } else {
           const errData = await res.json().catch(() => ({}));
           if (res.status === 409) {
-            throw new Error(errData.error || `Username "@${userObj.username}" is already taken.`);
+            throw new Error(errData.error || `Account name "${userObj.displayName || userObj.username}" is already taken.`);
           }
           setEngineOnline(false);
         }
@@ -456,7 +456,7 @@ export default function App() {
                   displayName: `👥 ${groupName}`,
                   avatarUrl: null,
                   avatarColor: '#ee7882',
-                  previewText: `@${senderUser.displayName || sender}: New encrypted message`,
+                  previewText: `${senderUser.displayName || sender}: New encrypted message`,
                   peerObj: null
                 });
 
@@ -464,7 +464,7 @@ export default function App() {
                 if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
                   try {
                     new Notification(`👥 ${groupName}`, {
-                      body: `@${senderUser.displayName || sender}: New message on SadiSocial`,
+                      body: `${senderUser.displayName || sender}: New message on SadiSocial`,
                       icon: '/favicon.ico'
                     });
                   } catch (e) {}

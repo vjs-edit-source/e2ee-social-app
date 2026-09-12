@@ -868,7 +868,7 @@ export default function DirectMessages({
                           fontSize: '1.1rem'
                         }}
                       >
-                        {peer.username[0].toUpperCase()}
+                        {((peer.displayName || peer.username) || '?')[0].toUpperCase()}
                       </div>
                     )}
 
@@ -904,18 +904,15 @@ export default function DirectMessages({
                       )}
                     </div>
 
-                    {/* Handle & Contact Number below Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px', minWidth: 0, overflow: 'hidden' }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
-                        @{peer.username}
-                      </span>
-                      {peer.phoneNumber && (
-                        <span style={{ opacity: 0.8, display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
-                          <Phone size={9} />
-                          <span>{peer.phoneNumber}</span>
+                    {/* Contact Number below Name (if present) */}
+                    {peer.phoneNumber && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px', minWidth: 0, overflow: 'hidden' }}>
+                        <Phone size={10} color="#ee7882" style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {peer.phoneNumber}
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Middle Row: Decrypted Last Message Preview */}
                     <div style={{
@@ -1021,30 +1018,33 @@ export default function DirectMessages({
                 <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
                   {activePeer.displayName || activePeer.username}
                 </h4>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    fontSize: '0.68rem',
-                    color: '#ee7882',
-                    background: 'rgba(238, 120, 130, 0.12)',
-                    border: '1px solid rgba(238, 120, 130, 0.25)',
-                    borderRadius: '12px',
-                    padding: '1px 7px',
-                    fontWeight: 500,
-                    flexShrink: 0,
-                    maxWidth: '140px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={activePeer.phoneNumber || `@${activePeer.username}`}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    @{activePeer.username}{activePeer.phoneNumber ? ` • ${activePeer.phoneNumber}` : ''}
+                {activePeer.phoneNumber && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      fontSize: '0.68rem',
+                      color: '#ee7882',
+                      background: 'rgba(238, 120, 130, 0.12)',
+                      border: '1px solid rgba(238, 120, 130, 0.25)',
+                      borderRadius: '12px',
+                      padding: '1px 7px',
+                      fontWeight: 500,
+                      flexShrink: 0,
+                      maxWidth: '140px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={activePeer.phoneNumber}
+                  >
+                    <Phone size={10} color="#ee7882" />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {activePeer.phoneNumber}
+                    </span>
                   </span>
-                </span>
+                )}
               </div>
 
               {/* Row 2: Status & E2EE */}
@@ -1137,7 +1137,7 @@ export default function DirectMessages({
           <Search size={15} color="#ee7882" />
           <input
             type="text"
-            placeholder={`Search messages with @${activePeer.username}...`}
+            placeholder={`Search messages with ${activePeer.displayName || activePeer.username}...`}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             autoFocus
@@ -1212,7 +1212,7 @@ export default function DirectMessages({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <CornerUpLeft size={11} color="#ee7882" />
                           <span style={{ fontWeight: '700', color: '#ee7882' }}>
-                            {msgMeta.replyTo.sender === currentUser.username ? 'You' : `@${msgMeta.replyTo.sender}`}
+                            {msgMeta.replyTo.sender === currentUser.username ? 'You' : (allUsers.find(u => u.username === msgMeta.replyTo.sender)?.displayName || msgMeta.replyTo.sender)}
                           </span>
                         </div>
                         <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
@@ -1343,7 +1343,7 @@ export default function DirectMessages({
             <CornerUpLeft size={16} color="#ee7882" className="reply-preview-icon" />
             <div className="reply-preview-content">
               <span className="reply-preview-author">
-                Replying to {replyingTo.sender === currentUser.username ? 'yourself' : `@${replyingTo.sender}`}
+                Replying to {replyingTo.sender === currentUser.username ? 'yourself' : (allUsers.find(u => u.username === replyingTo.sender)?.displayName || replyingTo.sender)}
               </span>
               <span className="reply-preview-snippet">
                 {typeof replyingTo.text === 'string' ? replyingTo.text : 'Attachment'}

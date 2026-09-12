@@ -197,7 +197,7 @@ export default function MessageActionPopup({
             <span className="msg-action-sec-text">Zero-Knowledge E2EE</span>
             {message.sender && (
               <span className="msg-action-sender-pill">
-                {isMine ? 'You' : `@${message.sender}`}
+                {isMine ? 'You' : (message.senderDisplayName || msgMeta.senderDisplayName || message.sender)}
               </span>
             )}
           </div>

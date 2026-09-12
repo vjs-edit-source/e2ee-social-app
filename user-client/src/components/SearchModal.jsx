@@ -111,19 +111,19 @@ export default function SearchModal({ onClose, onNavigate }) {
                   {hit.type === 'post' && (
                     <>
                       <Rss size={14} color="#8b5cf6" />
-                      <span>Feed Post • <strong>@{hit.author}</strong></span>
+                      <span>Feed Post • <strong>{hit.authorDisplayName || hit.author}</strong></span>
                     </>
                   )}
                   {hit.type === 'message' && (
                     <>
                       <MessageSquare size={14} color="#ee7882" />
-                      <span>Direct Chat • <strong>@{hit.sender}</strong></span>
+                      <span>Direct Chat • <strong>{hit.senderDisplayName || hit.sender}</strong></span>
                     </>
                   )}
                   {hit.type === 'group' && (
                     <>
                       <Users size={14} color="#3b82f6" />
-                      <span>{hit.groupName || 'Group'} • <strong>@{hit.sender}</strong></span>
+                      <span>{hit.groupName || 'Group'} • <strong>{hit.senderDisplayName || hit.sender}</strong></span>
                     </>
                   )}
                   <span className="hit-time">{new Date(hit.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
