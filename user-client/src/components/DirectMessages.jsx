@@ -904,12 +904,17 @@ export default function DirectMessages({
                       )}
                     </div>
 
-                    {/* Contact Number / Handle below Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px', minWidth: 0 }}>
-                      <Phone size={11} color="#ee7882" style={{ flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {peer.phoneNumber ? peer.phoneNumber : `@${peer.username}`}
+                    {/* Handle & Contact Number below Name */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#ee7882', fontWeight: 500, margin: '1px 0 2px', minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
+                        @{peer.username}
                       </span>
+                      {peer.phoneNumber && (
+                        <span style={{ opacity: 0.8, display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
+                          <Phone size={9} />
+                          <span>{peer.phoneNumber}</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Middle Row: Decrypted Last Message Preview */}
@@ -1036,9 +1041,8 @@ export default function DirectMessages({
                   }}
                   title={activePeer.phoneNumber || `@${activePeer.username}`}
                 >
-                  <Phone size={10} color="#ee7882" />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {activePeer.phoneNumber ? activePeer.phoneNumber : `@${activePeer.username}`}
+                    @{activePeer.username}{activePeer.phoneNumber ? ` • ${activePeer.phoneNumber}` : ''}
                   </span>
                 </span>
               </div>

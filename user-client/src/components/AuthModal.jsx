@@ -52,6 +52,7 @@ export default function AuthModal({
 }) {
   const [activeTab, setActiveTab] = useState('phone');
 
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passphraseInput, setPassphraseInput] = useState('');
 
@@ -62,6 +63,7 @@ export default function AuthModal({
   const [restoreSeedInput, setRestoreSeedInput] = useState('');
   const [restoreMode, setRestoreMode] = useState('mnemonic');
 
+  const [emailDisplayName, setEmailDisplayName] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [emailUsername, setEmailUsername] = useState('');
   const [emailOtpStep, setEmailOtpStep] = useState(1);
@@ -69,6 +71,7 @@ export default function AuthModal({
   const [emailCooldown, setEmailCooldown] = useState(0);
 
   const [countryCode, setCountryCode] = useState('+91');
+  const [phoneDisplayName, setPhoneDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneUsername, setPhoneUsername] = useState('');
   const [phoneOtpStep, setPhoneOtpStep] = useState(1);
@@ -99,15 +102,32 @@ export default function AuthModal({
     e.preventDefault();
     if (!usernameInput.trim()) return;
     const cleanUser = usernameInput.trim();
+    const cleanDisplay = displayNameInput.trim() || cleanUser;
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Generating Zero-Knowledge keys...');
+    setStatusMsg('Checking username availability...');
 
     try {
+      // Check username availability
+      try {
+        const checkRes = await fetch(`${serverUrl}/api/users/check-username?username=${encodeURIComponent(cleanUser)}`);
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (!checkData.available) {
+            throw new Error(`Username "@${cleanUser}" is already taken. Please choose a different unique handle.`);
+          }
+        }
+      } catch (checkErr) {
+        if (checkErr.message && checkErr.message.includes('already taken')) {
+          throw checkErr;
+        }
+      }
+
+      setStatusMsg('Generating Zero-Knowledge keys...');
       const mnemonicWords = generate12WordMnemonic();
       localStorage.setItem(`ciphersocial_mnemonic_${cleanUser}`, mnemonicWords.join(' '));
 
-      await onLogin(cleanUser);
+      await onLogin(cleanUser, cleanDisplay);
 
       if (passphraseInput.trim()) {
         await backupKeyVaultToServer(cleanUser, passphraseInput.trim(), serverUrl);
@@ -125,12 +145,13 @@ export default function AuthModal({
 
   const handlePresetSelect = async (presetName) => {
     setUsernameInput(presetName);
+    setDisplayNameInput(presetName);
     setLoading(true);
     setAuthError('');
     setStatusMsg(`Logging into ${presetName}...`);
     try {
       ensureUserMnemonic(presetName);
-      await onLogin(presetName);
+      await onLogin(presetName, presetName);
     } catch (err) {
       setAuthError(err.message || 'Sign in failed.');
     } finally {
@@ -227,7 +248,7 @@ export default function AuthModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
 
-      await onLogin(emailUsername.trim());
+      await onLogin(emailUsername.trim(), emailDisplayName.trim() || emailUsername.trim());
     } catch (err) {
       console.error('Verify Email OTP error:', err);
       setAuthError(err.message || 'Email verification failed.');
@@ -306,7 +327,7 @@ export default function AuthModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
 
-      await onLogin(phoneUsername.trim());
+      await onLogin(phoneUsername.trim(), phoneDisplayName.trim() || phoneUsername.trim());
     } catch (err) {
       console.error('Verify Phone OTP error:', err);
       setAuthError(err.message || 'SMS verification failed.');
@@ -408,9 +429,21 @@ export default function AuthModal({
                   <input
                     type="text"
                     className="auth-input"
-                    placeholder="Choose your Username..."
+                    placeholder="Display Name (e.g. Charlie Brown)"
+                    value={phoneDisplayName}
+                    onChange={(e) => setPhoneDisplayName(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <span style={{ color: '#ee7882', fontWeight: 700, paddingLeft: '6px', fontSize: '0.95rem' }}>@</span>
+                  <input
+                    type="text"
+                    className="auth-input"
+                    placeholder="Unique username handle (e.g. charlie_99)"
                     value={phoneUsername}
-                    onChange={(e) => setPhoneUsername(e.target.value)}
+                    onChange={(e) => setPhoneUsername(e.target.value.replace(/\s+/g, '_'))}
                     disabled={loading}
                     required
                   />
@@ -541,9 +574,21 @@ export default function AuthModal({
                   <input
                     type="text"
                     className="auth-input"
-                    placeholder="Choose your Username..."
+                    placeholder="Display Name (e.g. Charlie Brown)"
+                    value={emailDisplayName}
+                    onChange={(e) => setEmailDisplayName(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <span style={{ color: '#ee7882', fontWeight: 700, paddingLeft: '6px', fontSize: '0.95rem' }}>@</span>
+                  <input
+                    type="text"
+                    className="auth-input"
+                    placeholder="Unique username handle (e.g. charlie_99)"
                     value={emailUsername}
-                    onChange={(e) => setEmailUsername(e.target.value)}
+                    onChange={(e) => setEmailUsername(e.target.value.replace(/\s+/g, '_'))}
                     disabled={loading}
                     required
                   />
@@ -681,9 +726,21 @@ export default function AuthModal({
                 <input
                   type="text"
                   className="auth-input"
-                  placeholder="Enter username (e.g. Sadi, Alex)..."
+                  placeholder="Display Name (e.g. Charlie Brown)"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <span style={{ color: '#ee7882', fontWeight: 700, paddingLeft: '6px', fontSize: '0.95rem' }}>@</span>
+                <input
+                  type="text"
+                  className="auth-input"
+                  placeholder="Unique username handle (e.g. charlie_99)"
                   value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
+                  onChange={(e) => setUsernameInput(e.target.value.replace(/\s+/g, '_'))}
                   disabled={loading}
                   required
                 />

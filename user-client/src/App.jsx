@@ -271,9 +271,9 @@ export default function App() {
   }, [serverUrl]);
 
   // Login / Switch User Handler
-  const handleLogin = async (username, isSilent = false) => {
+  const handleLogin = async (username, customDisplayName = null, isSilent = false) => {
     try {
-      const userObj = await initializeUserIdentity(username, serverUrl);
+      const userObj = await initializeUserIdentity(username, serverUrl, customDisplayName);
       setCurrentUser(userObj);
 
       // Register public key with the central backend engine
@@ -294,9 +294,16 @@ export default function App() {
           setEngineOnline(true);
           await loadUsersDirectory();
         } else {
+          const errData = await res.json().catch(() => ({}));
+          if (res.status === 409) {
+            throw new Error(errData.error || `Username "@${userObj.username}" is already taken.`);
+          }
           setEngineOnline(false);
         }
       } catch (netErr) {
+        if (netErr.message && netErr.message.includes('already taken')) {
+          throw netErr;
+        }
         console.warn('Backend engine registration offline:', netErr);
         setEngineOnline(false);
       }

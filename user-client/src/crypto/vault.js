@@ -29,12 +29,17 @@ function getDefaultVaultPassphrase(username) {
  * Initialize or restore local user identity and keypair
  * Seamlessly syncs with Zero-Knowledge Cloud Vault so keys persist across Incognito / new devices automatically
  */
-export async function initializeUserIdentity(username, serverUrl = '') {
+export async function initializeUserIdentity(username, serverUrl = '', customDisplayName = null) {
   const defaultPassphrase = getDefaultVaultPassphrase(username);
 
   // 1. Check if session already exists in localStorage
   const existingRaw = localStorage.getItem(`${STORAGE_KEY}_${username}`);
   const savedProfile = JSON.parse(localStorage.getItem(`ciphersocial_profile_${username}`) || '{}');
+
+  if (customDisplayName && customDisplayName.trim()) {
+    savedProfile.displayName = customDisplayName.trim();
+    localStorage.setItem(`ciphersocial_profile_${username}`, JSON.stringify(savedProfile));
+  }
 
   if (existingRaw) {
     try {
@@ -49,7 +54,7 @@ export async function initializeUserIdentity(username, serverUrl = '') {
         localStorage.setItem('e2ee_current_active_user', username);
         return {
           username: data.username,
-          displayName: savedProfile.displayName || data.displayName || data.username,
+          displayName: customDisplayName?.trim() || savedProfile.displayName || data.displayName || data.username,
           bio: savedProfile.bio !== undefined ? savedProfile.bio : (data.bio || ''),
           avatarUrl: savedProfile.avatarUrl || data.avatarUrl || null,
           avatarColor: savedProfile.avatarColor || data.avatarColor || '#3b82f6',
@@ -154,6 +159,7 @@ export async function initializeUserIdentity(username, serverUrl = '') {
 
   return {
     username,
+    displayName: customDisplayName?.trim() || username,
     avatarColor,
     spkiPublicKey,
     keyPair

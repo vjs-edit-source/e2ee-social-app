@@ -230,23 +230,57 @@ class ZeroKnowledgeStore {
     }
   }
 
+  findUserByUsername(username) {
+    if (!username || typeof username !== 'string') return null;
+    const lower = username.toLowerCase().trim();
+    for (const [uname, user] of this.users.entries()) {
+      if (uname.toLowerCase().trim() === lower) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  checkUsernameAvailable(username, currentPublicKey = null) {
+    if (!username || typeof username !== 'string') return false;
+    const clean = username.trim();
+    if (clean.length < 2 || clean.length > 30) return false;
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(clean)) return false;
+    const existing = this.findUserByUsername(clean);
+    if (!existing) return true;
+    if (currentPublicKey && existing.publicIdentityKey === currentPublicKey) {
+      return true;
+    }
+    return false;
+  }
+
   // ── USER DIRECTORY & VAULT ─────────────────────────────────
   registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber = null, avatarUrl = null, displayName = null, bio = null) {
-    const existing = this.users.get(username) || {};
+    const cleanUsername = String(username).trim();
+    const existing = this.findUserByUsername(cleanUsername);
+
+    // If username is taken by a different account (different public key), reject collision!
+    if (existing && existing.publicIdentityKey && existing.publicIdentityKey !== publicIdentityKey) {
+      const err = new Error(`Username "@${existing.username}" is already taken by another account. Please choose a different username.`);
+      err.code = 'USERNAME_TAKEN';
+      throw err;
+    }
+
+    const canonicalUsername = existing ? existing.username : cleanUsername;
     const userData = {
-      username,
-      displayName: displayName || existing.displayName || username,
-      bio: bio !== null && bio !== undefined ? bio : (existing.bio || ''),
-      avatarUrl: avatarUrl || existing.avatarUrl || null,
+      username: canonicalUsername,
+      displayName: (displayName && displayName.trim()) ? displayName.trim() : (existing?.displayName || canonicalUsername),
+      bio: bio !== null && bio !== undefined ? bio : (existing?.bio || ''),
+      avatarUrl: avatarUrl || existing?.avatarUrl || null,
       publicIdentityKey,
-      publicPrekey,
-      avatarColor: avatarColor || existing.avatarColor || '#3b82f6',
-      phoneNumber: phoneNumber || existing.phoneNumber || null,
-      registeredAt: existing.registeredAt || new Date().toISOString()
+      publicPrekey: publicPrekey || existing?.publicPrekey,
+      avatarColor: avatarColor || existing?.avatarColor || '#3b82f6',
+      phoneNumber: phoneNumber || existing?.phoneNumber || null,
+      registeredAt: existing?.registeredAt || new Date().toISOString()
     };
-    this.users.set(username, userData);
+    this.users.set(canonicalUsername, userData);
     this.scheduleSave();
-    this.syncDocToMongo('users', { username }, userData);
+    this.syncDocToMongo('users', { username: canonicalUsername }, userData);
     return userData;
   }
 

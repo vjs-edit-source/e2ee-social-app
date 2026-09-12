@@ -116,18 +116,41 @@ function notifyInspector() {
 
 // ── REST Endpoints ──────────────────────────────────────────
 
-// 1. User Registration / Prekey Directory
+// 1. Check Username Availability
+app.get('/api/users/check-username', (req, res) => {
+  const username = req.query.username;
+  const publicKey = req.query.publicKey;
+  if (!username) {
+    return res.status(400).json({ error: 'Username query parameter is required', available: false });
+  }
+  const available = db.checkUsernameAvailable(username, publicKey);
+  res.json({ username, available });
+});
+
+// 1a. User Registration / Prekey Directory
 app.post('/api/register', (req, res) => {
   const { username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio } = req.body;
   if (!username || !publicIdentityKey) {
     return res.status(400).json({ error: 'Username and public identity key are required' });
   }
 
-  const user = db.registerUser(username, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio);
-  broadcast({ type: 'USER_JOINED', user });
-  notifyInspector();
+  const cleanUser = String(username).trim();
+  if (cleanUser.length < 2 || cleanUser.length > 30) {
+    return res.status(400).json({ error: 'Username must be between 2 and 30 characters.' });
+  }
 
-  res.json({ success: true, user });
+  try {
+    const user = db.registerUser(cleanUser, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio);
+    broadcast({ type: 'USER_JOINED', user });
+    notifyInspector();
+    res.json({ success: true, user });
+  } catch (err) {
+    if (err.code === 'USERNAME_TAKEN') {
+      return res.status(409).json({ error: err.message, code: 'USERNAME_TAKEN' });
+    }
+    console.error('Registration failed:', err);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
 });
 
 // 1b. Send OTP via Backend SMS Gateway (2Factor.in / Fast2SMS / Twilio)
@@ -135,6 +158,16 @@ app.post('/api/auth/send-otp', async (req, res) => {
   const { phone, username } = req.body;
   if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
     return res.status(400).json({ error: 'Valid phone number with country code is required (e.g. +91 9876543210)' });
+  }
+
+  const cleanUser = username ? String(username).trim() : null;
+  if (cleanUser) {
+    const existing = db.findUserByUsername(cleanUser);
+    const cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+    const existingPhone = existing?.phoneNumber ? existing.phoneNumber.replace(/[\s\-\(\)]/g, '') : null;
+    if (existing && existingPhone && existingPhone !== cleanPhone) {
+      return res.status(409).json({ error: `Username "@${existing.username}" is already taken by another account. Please choose a different handle.` });
+    }
   }
 
   // Generate 6-digit numeric OTP fallback
@@ -148,7 +181,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
   if (smsResult.otp) {
     otp = smsResult.otp;
   }
-  db.saveOtp(cleanPhone, otp, username ? username.trim() : null);
+  db.saveOtp(cleanPhone, otp, cleanUser);
 
   res.json({
     success: true,
@@ -177,12 +210,20 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
   }
 
   const cleanEmail = email.trim().toLowerCase();
+  const cleanUser = username ? String(username).trim() : null;
+  if (cleanUser) {
+    const isAvail = db.checkUsernameAvailable(cleanUser);
+    if (!isAvail) {
+      return res.status(409).json({ error: `Username "@${cleanUser}" is already taken by another account. Please choose a different handle.` });
+    }
+  }
+
   // Generate 6-digit numeric OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  db.saveOtp(cleanEmail, otp, username ? username.trim() : null);
+  db.saveOtp(cleanEmail, otp, cleanUser);
 
   // Dispatch via SMTP Email Service
-  const emailResult = await sendEmailOtp(cleanEmail, otp, username);
+  const emailResult = await sendEmailOtp(cleanEmail, otp, cleanUser);
 
   res.json({
     success: true,

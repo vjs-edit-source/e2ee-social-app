@@ -1460,6 +1460,7 @@ export default function Groups({
                       {isMine ? (
                         <div className="group-msg-author mine">
                           <span>{currentUser.displayName || currentUser.username} (You)</span>
+                          <span style={{ fontSize: '0.68rem', opacity: 0.65, marginLeft: '4px' }}>@{currentUser.username}</span>
                         </div>
                       ) : (
                         <div className="group-msg-author" style={{ color: authorColor }}>
@@ -1476,7 +1477,8 @@ export default function Groups({
                               }}
                             />
                           ) : null}
-                          <span>{authorUser?.displayName || msg.sender}</span>
+                          <span style={{ fontWeight: 600 }}>{authorUser?.displayName || msg.sender}</span>
+                          <span style={{ fontSize: '0.68rem', opacity: 0.75, marginLeft: '4px', color: '#94a3b8', fontWeight: 400 }}>@{msg.sender}</span>
                           {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
                           {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
                           {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
@@ -1876,6 +1878,7 @@ export default function Groups({
                           <div className="drawer-member-info">
                             <div className="member-name-row">
                               <span className="drawer-member-name">{u?.displayName || m} {isSelf && '(You)'}</span>
+                              <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85, fontWeight: 500 }}>@{m}</span>
                               {isOwner && <span className="role-tag-badge creator"><Crown size={10} /> Creator</span>}
                               {!isOwner && mRole === 'admin' && <span className="role-tag-badge admin"><Shield size={10} /> Admin</span>}
                               {!isOwner && mRole === 'moderator' && <span className="role-tag-badge mod">Mod</span>}
@@ -2416,7 +2419,10 @@ export default function Groups({
                           {user.username[0].toUpperCase()}
                         </div>
                       )}
-                      <span className="member-name">{user.displayName || user.username}</span>
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                        <span className="member-name">{user.displayName || user.username}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85 }}>@{user.username}</span>
+                      </div>
                       <button className="add-btn-badge" type="button">
                         <Plus size={14} />
                         <span>Add</span>
@@ -2878,7 +2884,10 @@ export default function Groups({
                               {user.username[0].toUpperCase()}
                             </div>
                           )}
-                          <span className="member-select-name">{user.displayName || user.username}</span>
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                            <span className="member-select-name">{user.displayName || user.username}</span>
+                            <span style={{ fontSize: '0.72rem', color: '#ee7882', opacity: 0.85 }}>@{user.username}</span>
+                          </div>
                           {isSelected && <CheckCircle2 size={16} color="#10b981" />}
                         </div>
                       );
