@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Shield } from 'lucide-react';
 import Navigation from './components/Navigation';
 import Feed from './components/Feed';
 import DirectMessages from './components/DirectMessages';
@@ -47,11 +48,18 @@ export default function App() {
   useEffect(() => {
     allUsersRef.current = allUsers;
   }, [allUsers]);
-  const [activeTab, setActiveTab] = useState('feed'); // 'feed' | 'messages' | 'groups' | 'status'
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ciphersocial_active_tab') || 'feed');
+  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getCurrentUsername()));
   const [wsClient, setWsClient] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showEngineModal, setShowEngineModal] = useState(false);
+
+  useEffect(() => {
+    if (activeTab) {
+      localStorage.setItem('ciphersocial_active_tab', activeTab);
+    }
+  }, [activeTab]);
 
   // App Lock State
   const [isAppLocked, setIsAppLocked] = useState(() => Boolean(localStorage.getItem('ciphersocial_pin_hash')));
@@ -324,13 +332,29 @@ export default function App() {
     setShowAuthModal(false);
   };
 
+  // Logout / Clear session handler
+  const handleLogout = () => {
+    localStorage.removeItem('e2ee_current_active_user');
+    localStorage.removeItem('ciphersocial_active_user');
+    setCurrentUser(null);
+    setShowAuthModal(true);
+  };
+
   // Auto-restore saved session on mount
   useEffect(() => {
     const savedUser = getCurrentUsername();
     if (savedUser) {
-      handleLogin(savedUser, true);
+      handleLogin(savedUser, null, true)
+        .catch(err => {
+          console.warn('Session restore failed, prompting login:', err);
+          setShowAuthModal(true);
+        })
+        .finally(() => {
+          setIsRestoringSession(false);
+        });
     } else {
-      handleLogin('Alice', true);
+      setIsRestoringSession(false);
+      setShowAuthModal(true);
     }
   }, [serverUrl]);
 
@@ -740,7 +764,31 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className={`main-content ${isAnyChatActive ? 'chat-mode' : ''}`}>
-        {!currentUser || showAuthModal ? (
+        {isRestoringSession ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '60vh',
+            gap: '14px',
+            color: '#e5b3b8'
+          }}>
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '14px',
+              background: 'rgba(224, 108, 117, 0.15)',
+              border: '1px solid rgba(224, 108, 117, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Shield size={24} color="#ee7882" />
+            </div>
+            <span style={{ fontSize: '0.84rem', color: '#94a3b8' }}>Restoring secure session...</span>
+          </div>
+        ) : !currentUser || showAuthModal ? (
           <AuthModal
             onLogin={handleLogin}
             activeUsername={currentUser?.username}
@@ -800,6 +848,7 @@ export default function App() {
                 allUsers={allUsers}
                 serverUrl={serverUrl}
                 onSwitchUser={() => setShowAuthModal(true)}
+                onLogout={handleLogout}
                 onOpenEngineSettings={() => setShowEngineModal(true)}
                 onTriggerLock={() => setIsAppLocked(true)}
                 onProfileUpdated={(updatedUser) => {

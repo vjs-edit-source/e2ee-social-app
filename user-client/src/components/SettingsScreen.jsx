@@ -39,7 +39,8 @@ export default function SettingsScreen({
   onSwitchUser,
   onOpenEngineSettings,
   onProfileUpdated,
-  onTriggerLock = null
+  onTriggerLock = null,
+  onLogout = null
 }) {
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'starred' | 'preferences'
   
@@ -1182,8 +1183,13 @@ export default function SettingsScreen({
             <button
               type="button"
               onClick={() => {
+                localStorage.removeItem('e2ee_current_active_user');
                 localStorage.removeItem('ciphersocial_active_user');
-                onSwitchUser();
+                if (onLogout) {
+                  onLogout();
+                } else {
+                  onSwitchUser();
+                }
               }}
               style={{
                 width: '100%',

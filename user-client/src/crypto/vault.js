@@ -36,8 +36,9 @@ export async function initializeUserIdentity(username, serverUrl = '', customDis
   const existingRaw = localStorage.getItem(`${STORAGE_KEY}_${username}`);
   const savedProfile = JSON.parse(localStorage.getItem(`ciphersocial_profile_${username}`) || '{}');
 
-  if (customDisplayName && customDisplayName.trim()) {
-    savedProfile.displayName = customDisplayName.trim();
+  const cleanCustomDisplay = (typeof customDisplayName === 'string' && customDisplayName.trim()) ? customDisplayName.trim() : null;
+  if (cleanCustomDisplay) {
+    savedProfile.displayName = cleanCustomDisplay;
     localStorage.setItem(`ciphersocial_profile_${username}`, JSON.stringify(savedProfile));
   }
 
@@ -54,7 +55,7 @@ export async function initializeUserIdentity(username, serverUrl = '', customDis
         localStorage.setItem('e2ee_current_active_user', username);
         return {
           username: data.username,
-          displayName: customDisplayName?.trim() || savedProfile.displayName || data.displayName || data.username,
+          displayName: cleanCustomDisplay || savedProfile.displayName || data.displayName || data.username,
           bio: savedProfile.bio !== undefined ? savedProfile.bio : (data.bio || ''),
           avatarUrl: savedProfile.avatarUrl || data.avatarUrl || null,
           avatarColor: savedProfile.avatarColor || data.avatarColor || '#3b82f6',
@@ -159,7 +160,7 @@ export async function initializeUserIdentity(username, serverUrl = '', customDis
 
   return {
     username,
-    displayName: customDisplayName?.trim() || username,
+    displayName: cleanCustomDisplay || username,
     avatarColor,
     spkiPublicKey,
     keyPair
