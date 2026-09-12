@@ -70,6 +70,18 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
+  // Global Ctrl+K / Cmd+K Search Hotkey
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearchModal(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // In-App Notification & Unread Count State
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
   const [unreadGroupsCount, setUnreadGroupsCount] = useState(0);

@@ -141,7 +141,8 @@ export default function Groups({
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
 
-  const handleTouchStart = (msg, msgMeta, e) => {
+  const handleTouchStart = (msg, msgMeta, isMine, e) => {
+    const el = e.currentTarget;
     if (e.touches && e.touches.length > 0) {
       const t = e.touches[0];
       touchStartPosRef.current = { x: t.clientX, y: t.clientY };
@@ -149,7 +150,20 @@ export default function Groups({
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(35);
-      setActivePopupMsg({ msg, msgMeta });
+      const rect = el.getBoundingClientRect();
+      setActivePopupMsg({
+        msg,
+        msgMeta,
+        isMine,
+        anchorRect: {
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          height: rect.height
+        }
+      });
     }, 450);
   };
 
@@ -168,11 +182,24 @@ export default function Groups({
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
   };
 
-  const handleContextMenu = (msg, msgMeta, e) => {
+  const handleContextMenu = (msg, msgMeta, isMine, e) => {
     e.preventDefault();
     e.stopPropagation();
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    setActivePopupMsg({ msg, msgMeta });
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActivePopupMsg({
+      msg,
+      msgMeta,
+      isMine,
+      anchorRect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height
+      }
+    });
   };
 
   const handleScrollFeed = (e) => {
@@ -1297,6 +1324,9 @@ export default function Groups({
               const prevMsgDateKey = prevMsg ? getDateKey(prevMsg.timestamp) : null;
               const showDateSeparator = !prevMsgDateKey || currentMsgDateKey !== prevMsgDateKey;
 
+              // Only display sender name/avatar on the first message in a sequence (like Telegram/WhatsApp)
+              const isFirstInSequence = !prevMsg || prevMsg.sender !== msg.sender || showDateSeparator;
+
               return (
                 <React.Fragment key={msg.id}>
                   {showDateSeparator && (
@@ -1314,13 +1344,13 @@ export default function Groups({
                     <div
                       className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}
                       style={{ position: 'relative' }}
-                      onContextMenu={(e) => handleContextMenu(msg, msgMeta, e)}
-                      onTouchStart={(e) => handleTouchStart(msg, msgMeta, e)}
+                      onContextMenu={(e) => handleContextMenu(msg, msgMeta, isMine, e)}
+                      onTouchStart={(e) => handleTouchStart(msg, msgMeta, isMine, e)}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={handleTouchEnd}
                       onTouchCancel={handleTouchEnd}
                     >
-                      {!isMine && (
+                      {!isMine && isFirstInSequence && (
                         <div className="group-msg-author" style={{ color: authorColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {authorUser?.avatarUrl ? (
                             <img
@@ -2257,7 +2287,8 @@ export default function Groups({
           <MessageActionPopup
             message={activePopupMsg.msg}
             msgMeta={activePopupMsg.msgMeta}
-            isMine={activePopupMsg.msg.sender === currentUser.username}
+            isMine={activePopupMsg.isMine}
+            anchorRect={activePopupMsg.anchorRect}
             onClose={() => setActivePopupMsg(null)}
             onReact={(emoji) => toggleGroupReaction(activePopupMsg.msg.id, emoji)}
             onReply={() => setReplyingTo({

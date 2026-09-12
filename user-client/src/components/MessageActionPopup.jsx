@@ -7,10 +7,7 @@ import {
   Check,
   Star,
   Pin,
-  X,
-  Lock,
-  Calendar,
-  Sparkles
+  X
 } from 'lucide-react';
 import { formatFullTimestamp, formatMessageTime } from '../utils/dateUtils';
 
@@ -20,7 +17,7 @@ export default function MessageActionPopup({
   message,
   msgMeta = {},
   isMine = false,
-  anchorPos = null,
+  anchorRect = null,
   onClose,
   onReact,
   onReply,
@@ -28,18 +25,79 @@ export default function MessageActionPopup({
   isStarred = false,
   onPin = null,
   isPinned = false,
-  isModerator = false,
-  onDelete = null
+  isModerator = false
 }) {
   const [copied, setCopied] = useState(false);
   const cardRef = useRef(null);
+  const [coords, setCoords] = useState(null);
+
+  // Position beside the message with boundary safety
+  useEffect(() => {
+    if (!anchorRect) {
+      setCoords({ isCentered: true });
+      return;
+    }
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const popupWidth = 240;
+    const estimatedHeight = 240;
+
+    let left = 0;
+    let top = 0;
+
+    // Check if there is enough horizontal room beside the message (desktop / wide view)
+    const canFitRight = anchorRect.right + popupWidth + 12 < vw;
+    const canFitLeft = anchorRect.left - popupWidth - 12 > 0;
+
+    if (vw >= 640 && (canFitRight || canFitLeft)) {
+      // Wide screen: place strictly beside the bubble!
+      if (isMine) {
+        // Sent by user (on the right) -> place to the left of the bubble
+        if (canFitLeft) {
+          left = anchorRect.left - popupWidth - 10;
+        } else {
+          left = anchorRect.right + 10;
+        }
+      } else {
+        // Received message (on the left) -> place to the right of the bubble
+        if (canFitRight) {
+          left = anchorRect.right + 10;
+        } else {
+          left = anchorRect.left - popupWidth - 10;
+        }
+      }
+
+      // Vertical alignment: match bubble top, clamped inside viewport
+      top = Math.max(12, Math.min(anchorRect.top - 8, vh - estimatedHeight - 16));
+    } else {
+      // Narrow / mobile view: attach directly above or below the bubble
+      const canFitAbove = anchorRect.top > estimatedHeight + 16;
+      if (canFitAbove) {
+        top = Math.max(12, anchorRect.top - estimatedHeight - 8);
+      } else {
+        top = Math.min(vh - estimatedHeight - 12, anchorRect.bottom + 8);
+      }
+
+      // Align horizontally with the bubble
+      if (isMine) {
+        left = Math.max(12, anchorRect.right - popupWidth);
+      } else {
+        left = Math.min(vw - popupWidth - 12, Math.max(12, anchorRect.left));
+      }
+    }
+
+    setCoords({
+      left: Math.round(left),
+      top: Math.round(top),
+      width: popupWidth
+    });
+  }, [anchorRect, isMine]);
 
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -89,6 +147,14 @@ export default function MessageActionPopup({
     onClose();
   };
 
+  const cardStyle = coords && !coords.isCentered ? {
+    position: 'fixed',
+    left: `${coords.left}px`,
+    top: `${coords.top}px`,
+    width: `${coords.width}px`,
+    margin: 0
+  } : {};
+
   return (
     <div
       className="msg-action-popup-overlay"
@@ -96,7 +162,12 @@ export default function MessageActionPopup({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="msg-action-popup-card" ref={cardRef}>
+      <div
+        className="msg-action-popup-card"
+        ref={cardRef}
+        style={cardStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Quick Reactions Bar */}
         <div className="msg-action-reactions-bar">
           {QUICK_EMOJIS.map((emoji) => (
@@ -105,32 +176,31 @@ export default function MessageActionPopup({
               type="button"
               className="msg-action-reaction-btn"
               onClick={() => handleSelectReaction(emoji)}
-              title={React }
+              title={`React ${emoji}`}
             >
               <span>{emoji}</span>
             </button>
           ))}
         </div>
 
-        {/* Timestamp & Security Details */}
+        {/* Timestamp & Security Details (Compact) */}
         <div className="msg-action-meta-box">
           <div className="msg-action-meta-row">
-            <Clock size={13} className="meta-icon" />
+            <Clock size={12} className="meta-icon" />
             <span className="msg-action-time-text">
               {formatFullTimestamp(message.timestamp)}
             </span>
           </div>
 
           <div className="msg-action-meta-row security">
-            <ShieldCheck size={13} color="#10b981" />
-            <span className="msg-action-sec-text">Zero-Knowledge E2EE Verified</span>
+            <ShieldCheck size={12} color="#10b981" />
+            <span className="msg-action-sec-text">Zero-Knowledge E2EE</span>
+            {message.sender && (
+              <span className="msg-action-sender-pill">
+                {isMine ? 'You' : `@${message.sender}`}
+              </span>
+            )}
           </div>
-
-          {message.sender && (
-            <div className="msg-action-sender-tag">
-              <span>{isMine ? 'Sent by you' : `From: @${message.sender}`}</span>
-            </div>
-          )}
         </div>
 
         {/* Action Menu List */}
@@ -141,7 +211,7 @@ export default function MessageActionPopup({
               className="msg-action-menu-btn"
               onClick={handleReplyClick}
             >
-              <CornerUpLeft size={16} className="btn-icon" />
+              <CornerUpLeft size={14} className="btn-icon" />
               <span>Reply</span>
             </button>
           )}
@@ -154,12 +224,12 @@ export default function MessageActionPopup({
             >
               {copied ? (
                 <>
-                  <Check size={16} className="btn-icon" color="#10b981" />
-                  <span style={{ color: '#10b981', fontWeight: 600 }}>Copied to Clipboard!</span>
+                  <Check size={14} className="btn-icon" color="#10b981" />
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
                 </>
               ) : (
                 <>
-                  <Copy size={16} className="btn-icon" />
+                  <Copy size={14} className="btn-icon" />
                   <span>Copy Text</span>
                 </>
               )}
@@ -173,7 +243,7 @@ export default function MessageActionPopup({
               onClick={handleStarClick}
             >
               <Star
-                size={16}
+                size={14}
                 className="btn-icon"
                 fill={isStarred ? '#fbbf24' : 'none'}
                 color={isStarred ? '#fbbf24' : 'currentColor'}
@@ -189,7 +259,7 @@ export default function MessageActionPopup({
               onClick={handlePinClick}
             >
               <Pin
-                size={16}
+                size={14}
                 className="btn-icon"
                 color={isPinned ? '#ee7882' : 'currentColor'}
               />

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, X, ShieldCheck, Rss, MessageSquare, Users, Sparkles } from 'lucide-react';
 import { localSearchIndex } from '../search/searchIndex';
 
@@ -24,7 +24,7 @@ export default function SearchModal({ onClose, onNavigate }) {
   };
 
   return (
-    <div className="auth-overlay" onClick={onClose}>
+    <div className="modal-overlay search-modal-overlay" onClick={onClose}>
       <div className="search-modal-card" onClick={(e) => e.stopPropagation()}>
         {/* Search Input Bar */}
         <div className="search-header">

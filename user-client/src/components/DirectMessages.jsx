@@ -18,7 +18,8 @@ import {
   Star,
   CornerUpLeft,
   Smile,
-  ChevronDown
+  ChevronDown,
+  Search
 } from 'lucide-react';
 import {
   importPublicKey,
@@ -128,12 +129,17 @@ export default function DirectMessages({
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const prevMsgCountRef = useRef(0);
 
+  // In-chat search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchBar, setShowSearchBar] = useState(false);
+
   // Message Action Popup state & touch/long-press tracking
   const [activePopupMsg, setActivePopupMsg] = useState(null);
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
 
-  const handleTouchStart = (msg, msgMeta, e) => {
+  const handleTouchStart = (msg, msgMeta, isMine, e) => {
+    const el = e.currentTarget;
     if (e.touches && e.touches.length > 0) {
       const t = e.touches[0];
       touchStartPosRef.current = { x: t.clientX, y: t.clientY };
@@ -141,7 +147,20 @@ export default function DirectMessages({
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(35);
-      setActivePopupMsg({ msg, msgMeta });
+      const rect = el.getBoundingClientRect();
+      setActivePopupMsg({
+        msg,
+        msgMeta,
+        isMine,
+        anchorRect: {
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          height: rect.height
+        }
+      });
     }, 450);
   };
 
@@ -160,11 +179,24 @@ export default function DirectMessages({
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
   };
 
-  const handleContextMenu = (msg, msgMeta, e) => {
+  const handleContextMenu = (msg, msgMeta, isMine, e) => {
     e.preventDefault();
     e.stopPropagation();
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    setActivePopupMsg({ msg, msgMeta });
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActivePopupMsg({
+      msg,
+      msgMeta,
+      isMine,
+      anchorRect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height
+      }
+    });
   };
 
   const handleScrollFeed = (e) => {
@@ -885,9 +917,16 @@ export default function DirectMessages({
   const activePeer = selectedPeer ? (allUsers.find(u => u.username === selectedPeer.username) || selectedPeer) : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 
+  const visibleMessages = searchQuery.trim()
+    ? messages.filter(m => {
+        const meta = decryptedMsgMap[m.id];
+        return meta?.text?.toLowerCase().includes(searchQuery.toLowerCase());
+      })
+    : messages;
+
   return (
     <div className="dm-chat-screen">
-      {/* Chat Header with Call Buttons */}
+      {/* Chat Header with Call Buttons & In-Chat Search */}
       <div className="chat-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button className="back-btn" onClick={() => setSelectedPeer(null)} title="Back to contacts">
@@ -926,8 +965,29 @@ export default function DirectMessages({
           </div>
         </div>
 
-        {/* Header Voice & Video Call Action Buttons */}
+        {/* Header Action Buttons: Call & In-Chat Search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}
+            onClick={() => { setShowSearchBar(s => !s); setSearchQuery(''); }}
+            style={{
+              background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(255, 255, 255, 0.15)'}`,
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              color: showSearchBar ? '#ee7882' : '#cbd5e1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title="Search messages in this chat"
+          >
+            <Search size={16} />
+          </button>
+
           <button
             type="button"
             onClick={() => onStartCall && onStartCall(activePeer, false)}
@@ -969,27 +1029,46 @@ export default function DirectMessages({
         </div>
       </div>
 
+      {/* In-Chat Search Bar (Collapsible) */}
+      {showSearchBar && (
+        <div className="group-search-bar" style={{ margin: '8px 16px', borderRadius: '12px' }}>
+          <Search size={15} color="#ee7882" />
+          <input
+            type="text"
+            placeholder={`Search messages with @${activePeer.username}...`}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            autoFocus
+          />
+          {searchQuery && (
+            <button className="clear-search-btn" onClick={() => setSearchQuery('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Messages Log */}
       <div
-        className="messages-log"
+        className="messages-log dm-messages-feed"
         ref={messagesContainerRef}
         onScroll={handleScrollFeed}
       >
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div className="empty-chat">
             <Lock size={32} color="#94a3b8" />
-            <p>Start a private conversation with {activePeer.displayName || activePeer.username}.</p>
-            <span>Only you and {activePeer.displayName || activePeer.username} can read messages, listen to voice notes, and view shared media.</span>
+            <p>{searchQuery ? 'No matching messages found.' : `Start a private conversation with ${activePeer.displayName || activePeer.username}.`}</p>
+            <span>{searchQuery ? 'Try a different search query.' : `Only you and ${activePeer.displayName || activePeer.username} can read messages, listen to voice notes, and view shared media.`}</span>
           </div>
         ) : (
-          messages.map((msg, index) => {
+          visibleMessages.map((msg, index) => {
             const isMine = msg.sender === currentUser.username;
             const msgMeta = decryptedMsgMap[msg.id] || { text: 'Decrypting message...' };
             const mediaDecrypted = msgMeta.mediaId ? decryptedMediaMap[msgMeta.mediaId] : null;
             const isStarred = starredIds.has(msg.id);
             const msgReactions = reactionsMap[msg.id] || {};
 
-            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
             const showDateSeparator = !prevMsg || getDateKey(msg.timestamp) !== getDateKey(prevMsg.timestamp);
 
             return (
@@ -1004,8 +1083,8 @@ export default function DirectMessages({
                   <div
                     className="message-bubble"
                     style={{ position: 'relative' }}
-                    onContextMenu={(e) => handleContextMenu(msg, msgMeta, e)}
-                    onTouchStart={(e) => handleTouchStart(msg, msgMeta, e)}
+                    onContextMenu={(e) => handleContextMenu(msg, msgMeta, isMine, e)}
+                    onTouchStart={(e) => handleTouchStart(msg, msgMeta, isMine, e)}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                     onTouchCancel={handleTouchEnd}
@@ -1269,7 +1348,8 @@ export default function DirectMessages({
         <MessageActionPopup
           message={activePopupMsg.msg}
           msgMeta={activePopupMsg.msgMeta}
-          isMine={activePopupMsg.msg.sender === currentUser.username}
+          isMine={activePopupMsg.isMine}
+          anchorRect={activePopupMsg.anchorRect}
           onClose={() => setActivePopupMsg(null)}
           onReact={(emoji) => toggleReaction(activePopupMsg.msg.id, emoji)}
           onReply={() => setReplyingTo({

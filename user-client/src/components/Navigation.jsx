@@ -22,6 +22,19 @@ export default function Navigation({
           <span className="brand-name">SadiSocial</span>
         </div>
 
+        {/* Global Search Bar (prominent on full screen / desktop) */}
+        <div
+          className="top-header-search-bar"
+          onClick={onOpenSearch}
+          role="button"
+          tabIndex={0}
+          title="Search decrypted posts, chats, and groups (Ctrl+K)"
+        >
+          <Search size={14} className="top-search-icon" />
+          <span className="top-search-placeholder">Search posts, chats, groups...</span>
+          <kbd className="top-search-kbd">Ctrl K</kbd>
+        </div>
+
         <div className="top-header-right">
           {/* Engine Connectivity Pill */}
           <button
