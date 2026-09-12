@@ -1190,10 +1190,6 @@ export default function DirectMessages({
                     onTouchEnd={handleTouchEnd}
                     onTouchCancel={handleTouchEnd}
                   >
-                    <div className={`dm-msg-author ${isMine ? 'mine' : ''}`}>
-                      <span>{isMine ? `${currentUser.displayName || currentUser.username} (You)` : (activePeer?.displayName || activePeer?.username)}</span>
-                    </div>
-
                     {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
                     {msgMeta.replyTo && (
                       <div
