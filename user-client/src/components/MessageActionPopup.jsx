@@ -7,6 +7,7 @@ import {
   Check,
   Star,
   Pin,
+  Trash2,
   X
 } from 'lucide-react';
 import { formatFullTimestamp, formatMessageTime } from '../utils/dateUtils';
@@ -25,7 +26,8 @@ export default function MessageActionPopup({
   isStarred = false,
   onPin = null,
   isPinned = false,
-  isModerator = false
+  isModerator = false,
+  onDelete = null
 }) {
   const [copied, setCopied] = useState(false);
   const cardRef = useRef(null);
@@ -147,6 +149,15 @@ export default function MessageActionPopup({
     onClose();
   };
 
+  const handleDeleteClick = () => {
+    if (onDelete) {
+      if (window.confirm('Delete this message for everyone?')) {
+        onDelete(message);
+        onClose();
+      }
+    }
+  };
+
   const cardStyle = coords && !coords.isCentered ? {
     position: 'fixed',
     left: `${coords.left}px`,
@@ -266,7 +277,20 @@ export default function MessageActionPopup({
               <span>{isPinned ? 'Unpin from Group' : 'Pin to Group'}</span>
             </button>
           )}
+
+          {(isMine || isModerator) && onDelete && (
+            <button
+              type="button"
+              className="msg-action-menu-btn delete-btn"
+              onClick={handleDeleteClick}
+              title="Delete message for everyone"
+            >
+              <Trash2 size={14} className="btn-icon" color="#f87171" />
+              <span style={{ color: '#f87171', fontWeight: 600 }}>Delete Message</span>
+            </button>
+          )}
         </div>
+
       </div>
     </div>
   );

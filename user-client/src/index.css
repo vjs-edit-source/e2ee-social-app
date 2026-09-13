@@ -7138,3 +7138,88 @@ input:checked + .toggle-slider:before {
   z-index: 99999 !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   DELETED MESSAGE PLACEHOLDER & STATUS INDICATOR TICKS
+   ══════════════════════════════════════════════════════════════════════════════ */
+.msg-deleted-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  padding: 2px 0;
+  opacity: 0.8;
+  user-select: none;
+}
+
+.msg-deleted-icon {
+  color: #ef4444;
+  opacity: 0.75;
+}
+
+.message-bubble.deleted {
+  opacity: 0.7;
+  background: rgba(30, 15, 22, 0.45) !important;
+  border: 1px dashed rgba(224, 108, 117, 0.3) !important;
+  box-shadow: none !important;
+}
+
+/* Message Status Indicator Ticks */
+.msg-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.msg-tick {
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.msg-tick.tick-pending {
+  color: #f59e0b;
+  animation: tickPulse 1.2s infinite ease-in-out;
+}
+
+.msg-tick.tick-failed {
+  color: #ef4444;
+}
+
+.msg-tick.tick-sent {
+  color: #94a3b8;
+}
+
+.msg-tick.tick-delivered {
+  color: #cbd5e1;
+}
+
+.msg-tick.tick-seen {
+  color: #38bdf8;
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.5));
+}
+
+@keyframes tickPulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* Delete Button in MessageActionPopup */
+.msg-action-menu-btn.delete-btn {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.msg-action-menu-btn.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border-color: #ef4444 !important;
+  color: #fca5a5 !important;
+}
+

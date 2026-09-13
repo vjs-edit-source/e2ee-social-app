@@ -462,9 +462,48 @@ class ZeroKnowledgeStore {
       iv,
       ratchetSeq,
       dhKeyB64,
+      status: 'sent',
+      seen: false,
+      seenAt: null,
+      isDeleted: false,
       timestamp: new Date().toISOString()
     };
     this.messages.push(msg);
+    this.scheduleSave();
+    this.syncDocToMongo('messages', { id: msg.id }, msg);
+    return msg;
+  }
+
+  markMessagesSeen(reader, sender) {
+    let updatedCount = 0;
+    const now = new Date().toISOString();
+    for (const msg of this.messages) {
+      if (msg.sender === sender && msg.recipient === reader && !msg.seen && !msg.isDeleted) {
+        msg.seen = true;
+        msg.status = 'seen';
+        msg.seenAt = now;
+        updatedCount++;
+        this.syncDocToMongo('messages', { id: msg.id }, msg);
+      }
+    }
+    if (updatedCount > 0) {
+      this.scheduleSave();
+    }
+    return updatedCount;
+  }
+
+  deleteMessage(messageId, requester) {
+    const msg = this.messages.find(m => m.id === messageId);
+    if (!msg) return null;
+    if (msg.sender !== requester && msg.recipient !== requester) {
+      throw new Error('Unauthorized to delete this message');
+    }
+    msg.isDeleted = true;
+    msg.ciphertext = '';
+    msg.iv = '';
+    msg.mediaId = null;
+    msg.deletedBy = requester;
+    msg.deletedAt = new Date().toISOString();
     this.scheduleSave();
     this.syncDocToMongo('messages', { id: msg.id }, msg);
     return msg;
@@ -687,12 +726,39 @@ class ZeroKnowledgeStore {
       mediaId,
       pollId,
       expiresAt,
+      status: 'sent',
+      isDeleted: false,
       timestamp: new Date().toISOString()
     };
     if (!this.groupMessages.has(groupId)) {
       this.groupMessages.set(groupId, []);
     }
     this.groupMessages.get(groupId).push(msg);
+    this.scheduleSave();
+    this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
+    return msg;
+  }
+
+  deleteGroupMessage(groupId, messageId, requester) {
+    const group = this.getGroup(groupId);
+    if (!group) return null;
+    const msgs = this.groupMessages.get(groupId) || [];
+    const msg = msgs.find(m => m.id === messageId);
+    if (!msg) return null;
+
+    const isSender = msg.sender === requester;
+    const isAdminOrMod = group.creator === requester || (group.roles && ['admin', 'moderator'].includes(group.roles[requester]));
+    if (!isSender && !isAdminOrMod) {
+      throw new Error('Unauthorized to delete this group message');
+    }
+
+    msg.isDeleted = true;
+    msg.ciphertext = '';
+    msg.iv = '';
+    msg.keyEnvelopes = {};
+    msg.mediaId = null;
+    msg.deletedBy = requester;
+    msg.deletedAt = new Date().toISOString();
     this.scheduleSave();
     this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
     return msg;

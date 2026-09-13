@@ -368,6 +368,12 @@ app.post('/api/messages', (req, res) => {
 
   const msg = db.addMessage(sender, recipient, ciphertext, iv, ratchetSeq, dhKeyB64);
 
+  // If recipient is online, mark as delivered immediately
+  const isRecipientOnline = connectedClients.has(recipient) && connectedClients.get(recipient).size > 0;
+  if (isRecipientOnline) {
+    msg.status = 'delivered';
+  }
+
   // Real-time delivery to all active devices of recipient & sender
   sendToUser(recipient, { type: 'DIRECT_MESSAGE', message: msg });
   sendToUser(sender, { type: 'DIRECT_MESSAGE', message: msg });
@@ -376,11 +382,68 @@ app.post('/api/messages', (req, res) => {
   res.json({ success: true, message: msg });
 });
 
+// 5b. Mark Direct Messages as Seen (Read Receipts)
+app.post('/api/messages/mark-seen', (req, res) => {
+  const { reader, sender } = req.body;
+  if (!reader || !sender) {
+    return res.status(400).json({ error: 'reader and sender required' });
+  }
+
+  const updatedCount = db.markMessagesSeen(reader, sender);
+  if (updatedCount > 0) {
+    const seenAt = new Date().toISOString();
+    sendToUser(sender, {
+      type: 'MESSAGES_SEEN',
+      reader,
+      seenAt
+    });
+    notifyInspector();
+  }
+
+  res.json({ success: true, updatedCount });
+});
+
+// 5c. Delete Encrypted DM Message
+app.delete('/api/messages/:messageId', (req, res) => {
+  const { messageId } = req.params;
+  const requester = req.query.requester || req.body.requester;
+  if (!requester) {
+    return res.status(400).json({ error: 'requester required' });
+  }
+
+  try {
+    const msg = db.deleteMessage(messageId, requester);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    // Notify both sender & recipient in real-time
+    sendToUser(msg.sender, {
+      type: 'MESSAGE_DELETED',
+      messageId: msg.id,
+      sender: msg.sender,
+      recipient: msg.recipient,
+      deletedBy: requester
+    });
+    sendToUser(msg.recipient, {
+      type: 'MESSAGE_DELETED',
+      messageId: msg.id,
+      sender: msg.sender,
+      recipient: msg.recipient,
+      deletedBy: requester
+    });
+
+    notifyInspector();
+    res.json({ success: true, message: msg });
+  } catch (err) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
 // 6. Fetch DM Chat History
 app.get('/api/messages/:userA/:userB', (req, res) => {
   const { userA, userB } = req.params;
   res.json(db.getMessagesBetween(userA, userB));
 });
+
 
 // ── GROUPS & COMMUNITIES ────────────────────────────────────
 
@@ -455,6 +518,33 @@ app.post('/api/groups/:groupId/messages', (req, res) => {
 // Fetch Group Messages
 app.get('/api/groups/:groupId/messages', (req, res) => {
   res.json(db.getGroupMessages(req.params.groupId));
+});
+
+// Delete Group Message
+app.delete('/api/groups/:groupId/messages/:messageId', (req, res) => {
+  const { groupId, messageId } = req.params;
+  const requester = req.query.requester || req.body.requester;
+  if (!requester) {
+    return res.status(400).json({ error: 'requester required' });
+  }
+
+  try {
+    const msg = db.deleteGroupMessage(groupId, messageId, requester);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    const group = db.getGroup(groupId);
+    broadcastToGroup(group, {
+      type: 'GROUP_MESSAGE_DELETED',
+      groupId,
+      messageId: msg.id,
+      deletedBy: requester
+    });
+
+    notifyInspector();
+    res.json({ success: true, message: msg });
+  } catch (err) {
+    res.status(403).json({ error: err.message });
+  }
 });
 
 // Update Group Settings (Disappearing timer, Announcement only)

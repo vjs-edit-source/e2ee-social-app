@@ -39,7 +39,9 @@ import {
   Smile,
   ChevronDown,
   Circle,
-  Phone
+  Phone,
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
@@ -370,6 +372,21 @@ export default function Groups({
             if (prev.some(m => m.id === data.message.id)) return prev;
             return [...prev, data.message];
           });
+        } else if (data.type === 'GROUP_MESSAGE_DELETED' && data.groupId === selectedGroup?.id) {
+          setMessages(prev => prev.map(m => {
+            if (m.id === data.messageId) {
+              return {
+                ...m,
+                isDeleted: true,
+                ciphertext: '',
+                iv: '',
+                keyEnvelopes: {},
+                mediaId: null,
+                deletedBy: data.deletedBy
+              };
+            }
+            return m;
+          }));
         }
       } catch (e) {}
     };
@@ -377,6 +394,23 @@ export default function Groups({
     wsClient.addEventListener('message', handleMessage);
     return () => wsClient.removeEventListener('message', handleMessage);
   }, [wsClient, selectedGroup]);
+
+  // Handle group message deletion
+  const handleDeleteMessage = async (msgToDelete) => {
+    if (!msgToDelete || !msgToDelete.id || !selectedGroup) return;
+    try {
+      setMessages(prev => prev.map(m => m.id === msgToDelete.id ? { ...m, isDeleted: true, ciphertext: '', iv: '', keyEnvelopes: {}, mediaId: null } : m));
+      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages/${msgToDelete.id}?requester=${encodeURIComponent(currentUser.username)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Delete group message error:', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete group message:', err);
+    }
+  };
 
   // Reset scroll position on opening a group/community
   useEffect(() => {
@@ -740,9 +774,38 @@ export default function Groups({
         });
       }
 
-      const payloadString = JSON.stringify({
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+
+      // Optimistic pending message for instant UI feedback (🕒 Clock icon)
+      const tempId = `gtemp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const optimisticMsg = {
+        id: tempId,
+        groupId: selectedGroup.id,
+        sender: currentUser.username,
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        isDeleted: false
+      };
+      decryptedMsgCache.current[tempId] = {
         text: inputMessage.trim(),
-        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+        mediaKey: attachedMedia?.mediaKeyB64 || null,
+        mediaId: attachedMedia?.mediaId || null,
+        isVoice: false,
+        voiceDuration: 0,
+        replyTo: sentReplyTo
+      };
+      setDecryptedMsgMap(prev => ({
+        ...prev,
+        [tempId]: decryptedMsgCache.current[tempId]
+      }));
+      setMessages(prev => [...prev, optimisticMsg]);
+      setInputMessage('');
+      clearAttachment();
+      setReplyingTo(null);
+
+      const payloadString = JSON.stringify({
+        text: optimisticMsg ? decryptedMsgCache.current[tempId]?.text : inputMessage.trim(),
+        replyTo: sentReplyTo
       });
 
       const { ciphertext, iv, keyEnvelopes } = await encryptPost(
@@ -766,30 +829,21 @@ export default function Groups({
       if (!res.ok) throw new Error('Failed to send message');
       const data = await res.json();
 
-      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
-      decryptedMsgCache.current[data.message.id] = {
-        text: inputMessage.trim(),
-        mediaKey: attachedMedia?.mediaKeyB64 || null,
-        mediaId: attachedMedia?.mediaId || null,
-        isVoice: false,
-        voiceDuration: 0,
-        replyTo: sentReplyTo
-      };
-      setDecryptedMsgMap(prev => ({
-        ...prev,
-        [data.message.id]: decryptedMsgCache.current[data.message.id]
-      }));
-
-      setMessages(prev => {
-        if (prev.some(m => m.id === data.message.id)) return prev;
-        return [...prev, data.message];
+      decryptedMsgCache.current[data.message.id] = decryptedMsgCache.current[tempId];
+      delete decryptedMsgCache.current[tempId];
+      setDecryptedMsgMap(prev => {
+        const copy = {
+          ...prev,
+          [data.message.id]: decryptedMsgCache.current[data.message.id]
+        };
+        delete copy[tempId];
+        return copy;
       });
-      setInputMessage('');
-      clearAttachment();
-      setReplyingTo(null);
+
+      setMessages(prev => prev.map(m => m.id === tempId ? data.message : m));
     } catch (err) {
       console.error('Failed to send group message:', err);
-      alert('Failed to send message.');
+      setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m));
     } finally {
       setSending(false);
     }
@@ -1474,124 +1528,144 @@ export default function Groups({
                     className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
                   >
                     <div
-                      className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}
+                      className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''} ${msg.isDeleted ? 'deleted' : ''}`}
                       style={{ position: 'relative' }}
-                      onContextMenu={(e) => handleContextMenu(msg, msgMeta, isMine, e)}
-                      onTouchStart={(e) => handleTouchStart(msg, msgMeta, isMine, e)}
+                      onContextMenu={(e) => !msg.isDeleted && handleContextMenu(msg, msgMeta, isMine, e)}
+                      onTouchStart={(e) => !msg.isDeleted && handleTouchStart(msg, msgMeta, isMine, e)}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={handleTouchEnd}
                       onTouchCancel={handleTouchEnd}
                     >
-                      {isMine ? (
-                        <div className="group-msg-author mine">
-                          <span>{currentUser.displayName || currentUser.username} (You)</span>
+                      {msg.isDeleted ? (
+                        <div className="msg-deleted-notice">
+                          <Trash2 size={13} className="msg-deleted-icon" />
+                          <span>This message was deleted</span>
                         </div>
                       ) : (
-                        <div className="group-msg-author" style={{ color: authorColor }}>
-                          {authorUser?.avatarUrl ? (
-                            <img
-                              src={authorUser.avatarUrl}
-                              alt={msg.sender}
-                              style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                border: `1px solid ${authorColor}`
+                        <>
+                          {isMine ? (
+                            <div className="group-msg-author mine">
+                              <span>{currentUser.displayName || currentUser.username} (You)</span>
+                            </div>
+                          ) : (
+                            <div className="group-msg-author" style={{ color: authorColor }}>
+                              {authorUser?.avatarUrl ? (
+                                <img
+                                  src={authorUser.avatarUrl}
+                                  alt={msg.sender}
+                                  style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: `1px solid ${authorColor}`
+                                  }}
+                                />
+                              ) : null}
+                              <span style={{ fontWeight: 600 }}>{authorUser?.displayName || msg.sender}</span>
+                              {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
+                              {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
+                              {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
+                            </div>
+                          )}
+
+                          {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
+                          {msgMeta.replyTo && (
+                            <div
+                              className="msg-quoted-reply"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (msgMeta.replyTo?.id && messageRefs.current[msgMeta.replyTo.id]) {
+                                  messageRefs.current[msgMeta.replyTo.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  const targetEl = messageRefs.current[msgMeta.replyTo.id];
+                                  targetEl.classList.add('highlight-flash');
+                                  setTimeout(() => targetEl.classList.remove('highlight-flash'), 1200);
+                                }
                               }}
-                            />
-                          ) : null}
-                          <span style={{ fontWeight: 600 }}>{authorUser?.displayName || msg.sender}</span>
-                          {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
-                          {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
-                          {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
-                        </div>
-                      )}
-
-                      {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
-                      {msgMeta.replyTo && (
-                        <div
-                          className="msg-quoted-reply"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (msgMeta.replyTo?.id && messageRefs.current[msgMeta.replyTo.id]) {
-                              messageRefs.current[msgMeta.replyTo.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                              const targetEl = messageRefs.current[msgMeta.replyTo.id];
-                              targetEl.classList.add('highlight-flash');
-                              setTimeout(() => targetEl.classList.remove('highlight-flash'), 1200);
-                            }
-                          }}
-                          title="Click to jump to replied message"
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CornerUpLeft size={11} color="#ee7882" />
-                            <span style={{ fontWeight: '700', color: '#ee7882' }}>
-                              {msgMeta.replyTo.sender === currentUser.username ? 'You' : (allUsers.find(u => u.username === msgMeta.replyTo.sender)?.displayName || msgMeta.replyTo.sender)}
-                            </span>
-                          </div>
-                          <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
-                            {msgMeta.replyTo.text || 'Attachment'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Text */}
-                      {msgMeta.text && (
-                        <div className="msg-text">{msgMeta.text}</div>
-                      )}
-
-                      {/* Voice Note Player (if voice message) */}
-                      {msgMeta.isVoice && (
-                        <div style={{ margin: '4px 0' }}>
-                          {mediaDecrypted ? (
-                            <VoiceWaveformPlayer
-                              src={mediaDecrypted.objectUrl}
-                              duration={msgMeta.voiceDuration}
-                              isMine={isMine}
-                            />
-                          ) : (
-                            <div className="dm-media-decrypting">
-                              <Loader2 size={14} className="animate-spin" color="#ee7882" />
-                              <span>Decrypting voice note...</span>
+                              title="Click to jump to replied message"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <CornerUpLeft size={11} color="#ee7882" />
+                                <span style={{ fontWeight: '700', color: '#ee7882' }}>
+                                  {msgMeta.replyTo.sender === currentUser.username ? 'You' : (allUsers.find(u => u.username === msgMeta.replyTo.sender)?.displayName || msgMeta.replyTo.sender)}
+                                </span>
+                              </div>
+                              <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
+                                {msgMeta.replyTo.text || 'Attachment'}
+                              </span>
                             </div>
                           )}
-                        </div>
-                      )}
 
-                      {/* Media Attachment (if not voice) */}
-                      {msg.mediaId && !msgMeta.isVoice && (
-                        <div className="dm-media-attachment-container">
-                          {mediaDecrypted ? (
-                            <EncryptedAttachmentViewer
-                              objectUrl={mediaDecrypted.objectUrl}
-                              mimeType={mediaDecrypted.mimeType}
-                              mediaId={msg.mediaId}
-                            />
-                          ) : (
-                            <div className="dm-media-decrypting">
-                              <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                              <span>Decrypting attachment...</span>
+                          {/* Text */}
+                          {msgMeta.text && (
+                            <div className="msg-text">{msgMeta.text}</div>
+                          )}
+
+                          {/* Voice Note Player (if voice message) */}
+                          {msgMeta.isVoice && (
+                            <div style={{ margin: '4px 0' }}>
+                              {mediaDecrypted ? (
+                                <VoiceWaveformPlayer
+                                  src={mediaDecrypted.objectUrl}
+                                  duration={msgMeta.voiceDuration}
+                                  isMine={isMine}
+                                />
+                              ) : (
+                                <div className="dm-media-decrypting">
+                                  <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                                  <span>Decrypting voice note...</span>
+                                </div>
+                              )}
                             </div>
                           )}
-                        </div>
+
+                          {/* Media Attachment (if not voice) */}
+                          {msg.mediaId && !msgMeta.isVoice && (
+                            <div className="dm-media-attachment-container">
+                              {mediaDecrypted ? (
+                                <EncryptedAttachmentViewer
+                                  objectUrl={mediaDecrypted.objectUrl}
+                                  mimeType={mediaDecrypted.mimeType}
+                                  mediaId={msg.mediaId}
+                                />
+                              ) : (
+                                <div className="dm-media-decrypting">
+                                  <Loader2 size={14} className="animate-spin" color="#f59e0b" />
+                                  <span>Decrypting attachment...</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
 
-                      {/* Minimal Message Footer: Time + Disappearing Timer + Pinned indicator */}
+                      {/* Minimal Message Footer: Time + Disappearing Timer + Pinned indicator + Status Indicator Ticks */}
                       <div className="msg-meta-minimal">
                         <span className="msg-bubble-time">{formatMessageTime(msg.timestamp)}</span>
-                        {msg.expiresAt && (
+                        {msg.expiresAt && !msg.isDeleted && (
                           <span className="msg-timer-badge" style={{ marginLeft: '4px' }}>
                             <Flame size={10} color="#fbbf24" />
                             <span>{remainingTimeStr}</span>
                           </span>
                         )}
-                        {isPinned && (
+                        {isPinned && !msg.isDeleted && (
                           <Pin size={10} color="#ee7882" style={{ marginLeft: '4px' }} title="Pinned Message" />
+                        )}
+                        {isMine && !msg.isDeleted && (
+                          <span className="msg-status-indicator" style={{ marginLeft: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                            {msg.status === 'sending' || msg.pending ? (
+                              <Clock size={11} className="msg-tick tick-pending" title="Sending... (Not sent)" />
+                            ) : msg.status === 'failed' ? (
+                              <AlertCircle size={11} className="msg-tick tick-failed" title="Not sent (Failed)" />
+                            ) : (
+                              <Check size={12} className="msg-tick tick-sent" title="Sent to space" />
+                            )}
+                          </span>
                         )}
                       </div>
 
                       {/* Reaction Badges Container */}
-                      {Object.keys(msgReactions).length > 0 && (
+                      {!msg.isDeleted && Object.keys(msgReactions).length > 0 && (
                         <div className="msg-reaction-badges">
                           {Object.entries(msgReactions).map(([emoji, count]) => (
                             <span
@@ -2558,6 +2632,7 @@ export default function Groups({
             onPin={() => handleTogglePin(activePopupMsg.msg.id)}
             isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
             isModerator={isModerator}
+            onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
           />
         )}
       </div>
