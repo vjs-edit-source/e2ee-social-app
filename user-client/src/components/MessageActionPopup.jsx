@@ -5,6 +5,7 @@ import {
   CornerUpLeft,
   Copy,
   Check,
+  CheckCheck,
   Star,
   Pin,
   Trash2,
@@ -19,6 +20,7 @@ export default function MessageActionPopup({
   msgMeta = {},
   isMine = false,
   anchorRect = null,
+  allUsers = [],
   onClose,
   onReact,
   onReply,
@@ -213,6 +215,46 @@ export default function MessageActionPopup({
             )}
           </div>
         </div>
+
+        {/* Group Message Seen By Members */}
+        {isMine && message.seenBy && message.seenBy.length > 0 && (
+          <div className="msg-action-seen-by-box">
+            <div className="msg-action-seen-by-header">
+              <CheckCheck size={13} color="#00f0ff" />
+              <span>Seen by {message.seenBy.length} {message.seenBy.length === 1 ? 'member' : 'members'}</span>
+            </div>
+            <div className="msg-action-seen-by-list">
+              {message.seenBy.map((s, idx) => {
+                const viewer = allUsers?.find(u => u.username?.toLowerCase() === s.username?.toLowerCase()) || { username: s.username };
+                return (
+                  <div key={s.username || idx} className="msg-action-seen-by-item">
+                    <div className="seen-avatar" style={{ backgroundColor: viewer.avatarColor || '#ee7882' }}>
+                      {viewer.avatarUrl ? (
+                        <img src={viewer.avatarUrl} alt={viewer.username} />
+                      ) : (
+                        ((viewer.displayName || viewer.username) || '?')[0].toUpperCase()
+                      )}
+                    </div>
+                    <div className="seen-user-info">
+                      <span className="seen-username">{viewer.displayName || viewer.username}</span>
+                      <span className="seen-time">{s.seenAt ? formatMessageTime(s.seenAt) : 'Seen'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Direct Message Seen Details */}
+        {isMine && !message.groupId && (message.seen || message.status === 'seen') && (
+          <div className="msg-action-seen-by-box dm-seen-box">
+            <div className="msg-action-seen-by-header">
+              <CheckCheck size={13} color="#00f0ff" />
+              <span>Read by recipient {message.seenAt ? `(${formatMessageTime(message.seenAt)})` : ''}</span>
+            </div>
+          </div>
+        )}
 
         {/* Action Menu List */}
         <div className="msg-action-menu-list">

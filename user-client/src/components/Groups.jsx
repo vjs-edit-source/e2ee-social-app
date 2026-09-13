@@ -324,6 +324,20 @@ export default function Groups({
     loadGroups();
   }, [currentUser]);
 
+  // Trigger mark group messages seen on server
+  const triggerMarkGroupSeen = async (groupId) => {
+    if (!groupId || !currentUser?.username) return;
+    try {
+      await fetch(`${serverUrl}/api/groups/${groupId}/mark-seen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reader: currentUser.username })
+      });
+    } catch (err) {
+      // silently ignore
+    }
+  };
+
   // Load group messages when a group is selected
   const loadGroupMessages = async () => {
     if (!selectedGroup) return;
@@ -342,13 +356,16 @@ export default function Groups({
     loadGroupMessages();
     if (!selectedGroup) return;
 
+    // Immediately mark group messages as seen
+    triggerMarkGroupSeen(selectedGroup.id);
+
     // Fast 2.5s live polling sync fallback
     const syncInterval = setInterval(() => {
       loadGroupMessages();
     }, 2500);
 
     return () => clearInterval(syncInterval);
-  }, [selectedGroup, serverUrl]);
+  }, [selectedGroup?.id, serverUrl]);
 
   // Real-time WebSocket event handling
   useEffect(() => {
@@ -371,6 +388,22 @@ export default function Groups({
           setMessages(prev => {
             if (prev.some(m => m.id === data.message.id)) return prev;
             return [...prev, data.message];
+          });
+          if (data.message.sender !== currentUser?.username) {
+            triggerMarkGroupSeen(selectedGroup.id);
+          }
+        } else if (data.type === 'GROUP_MESSAGES_SEEN' && data.groupId === selectedGroup?.id) {
+          setMessages(prev => {
+            const updatedMap = new Map();
+            for (const item of (data.updatedMessages || [])) {
+              updatedMap.set(item.messageId, item.seenBy);
+            }
+            return prev.map(m => {
+              if (updatedMap.has(m.id)) {
+                return { ...m, seenBy: updatedMap.get(m.id) };
+              }
+              return m;
+            });
           });
         } else if (data.type === 'GROUP_MESSAGE_DELETED' && data.groupId === selectedGroup?.id) {
           setMessages(prev => prev.map(m => {
@@ -1657,6 +1690,15 @@ export default function Groups({
                               <Clock size={12} strokeWidth={2.4} className="msg-tick tick-pending" title="Sending... (Not sent)" />
                             ) : msg.status === 'failed' ? (
                               <AlertCircle size={12} strokeWidth={2.4} className="msg-tick tick-failed" title="Not sent (Failed)" />
+                            ) : msg.seenBy && msg.seenBy.length > 0 ? (
+                              <span
+                                className="msg-group-seen-indicator"
+                                title={`Seen by ${msg.seenBy.length} member${msg.seenBy.length > 1 ? 's' : ''}: ${msg.seenBy.map(s => (allUsers?.find(u => u.username === s.username)?.displayName || s.username)).join(', ')}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <CheckCheck size={13} strokeWidth={2.4} className="msg-tick tick-seen" />
+                                <span className="msg-seen-count">{msg.seenBy.length}</span>
+                              </span>
                             ) : (
                               <Check size={13} strokeWidth={2.4} className="msg-tick tick-sent" title="Sent to space" />
                             )}
@@ -2632,6 +2674,7 @@ export default function Groups({
             onPin={() => handleTogglePin(activePopupMsg.msg.id)}
             isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
             isModerator={isModerator}
+            allUsers={allUsers}
             onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
           />
         )}
@@ -2750,6 +2793,7 @@ export default function Groups({
                 onClick={() => {
                   setSelectedGroup(group);
                   if (onClearGroupUnread) onClearGroupUnread(group.id);
+                  triggerMarkGroupSeen(group.id);
                 }}
               >
                 <div className="group-card-top">

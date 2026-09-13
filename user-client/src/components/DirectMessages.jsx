@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
   Lock,
@@ -81,7 +81,8 @@ export default function DirectMessages({
   wsClient,
   onChatStateChange,
   initialSelectedPeer = null,
-  onStartCall = null
+  onStartCall = null,
+  onClearChatUnread = null
 }) {
   const [selectedPeer, setSelectedPeer] = useState(initialSelectedPeer);
   const [sharedKeyMap, setSharedKeyMap] = useState({});
@@ -89,6 +90,7 @@ export default function DirectMessages({
   const [decryptedMsgMap, setDecryptedMsgMap] = useState({});
   const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
   const [conversationPreviews, setConversationPreviews] = useState({});
+  const [peerUnreadMap, setPeerUnreadMap] = useState({});
   const [inputMessage, setInputMessage] = useState('');
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -262,9 +264,13 @@ export default function DirectMessages({
       if (!res.ok) return;
       const convos = await res.json();
       const previewUpdates = {};
+      const unreadUpdates = {};
 
       for (const item of convos) {
-        const { peer: peerUsername, lastMessage } = item;
+        const { peer: peerUsername, lastMessage, unreadCount } = item;
+        if (peerUsername) {
+          unreadUpdates[peerUsername] = unreadCount || 0;
+        }
         if (!lastMessage) continue;
 
         const peerUser = allUsers.find(u => u.username === peerUsername);
@@ -320,6 +326,7 @@ export default function DirectMessages({
       }
 
       setConversationPreviews(prev => ({ ...prev, ...previewUpdates }));
+      setPeerUnreadMap(prev => ({ ...prev, ...unreadUpdates }));
     } catch (err) {
       console.error('Failed to load conversations overview:', err);
     }
@@ -554,10 +561,15 @@ export default function DirectMessages({
     }).catch(err => console.error('Error marking seen:', err));
   };
 
-  // Auto mark seen on opening chat
+  // Auto mark seen on opening chat & clear unread count for selected peer
   useEffect(() => {
     if (selectedPeer?.username) {
       triggerMarkSeen(selectedPeer.username);
+      const unread = peerUnreadMap[selectedPeer.username] || 0;
+      if (unread > 0 && onClearChatUnread) {
+        onClearChatUnread(selectedPeer.username, unread);
+      }
+      setPeerUnreadMap(prev => ({ ...prev, [selectedPeer.username]: 0 }));
     }
   }, [selectedPeer?.username]);
 
@@ -569,6 +581,16 @@ export default function DirectMessages({
         const data = JSON.parse(event.data);
         if (data.type === 'DIRECT_MESSAGE') {
           const msg = data.message;
+          if (msg && msg.recipient === currentUser?.username) {
+            if (selectedPeer?.username !== msg.sender) {
+              setPeerUnreadMap(prev => ({
+                ...prev,
+                [msg.sender]: (prev[msg.sender] || 0) + 1
+              }));
+            }
+          }
+          loadConversationsOverview();
+
           if (
             (msg.sender === selectedPeer?.username && msg.recipient === currentUser?.username) ||
             (msg.sender === currentUser?.username && msg.recipient === selectedPeer?.username)
@@ -918,7 +940,25 @@ export default function DirectMessages({
     }
   };
 
-  const peers = allUsers.filter(u => u.username !== currentUser.username);
+  const peers = useMemo(() => {
+    const list = allUsers.filter(u => u.username !== currentUser.username);
+    return list.sort((a, b) => {
+      const unreadA = peerUnreadMap[a.username] || 0;
+      const unreadB = peerUnreadMap[b.username] || 0;
+      if (unreadA > 0 && unreadB === 0) return -1;
+      if (unreadB > 0 && unreadA === 0) return 1;
+      if (unreadA !== unreadB) return unreadB - unreadA;
+
+      const timeA = conversationPreviews[a.username]?.timestamp ? new Date(conversationPreviews[a.username].timestamp).getTime() : 0;
+      const timeB = conversationPreviews[b.username]?.timestamp ? new Date(conversationPreviews[b.username].timestamp).getTime() : 0;
+      if (timeA !== timeB) return timeB - timeA;
+
+      const nameA = a.displayName || a.username;
+      const nameB = b.displayName || b.username;
+      return nameA.localeCompare(nameB);
+    });
+  }, [allUsers, currentUser.username, peerUnreadMap, conversationPreviews]);
+
   const canSend = !sending && !mediaUploading && (Boolean(inputMessage && inputMessage.trim()) || Boolean(attachedMedia && attachedMedia.mediaId));
 
   // ── CONTACTS LIST SCREEN ─────────────────────────────────────
@@ -940,6 +980,7 @@ export default function DirectMessages({
           <div className="dm-contacts-list">
             {peers.map(peer => {
               const preview = conversationPreviews[peer.username];
+              const unreadCount = peerUnreadMap[peer.username] || 0;
               const isPeerActive = peer.isOnline || (peer.lastSeen && (Date.now() - new Date(peer.lastSeen).getTime()) < 120000);
               const lastSeenText = formatLastSeen(peer.lastSeen, peer.isOnline);
               const messageTime = preview?.timestamp ? formatMessageTime(preview.timestamp) : '';
@@ -947,7 +988,7 @@ export default function DirectMessages({
               return (
                 <button
                   key={peer.username}
-                  className="dm-contact-card"
+                  className={`dm-contact-card ${unreadCount > 0 ? 'has-unread' : ''}`}
                   onClick={() => setSelectedPeer(peer)}
                   style={{
                     display: 'flex',
@@ -1015,16 +1056,23 @@ export default function DirectMessages({
 
                   {/* Contact Info & Message Preview */}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {/* Top Row: Name + Time */}
+                    {/* Top Row: Name + Time & Unread Badge */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span style={{ fontWeight: '600', color: '#f8fafc', fontSize: '0.94rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: unreadCount > 0 ? '700' : '600', color: '#f8fafc', fontSize: '0.94rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {peer.displayName || peer.username}
                       </span>
-                      {messageTime && (
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0 }}>
-                          {messageTime}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        {messageTime && (
+                          <span style={{ fontSize: '0.72rem', color: unreadCount > 0 ? '#ee7882' : '#94a3b8', fontWeight: unreadCount > 0 ? '600' : '400', flexShrink: 0 }}>
+                            {messageTime}
+                          </span>
+                        )}
+                        {unreadCount > 0 && (
+                          <span className="contact-unread-badge" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Contact Number below Name (if present) */}
@@ -1040,7 +1088,8 @@ export default function DirectMessages({
                     {/* Middle Row: Decrypted Last Message Preview */}
                     <div style={{
                       fontSize: '0.82rem',
-                      color: preview ? '#cbd5e1' : '#64748b',
+                      color: unreadCount > 0 ? '#ffffff' : (preview ? '#cbd5e1' : '#64748b'),
+                      fontWeight: unreadCount > 0 ? '600' : '400',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
@@ -1050,7 +1099,7 @@ export default function DirectMessages({
                     }}>
                       {preview ? (
                         <>
-                          <span style={{ color: preview.isMine ? '#ee7882' : '#94a3b8', fontWeight: preview.isMine ? '600' : '400' }}>
+                          <span style={{ color: preview.isMine ? '#ee7882' : (unreadCount > 0 ? '#fca5a5' : '#94a3b8'), fontWeight: (preview.isMine || unreadCount > 0) ? '600' : '400' }}>
                             {preview.isMine ? 'You: ' : ''}
                           </span>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1736,6 +1785,7 @@ export default function DirectMessages({
           msgMeta={activePopupMsg.msgMeta}
           isMine={activePopupMsg.isMine}
           anchorRect={activePopupMsg.anchorRect}
+          allUsers={allUsers}
           onClose={() => setActivePopupMsg(null)}
           onReact={(emoji) => toggleReaction(activePopupMsg.msg.id, emoji)}
           onReply={() => {

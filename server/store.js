@@ -518,6 +518,7 @@ class ZeroKnowledgeStore {
 
   getRecentConversations(username) {
     const conversationMap = new Map();
+    const unreadMap = new Map();
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const msg = this.messages[i];
       if (msg.sender === username || msg.recipient === username) {
@@ -525,11 +526,18 @@ class ZeroKnowledgeStore {
         if (!conversationMap.has(peer)) {
           conversationMap.set(peer, msg);
         }
+        if (msg.recipient === username && !msg.seen && !msg.isDeleted) {
+          unreadMap.set(peer, (unreadMap.get(peer) || 0) + 1);
+        }
       }
     }
     const result = [];
     for (const [peer, lastMessage] of conversationMap.entries()) {
-      result.push({ peer, lastMessage });
+      result.push({
+        peer,
+        lastMessage,
+        unreadCount: unreadMap.get(peer) || 0
+      });
     }
     return result;
   }
@@ -727,6 +735,7 @@ class ZeroKnowledgeStore {
       pollId,
       expiresAt,
       status: 'sent',
+      seenBy: [], // [{ username, seenAt }]
       isDeleted: false,
       timestamp: new Date().toISOString()
     };
@@ -737,6 +746,31 @@ class ZeroKnowledgeStore {
     this.scheduleSave();
     this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
     return msg;
+  }
+
+  markGroupMessagesSeen(groupId, readerUsername) {
+    const msgs = this.groupMessages.get(groupId) || [];
+    const now = new Date().toISOString();
+    const updatedMessages = [];
+
+    for (const msg of msgs) {
+      if (msg.sender !== readerUsername && !msg.isDeleted) {
+        if (!Array.isArray(msg.seenBy)) {
+          msg.seenBy = [];
+        }
+        const alreadySeen = msg.seenBy.some(s => s.username === readerUsername);
+        if (!alreadySeen) {
+          msg.seenBy.push({ username: readerUsername, seenAt: now });
+          updatedMessages.push({ messageId: msg.id, sender: msg.sender, seenBy: msg.seenBy });
+          this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
+        }
+      }
+    }
+
+    if (updatedMessages.length > 0) {
+      this.scheduleSave();
+    }
+    return updatedMessages;
   }
 
   deleteGroupMessage(groupId, messageId, requester) {

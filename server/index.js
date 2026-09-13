@@ -520,6 +520,29 @@ app.get('/api/groups/:groupId/messages', (req, res) => {
   res.json(db.getGroupMessages(req.params.groupId));
 });
 
+// Mark Group Messages as Seen
+app.post('/api/groups/:groupId/mark-seen', (req, res) => {
+  const { groupId } = req.params;
+  const { reader } = req.body;
+  if (!reader) {
+    return res.status(400).json({ error: 'reader required' });
+  }
+
+  const updatedMessages = db.markGroupMessagesSeen(groupId, reader);
+  if (updatedMessages.length > 0) {
+    const group = db.getGroup(groupId);
+    broadcastToGroup(group, {
+      type: 'GROUP_MESSAGES_SEEN',
+      groupId,
+      reader,
+      updatedMessages
+    });
+    notifyInspector();
+  }
+
+  res.json({ success: true, count: updatedMessages.length });
+});
+
 // Delete Group Message
 app.delete('/api/groups/:groupId/messages/:messageId', (req, res) => {
   const { groupId, messageId } = req.params;

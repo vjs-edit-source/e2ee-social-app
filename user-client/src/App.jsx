@@ -818,6 +818,7 @@ export default function App() {
                 onChatStateChange={setIsDMChatOpen}
                 initialSelectedPeer={selectedDirectPeer}
                 onStartCall={(peer, isVideo) => setActiveCall({ isIncoming: false, peer, isVideo })}
+                onClearChatUnread={(peer, count) => setUnreadChatsCount(prev => Math.max(0, prev - (count || 1)))}
               />
             )}
 
