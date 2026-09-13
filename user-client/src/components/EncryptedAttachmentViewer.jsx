@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileCode,
   Download,
@@ -93,7 +94,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   // Full Screen Big / Actual Size Lightbox Modal
   const renderLightbox = () => {
     if (!isLightboxOpen) return null;
-    return (
+    return createPortal(
       <div className="lightbox-overlay" onClick={() => setIsLightboxOpen(false)}>
         <div className="lightbox-container" onClick={e => e.stopPropagation()}>
           {/* Top Controls Bar */}
@@ -154,7 +155,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
             ) : null}
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 
