@@ -344,21 +344,30 @@ class ZeroKnowledgeStore {
   }
 
   getUser(username) {
-    return this.users.get(username) || null;
+    if (!username) return null;
+    return this.users.get(username) || this.findUserByUsername(username) || null;
   }
 
   updateUserPresence(username, isOnline) {
-    const user = this.users.get(username);
+    if (!username) return;
+    let user = this.users.get(username);
+    if (!user) {
+      user = this.findUserByUsername(username);
+    }
     if (user) {
       user.isOnline = !!isOnline;
       user.lastSeen = new Date().toISOString();
-      this.users.set(username, user);
+      this.users.set(user.username, user);
       this.scheduleSave();
-      this.syncDocToMongo('users', { username }, user);
+      this.syncDocToMongo('users', { username: user.username }, user);
     }
   }
 
   getAllUsers(connectedUsersSet = null) {
+    const connectedLower = connectedUsersSet
+      ? new Set(Array.from(connectedUsersSet).map(s => String(s).toLowerCase().trim()))
+      : null;
+
     return Array.from(this.users.values()).map(u => ({
       username: u.username,
       displayName: u.displayName || u.username,
@@ -370,7 +379,7 @@ class ZeroKnowledgeStore {
       phoneNumber: u.phoneNumber || null,
       registeredAt: u.registeredAt || new Date().toISOString(),
       lastSeen: u.lastSeen || u.registeredAt || new Date().toISOString(),
-      isOnline: connectedUsersSet ? connectedUsersSet.has(u.username) : !!u.isOnline
+      isOnline: connectedLower ? connectedLower.has(u.username.toLowerCase().trim()) : !!u.isOnline
     }));
   }
 

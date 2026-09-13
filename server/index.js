@@ -278,11 +278,14 @@ app.post('/api/auth/verify-otp', (req, res) => {
 
 // 2. Fetch Directory of Public Keys
 app.get('/api/users', (req, res) => {
-  const onlineUsers = new Set(
-    Array.from(connectedClients.entries())
-      .filter(([_, sockets]) => sockets && sockets.size > 0)
-      .map(([uname]) => uname)
-  );
+  const onlineUsers = new Set();
+  for (const [uname, sockets] of connectedClients.entries()) {
+    if (sockets && sockets.size > 0 && uname !== '__inspector__') {
+      onlineUsers.add(uname);
+      const canonical = db.findUserByUsername(uname);
+      if (canonical) onlineUsers.add(canonical.username);
+    }
+  }
   res.json(db.getAllUsers(onlineUsers));
 });
 
@@ -791,7 +794,9 @@ app.get('/api/inspector', (req, res) => {
 // ── WEBSOCKET SERVER ────────────────────────────────────────
 wss.on('connection', (ws, req) => {
   const urlParams = new URLSearchParams(req.url.replace(/^.*\?/, ''));
-  const username = urlParams.get('user');
+  const rawUser = urlParams.get('user');
+  const canonical = rawUser ? db.findUserByUsername(rawUser) : null;
+  const username = canonical ? canonical.username : (rawUser ? rawUser.trim() : null);
 
   if (username) {
     if (!connectedClients.has(username)) {

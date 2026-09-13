@@ -1190,7 +1190,7 @@ export default function Groups({
       : (selectedGroup.members && selectedGroup.members.length > 0 ? selectedGroup.members : [selectedGroup.creator]);
 
     const activeGroupMembers = groupMemberNames.filter(mName => {
-      const u = allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+      const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
       return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
     });
 
@@ -2780,11 +2780,11 @@ export default function Groups({
             const groupRole = group.roles?.[currentUser.username] || (isGroupOwner ? 'admin' : 'member');
             const memberNames = group.isCommunity ? allUsers.map(u => u.username) : group.members || [group.creator];
             const activeCardMembers = memberNames.filter(mName => {
-              const u = allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+              const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
               return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
             });
             const cardActiveCount = activeCardMembers.length;
-            const previewMembers = memberNames.slice(0, 4);
+            const previewMembers = cardActiveCount > 0 ? activeCardMembers.slice(0, 4) : memberNames.slice(0, 4);
 
             return (
               <div
@@ -2874,7 +2874,7 @@ export default function Groups({
                     <div className="group-card-members-row">
                       <div className="member-avatar-stack">
                         {previewMembers.map((mName, i) => {
-                          const mUser = allUsers.find(u => u.username === mName);
+                          const mUser = allUsers.find(u => u.username === mName) || allUsers.find(u => u.username.toLowerCase() === mName.toLowerCase());
                           return (
                             mUser?.avatarUrl ? (
                               <img

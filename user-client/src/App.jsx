@@ -276,6 +276,26 @@ export default function App() {
 
   useEffect(() => {
     loadUsersDirectory();
+
+    // Fast periodic presence refresh (every 10s) to keep online status & lastSeen in sync
+    const interval = setInterval(() => {
+      loadUsersDirectory();
+    }, 10000);
+
+    const handleSync = () => {
+      if (document.visibilityState === 'visible') {
+        loadUsersDirectory();
+      }
+    };
+
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
+    };
   }, [serverUrl]);
 
   // Login / Switch User Handler
@@ -377,6 +397,7 @@ export default function App() {
           setWsClient(ws);
           setEngineOnline(true);
           console.log(`[WS] Connected in real-time as ${currentUser.username}`);
+          loadUsersDirectory();
 
           // Send heartbeat ping every 15s to keep cloud & cellular sockets open
           clearInterval(pingTimer);
@@ -405,9 +426,19 @@ export default function App() {
               }
             } else if (data.type === 'USER_PRESENCE') {
               setAllUsers(prev => {
-                const exists = prev.some(u => u.username === data.username);
+                const targetLower = (data.username || '').toLowerCase().trim();
+                const exists = prev.some(u => u.username.toLowerCase().trim() === targetLower);
                 if (exists) {
-                  return prev.map(u => u.username === data.username ? { ...u, isOnline: !!data.isOnline, lastSeen: data.lastSeen || new Date().toISOString() } : u);
+                  return prev.map(u => {
+                    if (u.username.toLowerCase().trim() === targetLower) {
+                      return {
+                        ...u,
+                        isOnline: !!data.isOnline,
+                        lastSeen: data.lastSeen || new Date().toISOString()
+                      };
+                    }
+                    return u;
+                  });
                 } else {
                   loadUsersDirectory();
                   return prev;

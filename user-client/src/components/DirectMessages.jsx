@@ -941,7 +941,8 @@ export default function DirectMessages({
   };
 
   const peers = useMemo(() => {
-    const list = allUsers.filter(u => u.username !== currentUser.username);
+    const myNameLower = (currentUser?.username || '').toLowerCase().trim();
+    const list = allUsers.filter(u => u.username !== currentUser?.username && u.username.toLowerCase().trim() !== myNameLower);
     return list.sort((a, b) => {
       const unreadA = peerUnreadMap[a.username] || 0;
       const unreadB = peerUnreadMap[b.username] || 0;
@@ -1129,7 +1130,9 @@ export default function DirectMessages({
   }
 
   // ── CONVERSATION SCREEN ───────────────────────────────────────
-  const activePeer = selectedPeer ? (allUsers.find(u => u.username === selectedPeer.username) || selectedPeer) : null;
+  const activePeer = selectedPeer
+    ? (allUsers.find(u => u.username === selectedPeer.username) || allUsers.find(u => u.username.toLowerCase().trim() === selectedPeer.username.toLowerCase().trim()) || selectedPeer)
+    : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 
   const visibleMessages = searchQuery.trim()
