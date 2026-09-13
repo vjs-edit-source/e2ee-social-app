@@ -287,7 +287,7 @@ body.chat-open-locked {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
+  padding: 5px;
   background: rgba(14, 4, 7, 0.72);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -295,6 +295,7 @@ body.chat-open-locked {
   border-radius: 9999px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(224, 108, 117, 0.12);
   max-width: calc(100vw - 24px);
+  box-sizing: border-box;
 }
 
 .bottom-nav-item {
@@ -303,7 +304,9 @@ body.chat-open-locked {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 6px 14px;
+  padding: 6px 12px;
+  min-width: 50px;
+  box-sizing: border-box;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9999px;
@@ -355,12 +358,14 @@ body.chat-open-locked {
 @media (max-width: 480px) {
   .bottom-nav-container {
     bottom: 10px;
-    padding: 4px 6px;
+    padding: 4px;
     gap: 2px;
+    max-width: calc(100vw - 16px);
   }
 
   .bottom-nav-item {
-    padding: 5px 10px;
+    padding: 5px 8px;
+    min-width: 42px;
     font-size: 0.64rem;
     gap: 2px;
   }
