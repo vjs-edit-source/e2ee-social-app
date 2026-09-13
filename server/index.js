@@ -324,6 +324,41 @@ app.get('/api/posts', (req, res) => {
   res.json(db.getPosts());
 });
 
+// Like / Unlike Post
+app.post('/api/posts/:postId/like', (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  const post = db.likePost(req.params.postId, username);
+  if (!post) return res.status(404).json({ error: 'Post not found' });
+
+  broadcast({ type: 'POST_UPDATED', post });
+  notifyInspector();
+  res.json({ success: true, post });
+});
+
+// Add Comment on Post
+app.post('/api/posts/:postId/comment', (req, res) => {
+  const { author, authorDisplayName, text } = req.body;
+  if (!author || !text) return res.status(400).json({ error: 'Author and comment text required' });
+  const result = db.addPostComment(req.params.postId, author, authorDisplayName, text);
+  if (!result) return res.status(404).json({ error: 'Post not found' });
+
+  broadcast({ type: 'POST_UPDATED', post: result.post });
+  notifyInspector();
+  res.json({ success: true, post: result.post, comment: result.comment });
+});
+
+// Share Post
+app.post('/api/posts/:postId/share', (req, res) => {
+  const { username } = req.body;
+  const post = db.sharePost(req.params.postId, username || 'anonymous');
+  if (!post) return res.status(404).json({ error: 'Post not found' });
+
+  broadcast({ type: 'POST_UPDATED', post });
+  notifyInspector();
+  res.json({ success: true, post });
+});
+
 // 5. Send Encrypted Direct Message (with Double Ratchet support)
 app.post('/api/messages', (req, res) => {
   const { sender, recipient, ciphertext, iv, ratchetSeq, dhKeyB64 } = req.body;

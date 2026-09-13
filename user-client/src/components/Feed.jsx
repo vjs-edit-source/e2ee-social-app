@@ -25,7 +25,10 @@ import {
   Paperclip,
   FileText,
   RotateCcw,
-  LayoutGrid
+  LayoutGrid,
+  Heart,
+  MessageCircle,
+  Share2
 } from 'lucide-react';
 import {
   generatePostKey,
@@ -40,6 +43,7 @@ import {
 } from '../crypto/e2ee';
 import { localSearchIndex } from '../search/searchIndex';
 import { formatTruncatedFileName } from '../utils/fileUtils';
+import { formatRelativeTime } from '../utils/dateUtils';
 import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import StatusTray from './StatusTray';
@@ -71,6 +75,10 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [activeTool, setActiveTool] = useState(null); // 'emoji' | 'topics' | 'format' | 'expiry' | null
   const [showPreview, setShowPreview] = useState(false);
   const [postExpiry, setPostExpiry] = useState(0); // 0 = permanent, 86400 = 24h, 604800 = 7d
+  const [expandedComments, setExpandedComments] = useState({});
+  const [commentInputs, setCommentInputs] = useState({});
+  const [submittingComment, setSubmittingComment] = useState({});
+  const [shareToast, setShareToast] = useState(null);
   const textareaRef = useRef(null);
   const uploaderRef = useRef(null);
 
@@ -146,6 +154,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             if (prev.some(p => p.id === data.post.id)) return prev;
             return [data.post, ...prev];
           });
+        } else if (data.type === 'POST_UPDATED' && data.post) {
+          setPosts(prev => prev.map(p => p.id === data.post.id ? { ...p, ...data.post } : p));
         }
       } catch (e) {}
     };
@@ -394,6 +404,122 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       alert(err.message || 'Failed to send post. Please try again.');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const toggleComments = (postId) => {
+    setExpandedComments(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  };
+
+  const handleToggleLike = async (postId) => {
+    if (!currentUser) return;
+    // Optimistic update
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const currentLikes = p.likes || [];
+      const hasLiked = currentLikes.includes(currentUser.username);
+      const newLikes = hasLiked
+        ? currentLikes.filter(u => u !== currentUser.username)
+        : [...currentLikes, currentUser.username];
+      return { ...p, likes: newLikes };
+    }));
+
+    try {
+      const res = await fetch(`${serverUrl}/api/posts/${postId}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.post) {
+          setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...data.post } : p));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle like:', err);
+    }
+  };
+
+  const handleAddComment = async (e, postId) => {
+    e.preventDefault();
+    const commentText = (commentInputs[postId] || '').trim();
+    if (!commentText || !currentUser) return;
+
+    setSubmittingComment(prev => ({ ...prev, [postId]: true }));
+    try {
+      const res = await fetch(`${serverUrl}/api/posts/${postId}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          author: currentUser.username,
+          authorDisplayName: currentUser.displayName || currentUser.username,
+          text: commentText
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.post) {
+          setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...data.post } : p));
+        }
+        setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+      }
+    } catch (err) {
+      console.error('Failed to post comment:', err);
+    } finally {
+      setSubmittingComment(prev => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  const handleSharePost = async (post) => {
+    if (!currentUser) return;
+    const shareUrl = `${window.location.origin}/#post-${post.id}`;
+    let sharedSuccessfully = false;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Post on E2EE Social',
+          text: 'Check out this post',
+          url: shareUrl
+        });
+        sharedSuccessfully = true;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('Navigator share error:', err);
+        }
+      }
+    }
+
+    if (!sharedSuccessfully) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareToast('Link copied to clipboard!');
+        setTimeout(() => setShareToast(null), 3000);
+        sharedSuccessfully = true;
+      } catch (err) {
+        setShareToast('Post link shared!');
+        setTimeout(() => setShareToast(null), 3000);
+      }
+    }
+
+    try {
+      const res = await fetch(`${serverUrl}/api/posts/${post.id}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.post) {
+          setPosts(prev => prev.map(p => p.id === post.id ? { ...p, ...data.post } : p));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to record share:', err);
     }
   };
 
@@ -923,11 +1049,145 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                     )}
                   </div>
                 </div>
+
+                {/* Post Actions: Like, Comment, Share */}
+                <div className="post-actions-bar">
+                  <button
+                    type="button"
+                    className={`post-action-btn like-btn ${post.likes?.includes(currentUser.username) ? 'liked' : ''}`}
+                    onClick={() => handleToggleLike(post.id)}
+                    title={post.likes?.includes(currentUser.username) ? 'Unlike post' : 'Like post'}
+                  >
+                    <Heart
+                      size={17}
+                      fill={post.likes?.includes(currentUser.username) ? '#ee7882' : 'none'}
+                      color={post.likes?.includes(currentUser.username) ? '#ee7882' : '#94a3b8'}
+                    />
+                    <span>{post.likes?.length || 0}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`post-action-btn comment-btn ${expandedComments[post.id] ? 'active' : ''}`}
+                    onClick={() => toggleComments(post.id)}
+                    title="View & add comments"
+                  >
+                    <MessageCircle
+                      size={17}
+                      color={expandedComments[post.id] || (post.comments?.length > 0) ? '#ee7882' : '#94a3b8'}
+                    />
+                    <span>{post.comments?.length || 0}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="post-action-btn share-btn"
+                    onClick={() => handleSharePost(post)}
+                    title="Share post"
+                  >
+                    <Share2 size={17} color="#94a3b8" />
+                    <span>{post.shares?.length || 0}</span>
+                  </button>
+                </div>
+
+                {/* Collapsible Comments Section */}
+                {expandedComments[post.id] && (
+                  <div className="post-comments-section">
+                    <div className="post-comments-list">
+                      {(!post.comments || post.comments.length === 0) ? (
+                        <div className="empty-comments-hint">No comments yet. Start the conversation!</div>
+                      ) : (
+                        post.comments.map((comment) => {
+                          const commentAuthorObj = allUsers.find(u => u.username === comment.author) || {};
+                          return (
+                            <div key={comment.id} className="post-comment-item">
+                              {commentAuthorObj.avatarUrl ? (
+                                <img
+                                  src={commentAuthorObj.avatarUrl}
+                                  alt=""
+                                  className="comment-avatar"
+                                  style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: `1px solid ${commentAuthorObj.avatarColor || '#e06c75'}`
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  className="comment-avatar"
+                                  style={{
+                                    backgroundColor: commentAuthorObj.avatarColor || '#e06c75',
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '700',
+                                    color: '#fff'
+                                  }}
+                                >
+                                  {(comment.authorDisplayName || comment.author || '?')[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div className="comment-bubble-wrap">
+                                <div className="comment-meta-row">
+                                  <span className="comment-author-name">
+                                    {comment.authorDisplayName || commentAuthorObj.displayName || comment.author}
+                                  </span>
+                                  <span className="comment-time-stamp">
+                                    {formatRelativeTime(comment.timestamp)}
+                                  </span>
+                                </div>
+                                <div className="comment-text-content">{comment.text}</div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <form
+                      className="post-comment-input-bar"
+                      onSubmit={(e) => handleAddComment(e, post.id)}
+                    >
+                      <input
+                        type="text"
+                        className="post-comment-input"
+                        placeholder="Write a friendly comment..."
+                        value={commentInputs[post.id] || ''}
+                        onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                        maxLength={500}
+                      />
+                      <button
+                        type="submit"
+                        className="post-comment-submit-btn"
+                        disabled={submittingComment[post.id] || !(commentInputs[post.id] && commentInputs[post.id].trim())}
+                      >
+                        {submittingComment[post.id] ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Send size={14} />
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                )}
               </div>
             );
           })
         )}
       </div>
+
+      {shareToast && (
+        <div className="share-toast-pill animate-fade-in">
+          <Check size={14} color="#10b981" />
+          <span>{shareToast}</span>
+        </div>
+      )}
     </div>
   );
 }

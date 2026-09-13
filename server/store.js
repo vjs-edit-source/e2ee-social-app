@@ -385,6 +385,9 @@ class ZeroKnowledgeStore {
       mediaId,
       isPublic: isPublic !== false,
       postKeyB64: postKeyB64 || null,
+      likes: [],
+      comments: [],
+      shares: [],
       timestamp: new Date().toISOString()
     };
     this.posts.unshift(post);
@@ -394,7 +397,59 @@ class ZeroKnowledgeStore {
   }
 
   getPosts() {
-    return this.posts;
+    return this.posts.map(p => ({
+      ...p,
+      likes: p.likes || [],
+      comments: p.comments || [],
+      shares: p.shares || []
+    }));
+  }
+
+  likePost(postId, username) {
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) return null;
+
+    if (!post.likes) post.likes = [];
+    const index = post.likes.indexOf(username);
+    if (index > -1) {
+      post.likes.splice(index, 1); // Unlike
+    } else {
+      post.likes.push(username);    // Like
+    }
+    this.scheduleSave();
+    this.syncDocToMongo('posts', { id: post.id }, post);
+    return post;
+  }
+
+  addPostComment(postId, author, authorDisplayName, text) {
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) return null;
+
+    if (!post.comments) post.comments = [];
+    const comment = {
+      id: `pcomm_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      author,
+      authorDisplayName: authorDisplayName || author,
+      text: (text || '').trim(),
+      timestamp: new Date().toISOString()
+    };
+    post.comments.push(comment);
+    this.scheduleSave();
+    this.syncDocToMongo('posts', { id: post.id }, post);
+    return { post, comment };
+  }
+
+  sharePost(postId, username) {
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) return null;
+
+    if (!post.shares) post.shares = [];
+    if (!post.shares.includes(username)) {
+      post.shares.push(username);
+    }
+    this.scheduleSave();
+    this.syncDocToMongo('posts', { id: post.id }, post);
+    return post;
   }
 
   // ── DIRECT MESSAGES ───────────────────────────────────────
