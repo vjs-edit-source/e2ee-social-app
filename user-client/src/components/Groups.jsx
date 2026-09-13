@@ -1318,7 +1318,7 @@ export default function Groups({
         <div className="create-group-modal enter-community-modal" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <div className="modal-title-row">
-              <Globe size={18} color="#38bdf8" />
+              <Globe size={18} color="#ee7882" />
               <h3>Enter Community</h3>
             </div>
             <button className="modal-close-btn" onClick={() => !submittingJoin && setJoinModalGroup(null)}>
@@ -1331,7 +1331,7 @@ export default function Groups({
               {joinModalGroup.avatarUrl ? (
                 <img src={joinModalGroup.avatarUrl} alt={joinModalGroup.name} className="join-preview-avatar" />
               ) : (
-                <div className="join-preview-avatar" style={{ backgroundColor: joinModalGroup.avatarColor || '#38bdf8' }}>
+                <div className="join-preview-avatar" style={{ backgroundColor: joinModalGroup.avatarColor || '#e06c75' }}>
                   <Globe size={24} />
                 </div>
               )}
@@ -1345,7 +1345,7 @@ export default function Groups({
             </div>
 
             <div className="join-notice-box">
-              <Info size={16} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <Info size={16} color="#ee7882" style={{ flexShrink: 0, marginTop: '2px' }} />
               <span>
                 To keep this space authentic, entry requires admin confirmation.
                 An inbox confirmation request with your profile will be sent to the community admin.
@@ -1463,7 +1463,7 @@ export default function Groups({
         <div className="create-group-modal user-profile-modal" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <div className="modal-title-row">
-              <ShieldCheck size={18} color="#38bdf8" />
+              <ShieldCheck size={18} color="#ee7882" />
               <h3>User Profile Inspection</h3>
             </div>
             <button className="modal-close-btn" onClick={() => setShowProfileModalUser(null)}>
@@ -1478,12 +1478,12 @@ export default function Groups({
                   src={user.avatarUrl}
                   alt={user.username}
                   className="profile-modal-avatar"
-                  style={{ border: `2.5px solid ${user.avatarColor || '#38bdf8'}` }}
+                  style={{ border: `2.5px solid ${user.avatarColor || '#e06c75'}` }}
                 />
               ) : (
                 <div
                   className="profile-modal-avatar placeholder"
-                  style={{ backgroundColor: user?.avatarColor || '#38bdf8' }}
+                  style={{ backgroundColor: user?.avatarColor || '#e06c75' }}
                 >
                   {(user?.username || '?')[0].toUpperCase()}
                 </div>
@@ -1741,7 +1741,7 @@ export default function Groups({
                         className="header-menu-item"
                         onClick={() => { setDrawerTab('requests'); setShowMembersDrawer(true); setShowHeaderMenu(false); }}
                       >
-                        <UserPlus size={16} color="#38bdf8" />
+                        <UserPlus size={16} color="#ee7882" />
                         <div className="menu-item-text">
                           <strong>Entry Requests {pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}</strong>
                           <span>Review pending community entry requests</span>
@@ -2225,8 +2225,13 @@ export default function Groups({
           {selectedGroup.isCommunity && !isMember && !isAdmin ? (
             <div className="community-guest-join-bar">
               <div className="guest-join-info">
-                <Globe size={18} color="#38bdf8" />
-                <span>You are exploring <strong>{selectedGroup.name}</strong> as a guest.</span>
+                <div className="guest-pill-icon">
+                  <Globe size={17} />
+                </div>
+                <div className="guest-text-col">
+                  <span className="guest-primary-text">Guest Mode</span>
+                  <span className="guest-secondary-text">Enter to send messages</span>
+                </div>
               </div>
               {hasPendingJoin ? (
                 <button
@@ -2975,7 +2980,7 @@ export default function Groups({
                                       height: '38px',
                                       borderRadius: '50%',
                                       objectFit: 'cover',
-                                      border: `2px solid ${reqUser.avatarColor || '#38bdf8'}`
+                                      border: `2px solid ${reqUser.avatarColor || '#e06c75'}`
                                     }}
                                   />
                                 ) : (
@@ -2985,7 +2990,7 @@ export default function Groups({
                                       width: '38px',
                                       height: '38px',
                                       borderRadius: '50%',
-                                      backgroundColor: reqUser.avatarColor || '#38bdf8',
+                                      backgroundColor: reqUser.avatarColor || '#e06c75',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
