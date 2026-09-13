@@ -20,6 +20,7 @@ import {
   Smile,
   ChevronDown,
   Search,
+  Globe,
   Camera,
   Check,
   CheckCheck,
@@ -83,9 +84,12 @@ export default function DirectMessages({
   onChatStateChange,
   initialSelectedPeer = null,
   onStartCall = null,
-  onClearChatUnread = null
+  onClearChatUnread = null,
+  userGroups = []
 }) {
   const [selectedPeer, setSelectedPeer] = useState(initialSelectedPeer);
+  const [contactsSearchQuery, setContactsSearchQuery] = useState('');
+  const [contactsOnlyBothAccess, setContactsOnlyBothAccess] = useState(false);
   const [sharedKeyMap, setSharedKeyMap] = useState({});
   const [messages, setMessages] = useState([]);
   const [decryptedMsgMap, setDecryptedMsgMap] = useState(() => decryptionCache.getAllDirectMessages());
@@ -1019,31 +1023,134 @@ export default function DirectMessages({
     });
   }, [allUsers, currentUser.username, peerUnreadMap, conversationPreviews]);
 
+  const peerAccessMap = useMemo(() => {
+    const map = {};
+    for (const peer of peers) {
+      const uName = (peer.username || '').toLowerCase().trim();
+      const communities = (userGroups || []).filter(g =>
+        g.isCommunity && (
+          (g.members && g.members.some(m => (m || '').toLowerCase().trim() === uName)) ||
+          (g.creator && g.creator.toLowerCase().trim() === uName)
+        )
+      );
+      const groups = (userGroups || []).filter(g =>
+        !g.isCommunity && (
+          (g.members && g.members.some(m => (m || '').toLowerCase().trim() === uName)) ||
+          (g.creator && g.creator.toLowerCase().trim() === uName)
+        )
+      );
+      map[peer.username] = {
+        communities,
+        groups,
+        communitiesCount: communities.length,
+        groupsCount: groups.length,
+        hasBothAccess: communities.length > 0 && groups.length > 0
+      };
+    }
+    return map;
+  }, [peers, userGroups]);
+
+  const bothAccessPeersCount = useMemo(() => {
+    return Object.values(peerAccessMap).filter(a => a.hasBothAccess).length;
+  }, [peerAccessMap]);
+
+  const filteredPeers = useMemo(() => {
+    let list = peers;
+    if (contactsOnlyBothAccess) {
+      list = list.filter(p => peerAccessMap[p.username]?.hasBothAccess);
+    }
+    if (contactsSearchQuery.trim()) {
+      const q = contactsSearchQuery.toLowerCase().trim();
+      list = list.filter(p => {
+        const nameMatch = (p.displayName || '').toLowerCase().includes(q);
+        const userMatch = (p.username || '').toLowerCase().includes(q);
+        const phoneMatch = (p.phoneNumber || '').toLowerCase().includes(q);
+        const bioMatch = (p.bio || '').toLowerCase().includes(q);
+        const access = peerAccessMap[p.username];
+        const commMatch = access?.communities?.some(c => c.name.toLowerCase().includes(q));
+        const grpMatch = access?.groups?.some(g => g.name.toLowerCase().includes(q));
+        const bothMatch = (q.includes('both') || q.includes('access')) && access?.hasBothAccess;
+        const commKeyword = (q.includes('community') || q.includes('public')) && (access?.communitiesCount || 0) > 0;
+        const grpKeyword = (q.includes('group') || q.includes('private')) && (access?.groupsCount || 0) > 0;
+        return nameMatch || userMatch || phoneMatch || bioMatch || commMatch || grpMatch || bothMatch || commKeyword || grpKeyword;
+      });
+    }
+    return list;
+  }, [peers, contactsSearchQuery, contactsOnlyBothAccess, peerAccessMap]);
+
   const canSend = !sending && !mediaUploading && (Boolean(inputMessage && inputMessage.trim()) || Boolean(attachedMedia && attachedMedia.mediaId));
 
   // ── CONTACTS LIST SCREEN ─────────────────────────────────────
   if (!selectedPeer) {
     return (
       <div className="dm-contacts-screen">
-        <div className="dm-contacts-header">
-          <User size={20} />
-          <h2>Contacts</h2>
+        {/* Contacts Header with Count & Dual Access Toggle */}
+        <div className="dm-contacts-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <User size={20} color="#ee7882" />
+            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>Contacts</h2>
+            <span style={{ fontSize: '0.75rem', color: '#a69ea2', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 8px', borderRadius: '12px' }}>
+              {peers.length}
+            </span>
+          </div>
+
+          {bothAccessPeersCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setContactsOnlyBothAccess(prev => !prev)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.12)',
+                color: contactsOnlyBothAccess ? '#ffffff' : '#34d399',
+                border: `1px solid ${contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.35)'}`,
+                borderRadius: '16px',
+                padding: '4px 12px',
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                fontWeight: 600,
+                transition: 'all 0.15s ease'
+              }}
+              title="Filter contacts who have access to both communities and groups"
+            >
+              <ShieldCheck size={13} color={contactsOnlyBothAccess ? '#ffffff' : '#10b981'} />
+              <span>Both Communities & Groups ({bothAccessPeersCount})</span>
+            </button>
+          )}
         </div>
 
-        {peers.length === 0 ? (
+        {/* Contacts Search Bar */}
+        <div className="group-search-bar" style={{ margin: '4px 16px 12px', borderRadius: '9999px' }}>
+          <Search size={15} color="#ee7882" />
+          <input
+            type="text"
+            placeholder="Search contacts, community or group members..."
+            value={contactsSearchQuery}
+            onChange={e => setContactsSearchQuery(e.target.value)}
+          />
+          {contactsSearchQuery && (
+            <button className="clear-search-btn" onClick={() => setContactsSearchQuery('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {filteredPeers.length === 0 ? (
           <div className="dm-contacts-empty">
             <Lock size={40} color="#94a3b8" />
-            <p>No contacts online yet.</p>
-            <span>Ask a friend to join and their name will appear here!</span>
+            <p>{contactsSearchQuery ? `No contacts matching "${contactsSearchQuery}"` : (contactsOnlyBothAccess ? 'No contacts found with access to both communities and groups.' : 'No contacts online yet.')}</p>
+            <span>{contactsSearchQuery ? 'Try searching another name or space.' : 'Ask a friend to join and their name will appear here!'}</span>
           </div>
         ) : (
           <div className="dm-contacts-list">
-            {peers.map(peer => {
+            {filteredPeers.map(peer => {
               const preview = conversationPreviews[peer.username];
               const unreadCount = peerUnreadMap[peer.username] || 0;
               const isPeerActive = peer.isOnline || (peer.lastSeen && (Date.now() - new Date(peer.lastSeen).getTime()) < 120000);
               const lastSeenText = formatLastSeen(peer.lastSeen, peer.isOnline);
               const messageTime = preview?.timestamp ? formatMessageTime(preview.timestamp) : '';
+              const access = peerAccessMap[peer.username];
 
               return (
                 <button
@@ -1058,7 +1165,8 @@ export default function DirectMessages({
                     width: '100%',
                     boxSizing: 'border-box',
                     textAlign: 'left',
-                    borderRadius: '9999px'
+                    borderRadius: '24px',
+                    margin: '2px 0'
                   }}
                 >
                   {/* Contact Avatar with Online Badge */}
@@ -1142,6 +1250,59 @@ export default function DirectMessages({
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {peer.phoneNumber}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Access to Communities & Groups Tag */}
+                    {access && (access.hasBothAccess || access.communitiesCount > 0 || access.groupsCount > 0) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '1px 0', flexWrap: 'wrap' }}>
+                        {access.hasBothAccess ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            borderRadius: '9999px',
+                            padding: '1px 8px',
+                            fontSize: '0.68rem',
+                            color: '#34d399',
+                            fontWeight: 600
+                          }} title="Has access to both Communities and Groups">
+                            <ShieldCheck size={10} color="#10b981" />
+                            <span>Both Spaces ({access.communitiesCount} Comm • {access.groupsCount} Grp)</span>
+                          </span>
+                        ) : access.communitiesCount > 0 ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            background: 'rgba(96, 165, 250, 0.10)',
+                            border: '1px solid rgba(96, 165, 250, 0.25)',
+                            borderRadius: '9999px',
+                            padding: '1px 7px',
+                            fontSize: '0.67rem',
+                            color: '#60a5fa'
+                          }}>
+                            <Globe size={9} />
+                            <span>{access.communitiesCount} Community</span>
+                          </span>
+                        ) : (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            background: 'rgba(244, 114, 182, 0.10)',
+                            border: '1px solid rgba(244, 114, 182, 0.25)',
+                            borderRadius: '9999px',
+                            padding: '1px 7px',
+                            fontSize: '0.67rem',
+                            color: '#f472b6'
+                          }}>
+                            <Users size={9} />
+                            <span>{access.groupsCount} Groups</span>
+                          </span>
+                        )}
                       </div>
                     )}
 

@@ -28,10 +28,10 @@ export default function Navigation({
           onClick={onOpenSearch}
           role="button"
           tabIndex={0}
-          title="Search decrypted posts, chats, and groups (Ctrl+K)"
+          title="Search contacts, chats, groups, and posts (Ctrl+K)"
         >
           <Search size={14} className="top-search-icon" />
-          <span className="top-search-placeholder">Search posts, chats, groups...</span>
+          <span className="top-search-placeholder">Search contacts, chats, groups...</span>
           <kbd className="top-search-kbd">Ctrl K</kbd>
         </div>
 

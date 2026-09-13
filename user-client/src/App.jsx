@@ -785,8 +785,16 @@ export default function App() {
       {showSearchModal && (
         <SearchModal
           onClose={() => setShowSearchModal(false)}
+          allUsers={allUsers}
+          userGroups={userGroups}
+          currentUser={currentUser}
           onNavigate={(hit) => {
-            if (hit.type === 'message') {
+            if (hit.type === 'contact') {
+              const targetName = hit.username;
+              const targetUser = allUsers.find(u => u.username === targetName) || hit;
+              setSelectedDirectPeer(targetUser);
+              setActiveTab('messages');
+            } else if (hit.type === 'message') {
               const targetName = hit.sender === currentUser?.username ? hit.recipient : hit.sender;
               const targetUser = allUsers.find(u => u.username === targetName) || { username: targetName };
               setSelectedDirectPeer(targetUser);
@@ -884,6 +892,7 @@ export default function App() {
                 allUsers={allUsers}
                 serverUrl={serverUrl}
                 wsClient={wsClient}
+                userGroups={userGroups}
                 onChatStateChange={setIsDMChatOpen}
                 initialSelectedPeer={selectedDirectPeer}
                 onStartCall={(peer, isVideo) => setActiveCall({ isIncoming: false, peer, isVideo })}
