@@ -19,22 +19,16 @@ function getFormatDisplayLabel(fileName, mimeType) {
   const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toUpperCase() : '';
   if (mimeType) {
     const m = mimeType.toLowerCase();
-    if (m.startsWith('image/')) return ext ? `${ext} Photo` : 'Photo';
-    if (m.startsWith('video/')) return ext ? `${ext} Video` : 'Video';
-    if (m.startsWith('audio/')) return ext ? `${ext} Audio` : 'Audio Recording';
-    if (m.includes('pdf')) return 'PDF Document';
-    if (m.includes('spreadsheet') || m.includes('excel') || ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return `${ext || 'Excel'} Spreadsheet`;
-    if (m.includes('word') || m.includes('document') || ext === 'DOCX' || ext === 'DOC') return `${ext || 'Word'} Document`;
-    if (m.includes('presentation') || m.includes('powerpoint') || ext === 'PPTX' || ext === 'PPT') return `${ext || 'PowerPoint'} Presentation`;
-    if (m.includes('zip') || m.includes('rar') || m.includes('7z') || m.includes('tar') || ext === 'ZIP') return `${ext || 'ZIP'} Archive`;
+    if (m.startsWith('image/')) return ext || 'PHOTO';
+    if (m.startsWith('video/')) return ext || 'VIDEO';
+    if (m.startsWith('audio/')) return ext || 'AUDIO';
+    if (m.includes('pdf')) return 'PDF';
+    if (m.includes('spreadsheet') || m.includes('excel') || ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return ext || 'EXCEL';
+    if (m.includes('word') || m.includes('document') || ext === 'DOCX' || ext === 'DOC') return ext || 'DOC';
+    if (m.includes('presentation') || m.includes('powerpoint') || ext === 'PPTX' || ext === 'PPT') return ext || 'PPT';
+    if (m.includes('zip') || m.includes('rar') || m.includes('7z') || m.includes('tar') || ext === 'ZIP') return ext || 'ZIP';
   }
-  if (ext === 'PDF') return 'PDF Document';
-  if (ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return `${ext} Spreadsheet`;
-  if (ext === 'DOCX' || ext === 'DOC') return `${ext} Document`;
-  if (ext === 'PPTX' || ext === 'PPT') return `${ext} Presentation`;
-  if (ext === 'ZIP' || ext === 'RAR' || ext === '7Z') return `${ext} Archive`;
-  if (ext) return `${ext} File`;
-  return 'File Attachment';
+  return ext || 'FILE';
 }
 
 export default function EncryptedAttachmentViewer({ objectUrl, originalName, mimeType, mediaId }) {
@@ -92,57 +86,72 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   };
 
   // Full Screen Big / Actual Size Lightbox Modal
+  // Full Screen Big / Actual Size Lightbox Modal
   const renderLightbox = () => {
     if (!isLightboxOpen) return null;
     return createPortal(
       <div className="lightbox-overlay" onClick={() => setIsLightboxOpen(false)}>
         <div className="lightbox-container" onClick={e => e.stopPropagation()}>
-          {/* Top Controls Bar */}
-          <div className="lightbox-header">
-            <div className="lightbox-file-info">
-              <span className="lightbox-filename" title={fileName}>{fileName}</span>
-              <span className="lightbox-badge">{formatLabel}</span>
-            </div>
-            <div className="lightbox-actions">
-              {isStandardImage && (
+          {/* Sleek Floating Top Controls Island */}
+          <div className="lightbox-floating-header-wrapper">
+            <div className="lightbox-header-capsule">
+              <div className="lightbox-file-info">
+                <div className="lightbox-media-icon-badge">
+                  {isStandardImage ? <ImageIcon size={14} /> : isVideo ? <Film size={14} /> : <FileText size={14} />}
+                </div>
+                <span className="lightbox-filename" title={fileName}>
+                  {formatTruncatedFileName(fileName, 18)}
+                </span>
+                <span className="lightbox-badge">{formatLabel}</span>
+              </div>
+
+              <div className="lightbox-actions">
+                {isStandardImage && (
+                  <button
+                    type="button"
+                    className={`lightbox-action-btn ${isZoomedActual ? 'active' : ''}`}
+                    onClick={() => setIsZoomedActual(z => !z)}
+                    title={isZoomedActual ? "Fit to screen view" : "View at 100% Actual Size"}
+                  >
+                    {isZoomedActual ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    <span className="lightbox-btn-label">{isZoomedActual ? 'Fit Screen' : 'Actual Size'}</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  className={`lightbox-btn ${isZoomedActual ? 'active' : ''}`}
-                  onClick={() => setIsZoomedActual(z => !z)}
-                  title={isZoomedActual ? "Fit to screen view" : "View at 100% Actual Size"}
+                  className="lightbox-action-btn download"
+                  onClick={handleDownload}
+                  title="Download original file"
                 >
-                  {isZoomedActual ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  <span>{isZoomedActual ? 'Fit Screen' : 'Actual Size'}</span>
+                  <Download size={15} />
+                  <span className="lightbox-btn-label">Download</span>
                 </button>
-              )}
-              <button
-                type="button"
-                className="lightbox-btn download"
-                onClick={handleDownload}
-                title="Download original file"
-              >
-                <Download size={16} />
-                <span>Download</span>
-              </button>
-              <button
-                type="button"
-                className="lightbox-close-btn"
-                onClick={() => setIsLightboxOpen(false)}
-                title="Close viewer (Esc)"
-              >
-                <X size={20} />
-              </button>
+                <button
+                  type="button"
+                  className="lightbox-action-btn close"
+                  onClick={() => setIsLightboxOpen(false)}
+                  title="Close viewer (Esc)"
+                >
+                  <X size={17} />
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Main Big Media Display */}
-          <div className={`lightbox-body ${isZoomedActual ? 'actual-size-mode' : 'fit-mode'}`}>
+          <div
+            className={`lightbox-body ${isZoomedActual ? 'actual-size-mode' : 'fit-mode'}`}
+            onClick={() => setIsLightboxOpen(false)}
+          >
             {isStandardImage ? (
               <img
                 src={objectUrl}
                 alt={fileName}
                 className={`lightbox-image ${isZoomedActual ? 'actual-size' : 'fit-screen'}`}
-                onClick={() => setIsZoomedActual(z => !z)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsZoomedActual(z => !z);
+                }}
                 title="Click to toggle fit / actual size"
               />
             ) : isVideo ? (
@@ -151,6 +160,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
                 autoPlay
                 src={objectUrl}
                 className="lightbox-video"
+                onClick={e => e.stopPropagation()}
               />
             ) : null}
           </div>
