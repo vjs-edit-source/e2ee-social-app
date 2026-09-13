@@ -1957,18 +1957,65 @@ export default function Groups({
                   )}
 
                   {msg.isWelcome || msg.isSystem ? (
-                    <div
-                      ref={el => (messageRefs.current[msg.id] = el)}
-                      className="chat-system-message-row animate-fade-in"
-                    >
-                      <div className="msg-welcome-banner">
-                        <span className="welcome-banner-sparkle">🎉</span>
-                        <div className="welcome-banner-text-wrap">
-                          <div className="welcome-banner-text">{msg.text || msgMeta?.text}</div>
-                          <span className="welcome-banner-time">{formatMessageTime(msg.timestamp)}</span>
+                    (() => {
+                      const requester = msg.requester || (msg.text?.match(/Welcome @([^\s!]+)/i)?.[1]) || '';
+                      const isNewUser = Boolean(
+                        requester &&
+                        currentUser?.username?.toLowerCase() === requester.toLowerCase()
+                      );
+
+                      // For all other community members: display only a minimal, discreet notice
+                      if (msg.isWelcome && !isNewUser) {
+                        return (
+                          <div
+                            ref={el => (messageRefs.current[msg.id] = el)}
+                            className="chat-system-message-row minimal animate-fade-in"
+                          >
+                            <div
+                              className="msg-system-minimal-pill"
+                              title={msg.admin ? `Entry confirmed by @${msg.admin}` : ''}
+                            >
+                              <span className="minimal-joined-icon">👋</span>
+                              <span className="minimal-joined-text">
+                                <strong className="minimal-joined-username">@{requester}</strong> joined the community
+                              </span>
+                              <span className="minimal-joined-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // General non-welcome system messages
+                      if (msg.isSystem && !msg.isWelcome) {
+                        return (
+                          <div
+                            ref={el => (messageRefs.current[msg.id] = el)}
+                            className="chat-system-message-row minimal animate-fade-in"
+                          >
+                            <div className="msg-system-minimal-pill">
+                              <span className="minimal-joined-text">{msg.text || msgMeta?.text}</span>
+                              <span className="minimal-joined-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Full celebratory welcome banner: shown ONLY for the new user who joined
+                      return (
+                        <div
+                          ref={el => (messageRefs.current[msg.id] = el)}
+                          className="chat-system-message-row animate-fade-in"
+                        >
+                          <div className="msg-welcome-banner">
+                            <span className="welcome-banner-sparkle">🎉</span>
+                            <div className="welcome-banner-text-wrap">
+                              <div className="welcome-banner-text">{msg.text || msgMeta?.text}</div>
+                              <span className="welcome-banner-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()
                   ) : (
                     <div
                       ref={el => (messageRefs.current[msg.id] = el)}
