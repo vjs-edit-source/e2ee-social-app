@@ -1135,19 +1135,19 @@ export default function Groups({
 
             <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings" style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer' }}>
               <div className="group-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
-                <span className="group-title" style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
+                <span className="group-title" title={selectedGroup.name} style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
                   {selectedGroup.name}
                 </span>
-                {selectedGroup.isCommunity && <span className="group-tag community" style={{ borderRadius: '12px', flexShrink: 0 }}>Public</span>}
-                {isCreator && <span className="group-tag creator" style={{ borderRadius: '12px', flexShrink: 0 }}><Crown size={10} /> Owner</span>}
-                {!isCreator && isAdmin && <span className="group-tag admin" style={{ borderRadius: '12px', flexShrink: 0 }}><Shield size={10} /> Admin</span>}
+                {selectedGroup.isCommunity && <span className="group-tag community" style={{ borderRadius: '9999px', flexShrink: 0 }}>Public</span>}
+                {isCreator && <span className="group-tag creator" style={{ borderRadius: '9999px', flexShrink: 0 }}><Crown size={10} /> Owner</span>}
+                {!isCreator && isAdmin && <span className="group-tag admin" style={{ borderRadius: '9999px', flexShrink: 0 }}><Shield size={10} /> Admin</span>}
                 {groupPerms.sendMessages === false && (
-                  <span className="group-tag announcement" title="Broadcast channel" style={{ borderRadius: '12px', flexShrink: 0 }}>
+                  <span className="group-tag announcement" title="Broadcast channel" style={{ borderRadius: '9999px', flexShrink: 0 }}>
                     <Megaphone size={10} /> Broadcast
                   </span>
                 )}
                 {selectedGroup.settings?.disappearingTimer > 0 && (
-                  <span className="group-tag timer" title="Disappearing messages active" style={{ borderRadius: '12px', flexShrink: 0 }}>
+                  <span className="group-tag timer" title="Disappearing messages active" style={{ borderRadius: '9999px', flexShrink: 0 }}>
                     <Flame size={10} color="#fbbf24" />
                     {selectedGroup.settings.disappearingTimer >= 3600
                       ? `${selectedGroup.settings.disappearingTimer / 3600}h`
@@ -1157,18 +1157,18 @@ export default function Groups({
               </div>
               <div className="group-meta-subtitle" style={{ minWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeGroupCount > 0 ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.72rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.73rem', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     <Circle size={6} color="#10b981" fill="#10b981" style={{ flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {activeGroupCount} {activeGroupCount === 1 ? 'person' : 'people'} active now
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {activeGroupCount} active now
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 400, flexShrink: 0 }}>•</span>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {selectedGroup.isCommunity ? 'Public Community' : `${groupMemberNames.length} members`}
                     </span>
                   </span>
                 ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.73rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
                     <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
                     <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : (allUsers.find(u => u.username === m)?.displayName || m)).slice(0, 5).join(', ')}{groupMemberNames.length > 5 ? ` +${groupMemberNames.length - 5} more` : ''}</span>
                   </span>
@@ -2379,7 +2379,7 @@ export default function Groups({
               </div>
 
               {/* Member Search Bar */}
-              <div className="group-search-bar" style={{ margin: '4px 0 10px', borderRadius: 8 }}>
+              <div className="group-search-bar" style={{ margin: '4px 0 10px', borderRadius: '9999px' }}>
                 <Search size={14} color="#ee7882" />
                 <input
                   type="text"
@@ -2599,7 +2599,7 @@ export default function Groups({
                   <div className="group-card-header-info">
                     <div className="group-card-name-row">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                        <h4 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name}</h4>
+                        <h4 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.name}>{group.name}</h4>
                         {unreadGroupMap && unreadGroupMap[group.id] > 0 && (
                           <span
                             style={{
@@ -2607,8 +2607,8 @@ export default function Groups({
                               color: '#ffffff',
                               fontSize: '0.66rem',
                               fontWeight: 'bold',
-                              borderRadius: '12px',
-                              padding: '1px 6px',
+                              borderRadius: '9999px',
+                              padding: '1px 7px',
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',

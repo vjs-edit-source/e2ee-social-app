@@ -40,7 +40,7 @@ export default function MessageActionPopup({
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const popupWidth = 240;
+    const popupWidth = 250;
     const estimatedHeight = 240;
 
     let left = 0;

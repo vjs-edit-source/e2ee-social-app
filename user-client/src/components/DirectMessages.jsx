@@ -1013,57 +1013,108 @@ export default function DirectMessages({
                 {activePeer.username[0].toUpperCase()}
               </div>
             )}
-            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              {/* Row 1: Name + Rounded Contact Pill */}
+            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {/* Row 1: Name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
+                <h4
+                  style={{
+                    margin: 0,
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flexShrink: 1,
+                    minWidth: 0
+                  }}
+                  title={activePeer.displayName || activePeer.username}
+                >
                   {activePeer.displayName || activePeer.username}
                 </h4>
-                {activePeer.phoneNumber && (
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '3px',
-                      fontSize: '0.68rem',
-                      color: '#ee7882',
-                      background: 'rgba(238, 120, 130, 0.12)',
-                      border: '1px solid rgba(238, 120, 130, 0.25)',
-                      borderRadius: '12px',
-                      padding: '1px 7px',
-                      fontWeight: 500,
-                      flexShrink: 0,
-                      maxWidth: '140px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={activePeer.phoneNumber}
-                  >
-                    <Phone size={10} color="#ee7882" />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {activePeer.phoneNumber}
-                    </span>
-                  </span>
-                )}
               </div>
 
-              {/* Row 2: Status & E2EE */}
-              <div className="handshake-status" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <Circle size={6} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} style={{ flexShrink: 0 }} />
-                <span style={{ color: isPeerActive ? '#34d399' : '#94a3b8', fontWeight: isPeerActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
+              {/* Row 2: Friends contact number at bottom of name, Status Presence, and E2EE */}
+              <div
+                className="handshake-status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.73rem',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  flexWrap: 'nowrap'
+                }}
+              >
+                {/* Contact Number at bottom of Name */}
+                {activePeer.phoneNumber && (
+                  <>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: '0.70rem',
+                        color: '#ee7882',
+                        background: 'rgba(238, 120, 130, 0.12)',
+                        border: '1px solid rgba(238, 120, 130, 0.25)',
+                        borderRadius: '9999px',
+                        padding: '1px 8px',
+                        fontWeight: 500,
+                        flexShrink: 0
+                      }}
+                      title={`Phone: ${activePeer.phoneNumber}`}
+                    >
+                      <Phone size={9} color="#ee7882" />
+                      <span>{activePeer.phoneNumber}</span>
+                    </span>
+                    <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
+                  </>
+                )}
+
+                {/* Online Status / Last Seen - Fully Visible without cut-offs */}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    color: isPeerActive ? '#34d399' : '#a69ea2',
+                    fontWeight: isPeerActive ? 600 : 400,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                  title={formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
+                >
+                  <Circle size={6} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                  <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
                 </span>
-                <span style={{ opacity: 0.4, flexShrink: 0 }}>•</span>
-                <ShieldCheck size={11} color="#10b981" style={{ flexShrink: 0 }} />
-                <span style={{ color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>End-to-end encrypted</span>
+
+                <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
+
+                {/* Compact E2EE badge - no more 22-character truncation! */}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    color: '#10b981',
+                    fontSize: '0.68rem',
+                    fontWeight: 600,
+                    flexShrink: 0
+                  }}
+                  title="Zero-Knowledge End-to-End Encrypted (AES-GCM 256)"
+                >
+                  <ShieldCheck size={11} color="#10b981" style={{ flexShrink: 0 }} />
+                  <span>E2EE</span>
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Header Action Buttons: Call & In-Chat Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <button
             type="button"
             className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}
@@ -1072,8 +1123,8 @@ export default function DirectMessages({
               background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
               border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
               borderRadius: '50%',
-              width: '38px',
-              height: '38px',
+              width: '35px',
+              height: '35px',
               color: showSearchBar ? '#ee7882' : '#cbd5e1',
               display: 'flex',
               alignItems: 'center',
@@ -1094,8 +1145,8 @@ export default function DirectMessages({
               background: 'rgba(52, 211, 153, 0.12)',
               border: '1px solid rgba(52, 211, 153, 0.3)',
               borderRadius: '50%',
-              width: '38px',
-              height: '38px',
+              width: '35px',
+              height: '35px',
               color: '#34d399',
               display: 'flex',
               alignItems: 'center',
@@ -1106,7 +1157,7 @@ export default function DirectMessages({
             }}
             title="Encrypted Audio Call"
           >
-            <Phone size={17} />
+            <Phone size={16} />
           </button>
           <button
             type="button"
@@ -1115,8 +1166,8 @@ export default function DirectMessages({
               background: 'rgba(96, 165, 250, 0.12)',
               border: '1px solid rgba(96, 165, 250, 0.3)',
               borderRadius: '50%',
-              width: '38px',
-              height: '38px',
+              width: '35px',
+              height: '35px',
               color: '#60a5fa',
               display: 'flex',
               alignItems: 'center',
@@ -1127,14 +1178,14 @@ export default function DirectMessages({
             }}
             title="Encrypted Video Call"
           >
-            <Video size={17} />
+            <Video size={16} />
           </button>
         </div>
       </div>
 
       {/* In-Chat Search Bar (Collapsible) */}
       {showSearchBar && (
-        <div className="group-search-bar" style={{ margin: '8px 16px', borderRadius: '12px' }}>
+        <div className="group-search-bar" style={{ margin: '8px 16px', borderRadius: '9999px' }}>
           <Search size={15} color="#ee7882" />
           <input
             type="text"

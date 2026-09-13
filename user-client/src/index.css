@@ -1787,7 +1787,7 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 14px;
+  padding: 13px 16px;
   background: rgba(25, 10, 15, 0.45);
   border: 1px solid rgba(238, 120, 130, 0.1);
   color: var(--text-main);
@@ -1795,15 +1795,15 @@ textarea:focus {
   cursor: pointer;
   width: 100%;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 16px;
+  border-radius: 22px;
   margin-bottom: 6px;
 }
 
 .dm-contact-card:hover {
   background-color: rgba(238, 120, 130, 0.12);
-  border-color: rgba(238, 120, 130, 0.25);
+  border-color: rgba(238, 120, 130, 0.3);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), 0 0 14px rgba(224, 108, 117, 0.1);
 }
 
 .contact-avatar {
@@ -2080,13 +2080,12 @@ textarea:focus {
 .handshake-status {
   display: flex !important;
   align-items: center !important;
-  gap: 4px !important;
-  font-size: 0.72rem !important;
+  gap: 6px !important;
+  font-size: 0.73rem !important;
   color: var(--accent-success) !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
   min-width: 0 !important;
+  overflow: hidden !important;
+  flex-wrap: nowrap !important;
 }
 
 .key-details-badge code {
@@ -2138,12 +2137,12 @@ textarea:focus {
 .message-bubble {
   max-width: 80%;
   width: fit-content;
-  padding: 6px 12px;
-  border-radius: 14px;
+  padding: 8px 14px;
+  border-radius: 22px;
   background-color: #1a0b10;
-  border: 1px solid rgba(224, 108, 117, 0.15);
+  border: 1px solid rgba(224, 108, 117, 0.18);
   color: #f4f4f7;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2153,12 +2152,12 @@ textarea:focus {
   background: linear-gradient(135deg, #e06c75 0%, #ee7882 100%);
   border: none;
   color: #ffffff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 3px 12px rgba(224, 108, 117, 0.35);
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 4px 14px rgba(224, 108, 117, 0.38);
 }
 
 .message-bubble-row.peer .message-bubble {
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 6px;
 }
 
 .msg-sender {
@@ -2558,7 +2557,7 @@ textarea:focus {
 .search-modal-card {
   background-color: #1a0a11 !important;
   border: 1px solid rgba(224, 108, 117, 0.35) !important;
-  border-radius: 20px !important;
+  border-radius: 28px !important;
   width: 100% !important;
   max-width: 680px !important;
   padding: 22px !important;
@@ -2583,8 +2582,8 @@ textarea:focus {
   gap: 10px;
   background-color: var(--bg-main);
   border: 1px solid var(--border-accent);
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  border-radius: 9999px;
 }
 
 .search-input-wrapper input {
@@ -3415,17 +3414,17 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 10px 18px;
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 9999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .groups-discovery-search:focus-within {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(224, 108, 117, 0.2);
+  box-shadow: 0 0 0 2px rgba(224, 108, 117, 0.25), 0 4px 18px rgba(224, 108, 117, 0.15);
 }
 
 .groups-discovery-search input {
@@ -3480,20 +3479,20 @@ textarea:focus {
 .group-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 26px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   cursor: pointer;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
 .group-card:hover {
   transform: translateY(-2px);
   border-color: rgba(224, 108, 117, 0.45);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(224, 108, 117, 0.15);
 }
 
 .group-card-top {
@@ -3532,13 +3531,16 @@ textarea:focus {
 }
 
 .group-card-name-row h4 {
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: var(--text-main);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
   min-width: 0;
+  word-break: break-word;
 }
 
 .group-card-badges {
@@ -3552,7 +3554,7 @@ textarea:focus {
   font-size: 0.62rem;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -3574,7 +3576,7 @@ textarea:focus {
   font-size: 0.62rem;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 9999px;
   text-transform: uppercase;
 }
 
@@ -3627,13 +3629,14 @@ textarea:focus {
 }
 
 .group-card-desc {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  line-height: 1.4;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .group-card-footer {
@@ -3641,30 +3644,34 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--border-color);
-  padding-top: 10px;
+  padding-top: 12px;
   margin-top: auto;
 }
 
 .group-creator-label {
-  font-size: 0.72rem;
+  font-size: 0.73rem;
   color: var(--text-subtle);
 }
 
 .open-group-btn {
   background: rgba(224, 108, 117, 0.15);
-  border: 1px solid rgba(224, 108, 117, 0.3);
+  border: 1px solid rgba(224, 108, 117, 0.32);
   color: #ee7882;
-  padding: 5px 12px;
+  padding: 6px 16px;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .open-group-btn:hover {
-  background: var(--accent-primary);
+  background: linear-gradient(135deg, #e06c75, #c24151);
+  border-color: #e06c75;
   color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(224, 108, 117, 0.4);
 }
 
 .groups-empty-state {
@@ -3728,8 +3735,8 @@ textarea:focus {
 .create-group-modal {
   background-color: var(--bg-card);
   border: 1px solid rgba(224, 108, 117, 0.35);
-  border-radius: var(--radius-lg);
-  padding: 24px;
+  border-radius: 28px;
+  padding: 26px;
   width: 100%;
   max-width: 480px;
   max-height: 90vh;
@@ -4066,8 +4073,8 @@ textarea:focus {
 .group-tag {
   font-size: 0.65rem;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 12px;
+  padding: 2px 9px;
+  border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -4148,12 +4155,12 @@ textarea:focus {
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border: 1px solid rgba(224, 108, 117, 0.3);
-  border-radius: 18px;
+  border-radius: 24px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 24px rgba(224, 108, 117, 0.18);
-  padding: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   transform-origin: top right;
   animation: menuSpringIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -4174,10 +4181,10 @@ textarea:focus {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 10px 14px;
   background: transparent;
   border: none;
-  border-radius: 12px;
+  border-radius: 16px;
   color: var(--text-main);
   text-align: left;
   cursor: pointer;
@@ -4217,15 +4224,27 @@ textarea:focus {
   margin: 4px 6px;
 }
 
-/* In-Group Search Bar */
+/* In-Group & In-DM Search Bar - Floating Rounded Pill */
 .group-search-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  animation: slideDown 0.15s ease;
+  gap: 10px;
+  padding: 10px 18px;
+  margin: 8px 16px 10px;
+  background: rgba(25, 10, 15, 0.94);
+  border: 1px solid rgba(224, 108, 117, 0.28);
+  border-radius: 9999px !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(224, 108, 117, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: slideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
+}
+
+.group-search-bar:focus-within {
+  border-color: #ee7882;
+  box-shadow: 0 4px 20px rgba(224, 108, 117, 0.3), inset 0 1px 0 rgba(224, 108, 117, 0.18);
+  background: rgba(25, 10, 15, 0.98);
 }
 
 .group-search-bar input {
@@ -4233,7 +4252,7 @@ textarea:focus {
   background: transparent;
   border: none;
   color: var(--text-main);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   outline: none;
 }
 
@@ -4246,14 +4265,17 @@ textarea:focus {
   align-items: center;
 }
 
-/* Pinned Message Banner */
+/* Pinned Message Banner - Floating Rounded Card */
 .pinned-message-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
-  background: linear-gradient(90deg, rgba(224, 108, 117, 0.12) 0%, rgba(16, 5, 8, 0.8) 100%);
-  border-bottom: 1px solid rgba(224, 108, 117, 0.2);
+  padding: 8px 16px;
+  margin: 6px 14px 8px;
+  background: linear-gradient(90deg, rgba(224, 108, 117, 0.15) 0%, rgba(25, 10, 15, 0.92) 100%);
+  border: 1px solid rgba(224, 108, 117, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .pinned-banner-content {
@@ -4463,8 +4485,8 @@ textarea:focus {
 
 /* Compact Group Message Bubbles */
 .message-bubble.group-message-bubble {
-  padding: 6px 11px;
-  border-radius: 14px;
+  padding: 8px 14px;
+  border-radius: 22px;
   max-width: 80%;
   width: fit-content;
   word-break: break-word;
@@ -4476,7 +4498,7 @@ textarea:focus {
 .message-bubble-row.mine .group-message-bubble {
   background: linear-gradient(135deg, #e06c75 0%, #ee7882 100%);
   color: #ffffff;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 6px;
   margin-left: auto;
 }
 
@@ -4484,7 +4506,7 @@ textarea:focus {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 6px;
   margin-right: auto;
 }
 
@@ -6145,16 +6167,16 @@ input:checked + .toggle-slider:before {
 
 .msg-action-popup-card {
   position: fixed !important;
-  width: 240px !important;
+  width: 250px !important;
   max-width: calc(100vw - 24px) !important;
   background: linear-gradient(165deg, #1e0a13 0%, #13040a 100%) !important;
   border: 1px solid rgba(224, 108, 117, 0.35) !important;
-  border-radius: 18px !important;
+  border-radius: 26px !important;
   box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.85),
-    0 0 24px rgba(224, 108, 117, 0.18),
-    inset 0 1px 0 rgba(224, 108, 117, 0.2) !important;
-  padding: 10px 12px !important;
+    0 18px 42px rgba(0, 0, 0, 0.88),
+    0 0 28px rgba(224, 108, 117, 0.22),
+    inset 0 1px 0 rgba(224, 108, 117, 0.25) !important;
+  padding: 12px 14px !important;
   color: var(--text-main) !important;
   overflow: hidden !important;
   z-index: 10000 !important;
@@ -6211,8 +6233,8 @@ input:checked + .toggle-slider:before {
 .msg-action-meta-box {
   background: rgba(10, 3, 6, 0.55);
   border: 1px solid rgba(224, 108, 117, 0.12);
-  border-radius: 10px;
-  padding: 6px 10px;
+  border-radius: 16px;
+  padding: 8px 12px;
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
@@ -6237,8 +6259,8 @@ input:checked + .toggle-slider:before {
   margin-left: auto;
   background: rgba(224, 108, 117, 0.18);
   color: #ee7882;
-  border-radius: 6px;
-  padding: 1px 6px;
+  border-radius: 9999px;
+  padding: 1px 8px;
   font-size: 0.66rem;
   font-weight: 600;
 }
@@ -6254,10 +6276,10 @@ input:checked + .toggle-slider:before {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 8px 14px;
   background: rgba(224, 108, 117, 0.06);
   border: 1px solid rgba(224, 108, 117, 0.14);
-  border-radius: 10px;
+  border-radius: 14px;
   color: var(--text-main);
   font-size: 0.82rem;
   font-weight: 500;
