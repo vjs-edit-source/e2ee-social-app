@@ -1958,11 +1958,18 @@ export default function Groups({
 
                   {msg.isWelcome || msg.isSystem ? (
                     (() => {
-                      const requester = msg.requester || (msg.text?.match(/Welcome @([^\s!]+)/i)?.[1]) || '';
+                      const requesterRaw = (msg.requester || (msg.text?.match(/Welcome @?([^\s!]+)/i)?.[1]) || '').replace(/^@/, '');
+                      const reqUser = allUsers.find(u => u.username?.toLowerCase() === requesterRaw.toLowerCase());
+                      const reqDisplayName = reqUser?.displayName || requesterRaw;
+
                       const isNewUser = Boolean(
-                        requester &&
-                        currentUser?.username?.toLowerCase() === requester.toLowerCase()
+                        requesterRaw &&
+                        currentUser?.username?.toLowerCase() === requesterRaw.toLowerCase()
                       );
+
+                      const adminRaw = (msg.admin || (msg.text?.match(/confirmed by @?([^\s.!]+)/i)?.[1]) || 'Admin').replace(/^@/, '');
+                      const adminUser = allUsers.find(u => u.username?.toLowerCase() === adminRaw.toLowerCase());
+                      const adminDisplayName = adminUser?.displayName || adminRaw;
 
                       // For all other community members: display only a minimal, discreet notice
                       if (msg.isWelcome && !isNewUser) {
@@ -1973,11 +1980,11 @@ export default function Groups({
                           >
                             <div
                               className="msg-system-minimal-pill"
-                              title={msg.admin ? `Entry confirmed by @${msg.admin}` : ''}
+                              title={`Entry confirmed by ${adminDisplayName}`}
                             >
                               <span className="minimal-joined-icon">👋</span>
                               <span className="minimal-joined-text">
-                                <strong className="minimal-joined-username">@{requester}</strong> joined the community
+                                <strong className="minimal-joined-username">{reqDisplayName}</strong> joined the community
                               </span>
                               <span className="minimal-joined-time">{formatMessageTime(msg.timestamp)}</span>
                             </div>
@@ -2001,6 +2008,8 @@ export default function Groups({
                       }
 
                       // Full celebratory welcome banner: shown ONLY for the new user who joined
+                      const welcomeText = `🎉 Welcome ${reqDisplayName} to ${selectedGroup.name}! Entry request confirmed by ${adminDisplayName}.`;
+
                       return (
                         <div
                           ref={el => (messageRefs.current[msg.id] = el)}
@@ -2009,7 +2018,7 @@ export default function Groups({
                           <div className="msg-welcome-banner">
                             <span className="welcome-banner-sparkle">🎉</span>
                             <div className="welcome-banner-text-wrap">
-                              <div className="welcome-banner-text">{msg.text || msgMeta?.text}</div>
+                              <div className="welcome-banner-text">{welcomeText}</div>
                               <span className="welcome-banner-time">{formatMessageTime(msg.timestamp)}</span>
                             </div>
                           </div>

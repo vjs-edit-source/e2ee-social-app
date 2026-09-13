@@ -781,19 +781,30 @@ class ZeroKnowledgeStore {
     // Add requester as a full member of the group
     this.addGroupMember(groupId, req.requester);
 
-    // Create an automated welcome message inside the community
+    const requesterUser = this.findUserByUsername(req.requester);
+    const requesterDisplayName = requesterUser?.displayName || req.requester;
+    const adminUser = this.findUserByUsername(adminUsername);
+    const adminDisplayName = adminUser?.displayName || adminUsername;
+
+    // Create an automated welcome message inside the community (display name only, no @)
     const welcomeMsg = this.addSystemGroupMessage(
       groupId,
-      `🎉 Welcome @${req.requester} to ${group.name}! Entry request confirmed by @${adminUsername}.`,
-      { isWelcome: true, requester: req.requester, admin: adminUsername }
+      `🎉 Welcome ${requesterDisplayName} to ${group.name}! Entry request confirmed by ${adminDisplayName}.`,
+      {
+        isWelcome: true,
+        requester: req.requester,
+        requesterDisplayName,
+        admin: adminUsername,
+        adminDisplayName
+      }
     );
 
     // Create an automated welcome notification in user's direct messages from the admin
     const directWelcomeMsg = this.addSystemDirectMessage(
       adminUsername,
       req.requester,
-      `🎉 Welcome to ${group.name}! Your request to enter has been confirmed by @${adminUsername}. You now have full access to chat and collaborate in the space!`,
-      { isWelcome: true, groupId: group.id, groupName: group.name }
+      `🎉 Welcome to ${group.name}! Your request to enter has been confirmed by ${adminDisplayName}. You now have full access to chat and collaborate in the space!`,
+      { isWelcome: true, groupId: group.id, groupName: group.name, adminDisplayName }
     );
 
     this.scheduleSave();
