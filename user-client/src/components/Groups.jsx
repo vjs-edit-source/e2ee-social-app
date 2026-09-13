@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Send,
   Paperclip,
+  FileText,
   X,
   Loader2,
   UserPlus,
@@ -139,6 +140,29 @@ export default function Groups({
   const groupFileInputRef = useRef(null);
   const editGroupFileInputRef = useRef(null);
   const messageInputRef = useRef(null);
+
+  // 3-Option Attachment Menu: Camera, Photos, Files
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachMenuRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const photosInputRef = useRef(null);
+  const filesInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+        setShowAttachMenu(false);
+      }
+    };
+    if (showAttachMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showAttachMenu]);
 
   // Message Action Popup state & touch/long-press tracking
   const [activePopupMsg, setActivePopupMsg] = useState(null);
@@ -1677,10 +1701,89 @@ export default function Groups({
               </div>
             ) : (
               <form onSubmit={handleSendMessage} className="group-chat-input-capsule">
-                <label className="msg-bar-attach-btn" title="Attach encrypted media or file">
-                  <Paperclip size={18} />
-                  <input type="file" accept="*" onChange={handleFileSelect} onClick={e => (e.target.value = null)} hidden />
-                </label>
+                <div className="msg-bar-attach-container" ref={attachMenuRef}>
+                  <button
+                    type="button"
+                    className={`msg-bar-attach-btn ${showAttachMenu ? 'active' : ''}`}
+                    onClick={() => setShowAttachMenu(prev => !prev)}
+                    title="Attach Camera, Photos, or Files"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+
+                  {showAttachMenu && (
+                    <div className="attach-options-popup animate-pop-in">
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          cameraInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon camera">
+                          <Camera size={16} />
+                        </div>
+                        <span className="attach-option-label">Camera</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          photosInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon photos">
+                          <ImageIcon size={16} />
+                        </div>
+                        <span className="attach-option-label">Photos</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          filesInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon files">
+                          <FileText size={16} />
+                        </div>
+                        <span className="attach-option-label">Files</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Hidden specialized file pickers */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                  <input
+                    ref={photosInputRef}
+                    type="file"
+                    accept="image/*,video/*,.heic,.heif"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                  <input
+                    ref={filesInputRef}
+                    type="file"
+                    accept="*/*"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                </div>
 
                 <input
                   ref={messageInputRef}

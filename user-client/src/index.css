@@ -4622,6 +4622,14 @@ textarea:focus {
   box-shadow: 0 0 0 2px rgba(238, 120, 130, 0.25), 0 4px 16px rgba(0, 0, 0, 0.4) !important;
 }
 
+.msg-bar-attach-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .msg-bar-attach-btn {
   background: transparent;
   border: none;
@@ -4633,7 +4641,7 @@ textarea:focus {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
 
@@ -4642,6 +4650,104 @@ textarea:focus {
   background: rgba(238, 120, 130, 0.12);
   transform: scale(1.05);
 }
+
+.msg-bar-attach-btn.active {
+  color: #ee7882;
+  background: rgba(238, 120, 130, 0.22);
+  transform: rotate(45deg);
+}
+
+@keyframes attachPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.attach-options-popup {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: -4px;
+  background: rgba(22, 9, 14, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(238, 120, 130, 0.28) !important;
+  border-radius: 20px !important;
+  padding: 8px !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(238, 120, 130, 0.12) !important;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 152px;
+  z-index: 1000;
+  transform-origin: bottom left;
+  animation: attachPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.attach-option-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  color: #f1f5f9;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.attach-option-item:hover {
+  background: rgba(238, 120, 130, 0.16);
+  transform: translateX(2px);
+}
+
+.attach-option-item:active {
+  transform: scale(0.97);
+}
+
+.attach-option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.attach-option-icon.camera {
+  background: linear-gradient(135deg, rgba(238, 120, 130, 0.25), rgba(224, 108, 117, 0.45));
+  color: #ee7882;
+  box-shadow: 0 2px 8px rgba(238, 120, 130, 0.2);
+}
+
+.attach-option-icon.photos {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(192, 132, 252, 0.45));
+  color: #c084fc;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.2);
+}
+
+.attach-option-icon.files {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(96, 165, 250, 0.45));
+  color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
+}
+
+.attach-option-label {
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #e2e8f0;
+}
+
 
 .msg-bar-text-input {
   flex: 1;
