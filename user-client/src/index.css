@@ -7170,39 +7170,49 @@ input:checked + .toggle-slider:before {
   box-shadow: none !important;
 }
 
-/* Message Status Indicator Ticks */
+/* Message Status Indicator Ticks - High Contrast & Sharp Visibility */
 .msg-status-indicator {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 4px;
-  vertical-align: middle;
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: 4px !important;
+  vertical-align: middle !important;
+  opacity: 1 !important;
 }
 
 .msg-tick {
-  transition: all 0.2s ease;
-  vertical-align: middle;
+  transition: all 0.2s ease !important;
+  vertical-align: middle !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65)) !important;
+  opacity: 1 !important;
 }
 
 .msg-tick.tick-pending {
-  color: #f59e0b;
-  animation: tickPulse 1.2s infinite ease-in-out;
+  color: #fde047 !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) !important;
+  animation: tickPulse 1.2s infinite ease-in-out !important;
 }
 
 .msg-tick.tick-failed {
-  color: #ef4444;
+  color: #ff4d4f !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) !important;
 }
 
 .msg-tick.tick-sent {
-  color: #94a3b8;
+  color: #ffffff !important;
+  opacity: 0.92 !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65)) !important;
 }
 
 .msg-tick.tick-delivered {
-  color: #cbd5e1;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65)) !important;
 }
 
 .msg-tick.tick-seen {
-  color: #38bdf8;
-  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.5));
+  color: #00f0ff !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 3px rgba(0, 240, 255, 0.5)) !important;
 }
 
 @keyframes tickPulse {

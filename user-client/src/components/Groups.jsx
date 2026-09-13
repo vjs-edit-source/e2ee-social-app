@@ -1654,11 +1654,11 @@ export default function Groups({
                         {isMine && !msg.isDeleted && (
                           <span className="msg-status-indicator" style={{ marginLeft: '4px', display: 'inline-flex', alignItems: 'center' }}>
                             {msg.status === 'sending' || msg.pending ? (
-                              <Clock size={11} className="msg-tick tick-pending" title="Sending... (Not sent)" />
+                              <Clock size={12} strokeWidth={2.4} className="msg-tick tick-pending" title="Sending... (Not sent)" />
                             ) : msg.status === 'failed' ? (
-                              <AlertCircle size={11} className="msg-tick tick-failed" title="Not sent (Failed)" />
+                              <AlertCircle size={12} strokeWidth={2.4} className="msg-tick tick-failed" title="Not sent (Failed)" />
                             ) : (
-                              <Check size={12} className="msg-tick tick-sent" title="Sent to space" />
+                              <Check size={13} strokeWidth={2.4} className="msg-tick tick-sent" title="Sent to space" />
                             )}
                           </span>
                         )}
