@@ -935,9 +935,9 @@ body.chat-open-locked {
 .create-post-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  box-shadow: var(--shadow-md);
+  border-radius: 36px;
+  padding: 22px 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .card-header {
@@ -1599,20 +1599,21 @@ textarea:focus {
   padding: 40px 20px;
   background-color: var(--bg-card);
   border: 1px dashed var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 36px;
   color: var(--text-muted);
 }
 
 .post-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px;
+  border-radius: 36px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   max-width: 100%;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .post-author-row {
@@ -1806,23 +1807,23 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 13px 16px;
-  background: rgba(25, 10, 15, 0.45);
-  border: 1px solid rgba(238, 120, 130, 0.1);
+  padding: 12px 22px 12px 16px;
+  background: rgba(25, 10, 15, 0.5);
+  border: 1px solid rgba(238, 120, 130, 0.14);
   color: var(--text-main);
   text-align: left;
   cursor: pointer;
   width: 100%;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 22px;
-  margin-bottom: 6px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
 }
 
 .dm-contact-card:hover {
-  background-color: rgba(238, 120, 130, 0.12);
-  border-color: rgba(238, 120, 130, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), 0 0 14px rgba(224, 108, 117, 0.1);
+  background-color: rgba(238, 120, 130, 0.16);
+  border-color: rgba(238, 120, 130, 0.38);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(224, 108, 117, 0.14);
 }
 
 .contact-avatar {
@@ -3498,20 +3499,21 @@ textarea:focus {
 .group-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 26px;
-  padding: 18px;
+  border-radius: 40px;
+  padding: 24px 26px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   cursor: pointer;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
 }
 
 .group-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: rgba(224, 108, 117, 0.45);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(224, 108, 117, 0.15);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 22px rgba(224, 108, 117, 0.18);
 }
 
 .group-card-top {

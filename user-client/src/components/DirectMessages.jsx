@@ -831,11 +831,12 @@ export default function DirectMessages({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    padding: '14px 16px',
+                    gap: '14px',
+                    padding: '12px 22px 12px 16px',
                     width: '100%',
                     boxSizing: 'border-box',
-                    textAlign: 'left'
+                    textAlign: 'left',
+                    borderRadius: '9999px'
                   }}
                 >
                   {/* Contact Avatar with Online Badge */}
