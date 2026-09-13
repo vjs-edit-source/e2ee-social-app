@@ -13,6 +13,7 @@ import {
   Check
 } from 'lucide-react';
 import { decryptPost, encryptPost, decryptMediaBuffer } from '../crypto/e2ee';
+import { decryptionCache } from '../utils/decryptionCache';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 
 export default function StatusViewerModal({
@@ -25,8 +26,8 @@ export default function StatusViewerModal({
   onStatusUpdated
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [decryptedStatuses, setDecryptedStatuses] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedStatuses, setDecryptedStatuses] = useState(() => decryptionCache.getAllStatuses());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -54,26 +55,56 @@ export default function StatusViewerModal({
 
     async function decryptCurrent() {
       const statusId = currentStatus.id;
-      if (decryptedStatuses[statusId]) return;
+      let decrypted = decryptionCache.getStatus(statusId) || decryptedStatuses[statusId];
 
-      try {
-        const decrypted = await decryptPost(
-          currentUser.username,
-          currentStatus.ciphertext,
-          currentStatus.iv,
-          currentStatus.keyEnvelopes,
-          currentUser.keyPair.privateKey
-        );
+      if (!decrypted || !decrypted.mediaKey) {
+        try {
+          decrypted = await decryptPost(
+            currentUser.username,
+            currentStatus.ciphertext,
+            currentStatus.iv,
+            currentStatus.keyEnvelopes,
+            currentUser.keyPair.privateKey
+          );
+          decryptionCache.setStatus(statusId, decrypted);
 
-        if (isMounted) {
+          if (isMounted) {
+            setDecryptedStatuses(prev => ({
+              ...prev,
+              [statusId]: decrypted
+            }));
+          }
+        } catch (err) {
+          console.warn('Status decryption error:', err);
+          if (isMounted) {
+            setDecryptedStatuses(prev => ({
+              ...prev,
+              [statusId]: { text: '🔒 Encrypted Status (Private)' }
+            }));
+          }
+          return;
+        }
+      } else {
+        if (!decryptedStatuses[statusId] && isMounted) {
           setDecryptedStatuses(prev => ({
             ...prev,
             [statusId]: decrypted
           }));
         }
+      }
 
-        // Decrypt media if attached
-        if (currentStatus.mediaId && decrypted.mediaKey) {
+      // Decrypt media if attached
+      if (currentStatus.mediaId) {
+        const cachedMedia = decryptionCache.getMedia(currentStatus.mediaId);
+        if (cachedMedia) {
+          if (!decryptedMediaMap[currentStatus.mediaId] && isMounted) {
+            setDecryptedMediaMap(prev => ({
+              ...prev,
+              [currentStatus.mediaId]: cachedMedia
+            }));
+          }
+        } else if (decrypted && decrypted.mediaKey && !decryptionCache.isMediaPending(currentStatus.mediaId)) {
+          decryptionCache.setMediaPending(currentStatus.mediaId);
           try {
             const mediaRes = await fetch(`${serverUrl}/api/media/${currentStatus.mediaId}`);
             if (mediaRes.ok && isMounted) {
@@ -86,23 +117,19 @@ export default function StatusViewerModal({
               );
 
               if (objectUrl && isMounted) {
+                const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
+                decryptionCache.setMedia(currentStatus.mediaId, mediaEntry);
                 setDecryptedMediaMap(prev => ({
                   ...prev,
-                  [currentStatus.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
+                  [currentStatus.mediaId]: mediaEntry
                 }));
               }
             }
           } catch (mErr) {
             console.warn('Status media decryption error:', mErr);
+          } finally {
+            decryptionCache.clearMediaPending(currentStatus.mediaId);
           }
-        }
-      } catch (err) {
-        console.warn('Status decryption error:', err);
-        if (isMounted) {
-          setDecryptedStatuses(prev => ({
-            ...prev,
-            [statusId]: { text: '🔒 Encrypted Status (Private)' }
-          }));
         }
       }
     }

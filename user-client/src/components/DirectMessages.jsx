@@ -43,6 +43,7 @@ import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import MessageActionPopup from './MessageActionPopup';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
+import { decryptionCache } from '../utils/decryptionCache';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -87,8 +88,8 @@ export default function DirectMessages({
   const [selectedPeer, setSelectedPeer] = useState(initialSelectedPeer);
   const [sharedKeyMap, setSharedKeyMap] = useState({});
   const [messages, setMessages] = useState([]);
-  const [decryptedMsgMap, setDecryptedMsgMap] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedMsgMap, setDecryptedMsgMap] = useState(() => decryptionCache.getAllDirectMessages());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [conversationPreviews, setConversationPreviews] = useState({});
   const [peerUnreadMap, setPeerUnreadMap] = useState({});
   const [inputMessage, setInputMessage] = useState('');
@@ -421,7 +422,7 @@ export default function DirectMessages({
       const newMapEntries = {};
 
       for (const m of messages) {
-        let msgMeta = decryptedMsgCache.current[m.id];
+        let msgMeta = decryptionCache.getDirectMessage(m.id) || decryptedMsgCache.current[m.id];
 
         if (!msgMeta) {
           if (m.isSystem || m.isWelcome) {
@@ -438,6 +439,7 @@ export default function DirectMessages({
               isWelcome: !!m.isWelcome
             };
             decryptedMsgCache.current[m.id] = msgMeta;
+            decryptionCache.setDirectMessage(m.id, msgMeta);
             newMapEntries[m.id] = msgMeta;
             hasNewDecryptions = true;
             continue;
@@ -498,50 +500,72 @@ export default function DirectMessages({
           };
 
           decryptedMsgCache.current[m.id] = msgMeta;
+          decryptionCache.setDirectMessage(m.id, msgMeta);
           newMapEntries[m.id] = msgMeta;
           hasNewDecryptions = true;
 
           if (textContent || isVoice) {
             localSearchIndex.indexMessage(m.id, m.sender, m.recipient, textContent || '🎤 Voice note', m.timestamp);
           }
+        } else {
+          if (!decryptedMsgCache.current[m.id]) {
+            decryptedMsgCache.current[m.id] = msgMeta;
+          }
+          if (!decryptedMsgMap[m.id]) {
+            newMapEntries[m.id] = msgMeta;
+            hasNewDecryptions = true;
+          }
         }
 
-        // Decrypt attached media if present in DM
-        if (
-          msgMeta.mediaId &&
-          !decryptedMediaCache.current[msgMeta.mediaId] &&
-          !pendingMediaFetches.current.has(msgMeta.mediaId)
-        ) {
-          pendingMediaFetches.current.add(msgMeta.mediaId);
+        // Decrypt attached media if present in DM (checking global session cache first)
+        if (msgMeta.mediaId) {
+          const cachedMedia = decryptionCache.getMedia(msgMeta.mediaId);
+          if (cachedMedia) {
+            if (!decryptedMediaCache.current[msgMeta.mediaId]) {
+              decryptedMediaCache.current[msgMeta.mediaId] = cachedMedia;
+            }
+            if (!decryptedMediaMap[msgMeta.mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [msgMeta.mediaId]: cachedMedia }));
+            }
+          } else if (
+            !decryptedMediaCache.current[msgMeta.mediaId] &&
+            !pendingMediaFetches.current.has(msgMeta.mediaId) &&
+            !decryptionCache.isMediaPending(msgMeta.mediaId)
+          ) {
+            pendingMediaFetches.current.add(msgMeta.mediaId);
+            decryptionCache.setMediaPending(msgMeta.mediaId);
 
-          (async (mediaId, meta) => {
-            try {
-              const mediaRes = await fetch(`${serverUrl}/api/media/${mediaId}`);
-              if (mediaRes.ok && isMounted) {
-                const mediaData = await mediaRes.json();
-                if (mediaData.ciphertextBlob) {
-                  const keyToUse = meta.mediaKeyB64 || sharedKey;
-                  const mediaIv = mediaData.iv || m.iv;
-                  const finalMime = meta.mimeType || mediaData.mimeType || 'application/octet-stream';
-                  const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+            (async (mediaId, meta) => {
+              try {
+                const mediaRes = await fetch(`${serverUrl}/api/media/${mediaId}`);
+                if (mediaRes.ok && isMounted) {
+                  const mediaData = await mediaRes.json();
+                  if (mediaData.ciphertextBlob) {
+                    const keyToUse = meta.mediaKeyB64 || sharedKey;
+                    const mediaIv = mediaData.iv || m.iv;
+                    const finalMime = meta.mimeType || mediaData.mimeType || 'application/octet-stream';
+                    const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
 
-                  if (objectUrl && isMounted) {
-                    const mediaEntry = {
-                      objectUrl,
-                      originalName: meta.originalName || mediaData.originalName,
-                      mimeType: finalMime
-                    };
-                    decryptedMediaCache.current[mediaId] = mediaEntry;
-                    setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
+                    if (objectUrl && isMounted) {
+                      const mediaEntry = {
+                        objectUrl,
+                        originalName: meta.originalName || mediaData.originalName,
+                        mimeType: finalMime
+                      };
+                      decryptedMediaCache.current[mediaId] = mediaEntry;
+                      decryptionCache.setMedia(mediaId, mediaEntry);
+                      setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
+                    }
                   }
                 }
+              } catch (err) {
+                console.error(`DM Media decrypt error for ${mediaId}:`, err);
+              } finally {
+                pendingMediaFetches.current.delete(mediaId);
+                decryptionCache.clearMediaPending(mediaId);
               }
-            } catch (err) {
-              console.error(`DM Media decrypt error for ${mediaId}:`, err);
-            } finally {
-              pendingMediaFetches.current.delete(mediaId);
-            }
-          })(msgMeta.mediaId, msgMeta);
+            })(msgMeta.mediaId, msgMeta);
+          }
         }
       }
 
@@ -843,7 +867,7 @@ export default function DirectMessages({
       const msgData = await msgRes.json();
       if (msgData.success) {
         const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
-        decryptedMsgCache.current[msgData.message.id] = {
+        const voiceEntry = {
           text: '',
           mediaId: uploadData.media.id,
           mediaKeyB64: uploadData.media.mediaKeyB64 || mediaKeyB64,
@@ -852,9 +876,11 @@ export default function DirectMessages({
           replyTo: sentReplyTo,
           isLegacyExpired: false
         };
+        decryptedMsgCache.current[msgData.message.id] = voiceEntry;
+        decryptionCache.setDirectMessage(msgData.message.id, voiceEntry);
         setDecryptedMsgMap(prev => ({
           ...prev,
-          [msgData.message.id]: decryptedMsgCache.current[msgData.message.id]
+          [msgData.message.id]: voiceEntry
         }));
         setMessages(prev => [...prev, msgData.message]);
         setIsRecordingVoice(false);
@@ -954,10 +980,12 @@ export default function DirectMessages({
 
       const data = await res.json();
       if (data.success) {
-        decryptedMsgCache.current[data.message.id] = decryptedMsgCache.current[tempId];
+        const confirmedMeta = decryptedMsgCache.current[tempId];
+        decryptedMsgCache.current[data.message.id] = confirmedMeta;
+        decryptionCache.setDirectMessage(data.message.id, confirmedMeta);
         delete decryptedMsgCache.current[tempId];
         setDecryptedMsgMap(prev => {
-          const updated = { ...prev, [data.message.id]: decryptedMsgCache.current[data.message.id] };
+          const updated = { ...prev, [data.message.id]: confirmedMeta };
           delete updated[tempId];
           return updated;
         });

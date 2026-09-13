@@ -47,6 +47,7 @@ import { formatRelativeTime } from '../utils/dateUtils';
 import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import StatusTray from './StatusTray';
+import { decryptionCache } from '../utils/decryptionCache';
 
 const POPULAR_EMOJIS = [
   '❤️', '🔥', '👍', '😂', '🎉', '🚀', '✨', '🔒',
@@ -65,8 +66,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [isPublicPost, setIsPublicPost] = useState(true);
-  const [decryptedPostMap, setDecryptedPostMap] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedPostMap, setDecryptedPostMap] = useState(() => decryptionCache.getAllFeedPosts());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [publishing, setPublishing] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
 
@@ -82,8 +83,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const textareaRef = useRef(null);
   const uploaderRef = useRef(null);
 
-  const decryptedPostsCache = useRef({});
-  const decryptedMediaCache = useRef({});
+  const decryptedPostsCache = useRef(decryptionCache.getAllFeedPosts());
+  const decryptedMediaCache = useRef(decryptionCache.getAllMedia());
   const pendingMediaFetches = useRef(new Set());
 
   const insertAtCursor = (prefix, suffix = '') => {
@@ -173,7 +174,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
       const newPostEntries = {};
 
       for (const post of posts) {
-        let cachedPost = decryptedPostsCache.current[post.id];
+        let cachedPost = decryptionCache.getFeedPost(post.id) || decryptedPostsCache.current[post.id];
 
         if (!cachedPost || !cachedPost.success) {
           try {
@@ -227,6 +228,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
               };
 
               decryptedPostsCache.current[post.id] = cachedPost;
+              decryptionCache.setFeedPost(post.id, cachedPost);
               newPostEntries[post.id] = cachedPost;
               updatedPosts = true;
 
@@ -236,6 +238,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             } else {
               cachedPost = { success: false, text: 'This post was not addressed to you.', isPublic: false };
               decryptedPostsCache.current[post.id] = cachedPost;
+              decryptionCache.setFeedPost(post.id, cachedPost);
               newPostEntries[post.id] = cachedPost;
               updatedPosts = true;
             }
@@ -243,69 +246,92 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             console.error('Post decryption error:', err);
             cachedPost = { success: false, text: 'Unable to decrypt post.', isPublic: false };
             decryptedPostsCache.current[post.id] = cachedPost;
+            decryptionCache.setFeedPost(post.id, cachedPost);
+            newPostEntries[post.id] = cachedPost;
+            updatedPosts = true;
+          }
+        } else {
+          if (!decryptedPostsCache.current[post.id]) {
+            decryptedPostsCache.current[post.id] = cachedPost;
+          }
+          if (!decryptedPostMap[post.id]) {
             newPostEntries[post.id] = cachedPost;
             updatedPosts = true;
           }
         }
 
-        if (
-          post.mediaId &&
-          !decryptedMediaCache.current[post.mediaId] &&
-          !pendingMediaFetches.current.has(post.mediaId) &&
-          cachedPost &&
-          cachedPost.success
-        ) {
-          pendingMediaFetches.current.add(post.mediaId);
+        if (post.mediaId && cachedPost && cachedPost.success) {
+          const cachedMedia = decryptionCache.getMedia(post.mediaId);
+          if (cachedMedia) {
+            if (!decryptedMediaCache.current[post.mediaId]) {
+              decryptedMediaCache.current[post.mediaId] = cachedMedia;
+            }
+            if (!decryptedMediaMap[post.mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: cachedMedia }));
+            }
+          } else if (
+            !decryptedMediaCache.current[post.mediaId] &&
+            !pendingMediaFetches.current.has(post.mediaId) &&
+            !decryptionCache.isMediaPending(post.mediaId)
+          ) {
+            pendingMediaFetches.current.add(post.mediaId);
+            decryptionCache.setMediaPending(post.mediaId);
 
-          fetch(`${serverUrl}/api/media/${post.mediaId}`)
-            .then(res => {
-              if (!res.ok) throw new Error(`Media fetch failed: HTTP ${res.status}`);
-              return res.json();
-            })
-            .then(async (mediaObj) => {
-              if (mediaObj.ciphertextBlob && (mediaObj.iv || post.iv)) {
-                const mediaKeyToUse = cachedPost.mediaKeyB64 || cachedPost.postKey;
-                const mediaIv = mediaObj.iv || post.iv;
-                const finalMime = mediaObj.mimeType || cachedPost.mimeType || 'image/jpeg';
-                const decRes = await decryptMediaBuffer(
-                  mediaKeyToUse,
-                  mediaObj.ciphertextBlob,
-                  mediaIv,
-                  finalMime
-                );
-                const objectUrl = typeof decRes === 'string' ? decRes : (decRes?.objectUrl || decRes?.url || null);
+            fetch(`${serverUrl}/api/media/${post.mediaId}`)
+              .then(res => {
+                if (!res.ok) throw new Error(`Media fetch failed: HTTP ${res.status}`);
+                return res.json();
+              })
+              .then(async (mediaObj) => {
+                if (mediaObj.ciphertextBlob && (mediaObj.iv || post.iv)) {
+                  const mediaKeyToUse = cachedPost.mediaKeyB64 || cachedPost.postKey;
+                  const mediaIv = mediaObj.iv || post.iv;
+                  const finalMime = mediaObj.mimeType || cachedPost.mimeType || 'image/jpeg';
+                  const decRes = await decryptMediaBuffer(
+                    mediaKeyToUse,
+                    mediaObj.ciphertextBlob,
+                    mediaIv,
+                    finalMime
+                  );
+                  const objectUrl = typeof decRes === 'string' ? decRes : (decRes?.objectUrl || decRes?.url || null);
 
-                if (objectUrl && isMounted) {
-                  const mediaEntry = {
-                    objectUrl,
-                    mimeType: finalMime,
-                    originalName: cachedPost.originalName || mediaObj.originalName
-                  };
+                  if (objectUrl && isMounted) {
+                    const mediaEntry = {
+                      objectUrl,
+                      mimeType: finalMime,
+                      originalName: cachedPost.originalName || mediaObj.originalName
+                    };
 
-                  decryptedMediaCache.current[post.mediaId] = mediaEntry;
-                  setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: mediaEntry }));
+                    decryptedMediaCache.current[post.mediaId] = mediaEntry;
+                    decryptionCache.setMedia(post.mediaId, mediaEntry);
+                    setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: mediaEntry }));
+                  } else if (isMounted) {
+                    const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
+                    decryptedMediaCache.current[post.mediaId] = failedEntry;
+                    decryptionCache.setMedia(post.mediaId, failedEntry);
+                    setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
+                  }
                 } else if (isMounted) {
-                  const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
+                  const failedEntry = { failed: true, error: 'Media payload missing' };
                   decryptedMediaCache.current[post.mediaId] = failedEntry;
+                  decryptionCache.setMedia(post.mediaId, failedEntry);
                   setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
                 }
-              } else if (isMounted) {
-                const failedEntry = { failed: true, error: 'Media payload missing' };
-                decryptedMediaCache.current[post.mediaId] = failedEntry;
-                setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
-              }
-            })
-            .catch(e => {
-              console.warn('Feed media fetch info:', e.message);
-              if (isMounted) {
-                const failedEntry = { failed: true, error: 'Attachment from previous session expired' };
-                decryptedMediaCache.current[post.mediaId] = failedEntry;
-                setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
-              }
-            })
-            .finally(() => {
-              pendingMediaFetches.current.delete(post.mediaId);
-            });
+              })
+              .catch(e => {
+                console.warn('Feed media fetch info:', e.message);
+                if (isMounted) {
+                  const failedEntry = { failed: true, error: 'Attachment from previous session expired' };
+                  decryptedMediaCache.current[post.mediaId] = failedEntry;
+                  decryptionCache.setMedia(post.mediaId, failedEntry);
+                  setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
+                }
+              })
+              .finally(() => {
+                pendingMediaFetches.current.delete(post.mediaId);
+                decryptionCache.clearMediaPending(post.mediaId);
+              });
+          }
         }
       }
 
@@ -390,6 +416,33 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
       const data = await res.json();
       if (data.success) {
+        if (data.post) {
+          const cachedPost = {
+            success: true,
+            text: hasText ? newPostText.trim() : '',
+            mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
+            originalName: hasMedia ? attachedMedia.originalName : null,
+            mimeType: hasMedia ? attachedMedia.mimeType : null,
+            expiresIn: postExpiry > 0 ? postExpiry : null,
+            isPublic: isPublicPost,
+            postKey
+          };
+          decryptedPostsCache.current[data.post.id] = cachedPost;
+          decryptionCache.setFeedPost(data.post.id, cachedPost);
+          setDecryptedPostMap(prev => ({ ...prev, [data.post.id]: cachedPost }));
+
+          if (hasMedia && attachedMedia.mediaId && attachedMedia.objectUrl) {
+            const mediaEntry = {
+              objectUrl: attachedMedia.objectUrl,
+              mimeType: attachedMedia.mimeType,
+              originalName: attachedMedia.originalName
+            };
+            decryptedMediaCache.current[attachedMedia.mediaId] = mediaEntry;
+            decryptionCache.setMedia(attachedMedia.mediaId, mediaEntry);
+            setDecryptedMediaMap(prev => ({ ...prev, [attachedMedia.mediaId]: mediaEntry }));
+          }
+        }
+
         setNewPostText('');
         setAttachedMedia(null);
         setActiveTool(null);

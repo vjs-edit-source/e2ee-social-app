@@ -56,6 +56,7 @@ import VoiceNoteRecorder from './VoiceNoteRecorder';
 import MessageActionPopup from './MessageActionPopup';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { localSearchIndex } from '../search/searchIndex';
+import { decryptionCache } from '../utils/decryptionCache';
 
 export default function Groups({
   currentUser,
@@ -91,8 +92,8 @@ export default function Groups({
 
   // Group Messages & Decryption Cache
   const [messages, setMessages] = useState([]);
-  const [decryptedMsgMap, setDecryptedMsgMap] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedMsgMap, setDecryptedMsgMap] = useState(() => decryptionCache.getAllGroupMessages());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [inputMessage, setInputMessage] = useState('');
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -588,7 +589,7 @@ export default function Groups({
       let hasUpdates = false;
 
       for (const m of messages) {
-        let msgMeta = decryptedMsgCache.current[m.id];
+        let msgMeta = decryptionCache.getGroupMessage(m.id) || decryptedMsgCache.current[m.id];
         if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message') {
           if (m.isSystem || m.isWelcome) {
             msgMeta = {
@@ -602,6 +603,7 @@ export default function Groups({
               isWelcome: !!m.isWelcome
             };
             decryptedMsgCache.current[m.id] = msgMeta;
+            decryptionCache.setGroupMessage(m.id, msgMeta);
             newDecrypted[m.id] = msgMeta;
             hasUpdates = true;
             continue;
@@ -660,38 +662,66 @@ export default function Groups({
           }
 
           decryptedMsgCache.current[m.id] = msgMeta;
+          decryptionCache.setGroupMessage(m.id, msgMeta);
           newDecrypted[m.id] = msgMeta;
           hasUpdates = true;
+        } else {
+          if (!decryptedMsgCache.current[m.id]) {
+            decryptedMsgCache.current[m.id] = msgMeta;
+          }
+          if (!decryptedMsgMap[m.id]) {
+            newDecrypted[m.id] = msgMeta;
+            hasUpdates = true;
+          }
         }
 
-        // Decrypt attached media
-        if (m.mediaId && msgMeta?.mediaKey && !decryptedMediaCache.current[m.mediaId]) {
-          try {
-            const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
-            if (mediaRes.ok) {
-              const mediaObj = await mediaRes.json();
-              const objectUrl = await decryptMediaBuffer(
-                msgMeta.mediaKey,
-                mediaObj.ciphertextBlob,
-                mediaObj.iv,
-                mediaObj.mimeType
-              );
-
-              if (objectUrl) {
-                decryptedMediaCache.current[m.mediaId] = { objectUrl, mimeType: mediaObj.mimeType };
-                setDecryptedMediaMap(prev => ({
-                  ...prev,
-                  [m.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
-                }));
-              }
+        // Decrypt attached media (checking global session cache first)
+        if (m.mediaId) {
+          const cachedMedia = decryptionCache.getMedia(m.mediaId);
+          if (cachedMedia) {
+            if (!decryptedMediaCache.current[m.mediaId]) {
+              decryptedMediaCache.current[m.mediaId] = cachedMedia;
             }
-          } catch (e) {
-            console.warn('Group media decryption error:', e);
+            if (!decryptedMediaMap[m.mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [m.mediaId]: cachedMedia }));
+            }
+          } else if (
+            msgMeta?.mediaKey &&
+            !decryptedMediaCache.current[m.mediaId] &&
+            !decryptionCache.isMediaPending(m.mediaId)
+          ) {
+            decryptionCache.setMediaPending(m.mediaId);
+            try {
+              const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
+              if (mediaRes.ok && isMounted) {
+                const mediaObj = await mediaRes.json();
+                const objectUrl = await decryptMediaBuffer(
+                  msgMeta.mediaKey,
+                  mediaObj.ciphertextBlob,
+                  mediaObj.iv,
+                  mediaObj.mimeType
+                );
+
+                if (objectUrl && isMounted) {
+                  const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
+                  decryptedMediaCache.current[m.mediaId] = mediaEntry;
+                  decryptionCache.setMedia(m.mediaId, mediaEntry);
+                  setDecryptedMediaMap(prev => ({
+                    ...prev,
+                    [m.mediaId]: mediaEntry
+                  }));
+                }
+              }
+            } catch (e) {
+              console.warn('Group media decryption error:', e);
+            } finally {
+              decryptionCache.clearMediaPending(m.mediaId);
+            }
           }
         }
       }
 
-      if (isMounted) {
+      if (isMounted && hasUpdates) {
         setDecryptedMsgMap(prev => ({ ...prev, ...decryptedMsgCache.current, ...newDecrypted }));
       }
     }
@@ -868,7 +898,7 @@ export default function Groups({
       const data = await res.json();
 
       const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
-      decryptedMsgCache.current[data.message.id] = {
+      const voiceEntry = {
         text: '',
         mediaKey: uploadData.media.mediaKeyB64 || mediaKeyB64,
         mediaId: uploadData.media.id,
@@ -876,9 +906,11 @@ export default function Groups({
         voiceDuration: duration,
         replyTo: sentReplyTo
       };
+      decryptedMsgCache.current[data.message.id] = voiceEntry;
+      decryptionCache.setGroupMessage(data.message.id, voiceEntry);
       setDecryptedMsgMap(prev => ({
         ...prev,
-        [data.message.id]: decryptedMsgCache.current[data.message.id]
+        [data.message.id]: voiceEntry
       }));
 
       setMessages(prev => {
@@ -989,12 +1021,14 @@ export default function Groups({
       if (!res.ok) throw new Error('Failed to send message');
       const data = await res.json();
 
-      decryptedMsgCache.current[data.message.id] = decryptedMsgCache.current[tempId];
+      const confirmedMeta = decryptedMsgCache.current[tempId];
+      decryptedMsgCache.current[data.message.id] = confirmedMeta;
+      decryptionCache.setGroupMessage(data.message.id, confirmedMeta);
       delete decryptedMsgCache.current[tempId];
       setDecryptedMsgMap(prev => {
         const copy = {
           ...prev,
-          [data.message.id]: decryptedMsgCache.current[data.message.id]
+          [data.message.id]: confirmedMeta
         };
         delete copy[tempId];
         return copy;

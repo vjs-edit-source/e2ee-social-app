@@ -18,6 +18,7 @@ import {
   testEngineHealth,
   isCapacitorNative
 } from './utils/engineConfig';
+import { decryptionCache } from './utils/decryptionCache';
 
 function playNotificationChime() {
   try {
@@ -354,6 +355,7 @@ export default function App() {
 
   // Logout / Clear session handler
   const handleLogout = () => {
+    decryptionCache.clearAll();
     localStorage.removeItem('e2ee_current_active_user');
     localStorage.removeItem('ciphersocial_active_user');
     setCurrentUser(null);

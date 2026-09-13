@@ -13,6 +13,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
+import { decryptionCache } from '../utils/decryptionCache';
 import StatusPublisherModal from './StatusPublisherModal';
 import StatusViewerModal from './StatusViewerModal';
 
@@ -20,8 +21,15 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
   const [statuses, setStatuses] = useState([]);
   const [showPublisher, setShowPublisher] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
-  const [decryptedPreviews, setDecryptedPreviews] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedPreviews, setDecryptedPreviews] = useState(() => {
+    const cached = decryptionCache.getAllStatuses();
+    const previews = {};
+    for (const [id, meta] of Object.entries(cached)) {
+      previews[id] = typeof meta === 'object' ? meta.text : meta;
+    }
+    return previews;
+  });
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
 
   const loadStatuses = async () => {
     try {
@@ -71,8 +79,14 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
     async function decryptAllPreviews() {
       for (const s of statuses) {
         let mediaKey = null;
+        let cachedStatus = decryptionCache.getStatus(s.id);
 
-        if (!decryptedPreviews[s.id]) {
+        if (cachedStatus) {
+          mediaKey = cachedStatus.mediaKey;
+          if (!decryptedPreviews[s.id] && isMounted) {
+            setDecryptedPreviews(prev => ({ ...prev, [s.id]: cachedStatus.text }));
+          }
+        } else {
           try {
             const dec = await decryptPost(
               currentUser.username,
@@ -82,6 +96,8 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
               currentUser.keyPair.privateKey
             );
             mediaKey = dec.mediaKey;
+            const statusEntry = { text: dec.text, mediaKey: dec.mediaKey };
+            decryptionCache.setStatus(s.id, statusEntry);
 
             if (isMounted) {
               setDecryptedPreviews(prev => ({
@@ -90,6 +106,8 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
               }));
             }
           } catch (e) {
+            const failedEntry = { text: '🔒 Encrypted Status', mediaKey: null };
+            decryptionCache.setStatus(s.id, failedEntry);
             if (isMounted) {
               setDecryptedPreviews(prev => ({
                 ...prev,
@@ -100,27 +118,39 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
         }
 
         // Decrypt attached photo thumbnail
-        if (s.mediaId && mediaKey && !decryptedMediaMap[s.mediaId]) {
-          try {
-            const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
-            if (mediaRes.ok) {
-              const mediaObj = await mediaRes.json();
-              const objectUrl = await decryptMediaBuffer(
-                mediaKey,
-                mediaObj.ciphertextBlob,
-                mediaObj.iv,
-                mediaObj.mimeType
-              );
-
-              if (objectUrl && isMounted) {
-                setDecryptedMediaMap(prev => ({
-                  ...prev,
-                  [s.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
-                }));
-              }
+        if (s.mediaId) {
+          const cachedMedia = decryptionCache.getMedia(s.mediaId);
+          if (cachedMedia) {
+            if (!decryptedMediaMap[s.mediaId] && isMounted) {
+              setDecryptedMediaMap(prev => ({ ...prev, [s.mediaId]: cachedMedia }));
             }
-          } catch (e) {
-            console.warn('Status thumbnail decryption error:', e);
+          } else if (mediaKey && !decryptionCache.isMediaPending(s.mediaId)) {
+            decryptionCache.setMediaPending(s.mediaId);
+            try {
+              const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
+              if (mediaRes.ok) {
+                const mediaObj = await mediaRes.json();
+                const objectUrl = await decryptMediaBuffer(
+                  mediaKey,
+                  mediaObj.ciphertextBlob,
+                  mediaObj.iv,
+                  mediaObj.mimeType
+                );
+
+                if (objectUrl && isMounted) {
+                  const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
+                  decryptionCache.setMedia(s.mediaId, mediaEntry);
+                  setDecryptedMediaMap(prev => ({
+                    ...prev,
+                    [s.mediaId]: mediaEntry
+                  }));
+                }
+              }
+            } catch (e) {
+              console.warn('Status thumbnail decryption error:', e);
+            } finally {
+              decryptionCache.clearMediaPending(s.mediaId);
+            }
           }
         }
       }
