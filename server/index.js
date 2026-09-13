@@ -492,6 +492,179 @@ app.post('/api/groups/:groupId/members', (req, res) => {
   res.json({ success: true, group });
 });
 
+// ── COMMUNITY & GROUP JOIN REQUESTS ────────────────────────
+// Submit Community Join Request
+app.post('/api/groups/:groupId/join-requests', (req, res) => {
+  const { groupId } = req.params;
+  const { requester, note } = req.body;
+  if (!requester) {
+    return res.status(400).json({ error: 'requester required' });
+  }
+
+  const result = db.createJoinRequest(groupId, requester, note);
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  const { request, group } = result;
+  const requesterUser = db.findUserByUsername(requester);
+
+  // Send real-time notification to community admins and creator
+  const adminUsernames = new Set([group.creator]);
+  if (group.roles) {
+    for (const [uname, role] of Object.entries(group.roles)) {
+      if (role === 'admin') adminUsernames.add(uname);
+    }
+  }
+
+  const notificationPayload = {
+    type: 'COMMUNITY_JOIN_REQUEST',
+    groupId,
+    groupName: group.name,
+    request,
+    requesterUser: requesterUser ? {
+      username: requesterUser.username,
+      displayName: requesterUser.displayName || requesterUser.username,
+      avatarUrl: requesterUser.avatarUrl,
+      avatarColor: requesterUser.avatarColor,
+      bio: requesterUser.bio
+    } : { username: requester }
+  };
+
+  for (const admin of adminUsernames) {
+    sendToUser(admin, notificationPayload);
+  }
+
+  notifyInspector();
+  res.json({ success: true, request, group });
+});
+
+// Fetch Community Join Requests
+app.get('/api/groups/:groupId/join-requests', (req, res) => {
+  const { groupId } = req.params;
+  const requester = req.query.user || req.query.adminUsername;
+  const group = db.getGroup(groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+
+  const isAdmin = !requester ||
+    group.creator?.toLowerCase() === requester?.toLowerCase() ||
+    (group.roles && (group.roles[requester] === 'admin' || group.roles[requester?.toLowerCase()] === 'admin'));
+  const requests = db.getJoinRequests(groupId);
+  if (isAdmin) {
+    res.json(requests);
+  } else {
+    // Non-admin can only see their own requests
+    res.json(requests.filter(r => r.requester?.toLowerCase() === requester?.toLowerCase()));
+  }
+});
+
+// Approve Community Join Request
+app.post('/api/groups/:groupId/join-requests/:requestId/approve', (req, res) => {
+  const { groupId, requestId } = req.params;
+  const { adminUsername } = req.body;
+  if (!adminUsername) return res.status(400).json({ error: 'adminUsername required' });
+
+  const group = db.getGroup(groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+
+  const isAdmin = group.creator?.toLowerCase() === adminUsername?.toLowerCase() ||
+    (group.roles && (group.roles[adminUsername] === 'admin' || group.roles[adminUsername?.toLowerCase()] === 'admin'));
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Only admins can approve requests' });
+  }
+
+  const result = db.approveJoinRequest(groupId, requestId, adminUsername);
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  const { request, welcomeMsg, directWelcomeMsg } = result;
+  const freshGroup = db.getGroup(groupId);
+
+  // Broadcast to requester that they are now a member
+  sendToUser(request.requester, {
+    type: 'COMMUNITY_JOIN_APPROVED',
+    groupId,
+    groupName: group.name,
+    adminUsername,
+    request,
+    group: freshGroup
+  });
+
+  // Broadcast new member to the entire group
+  broadcastToGroup(freshGroup, {
+    type: 'GROUP_MEMBER_JOINED',
+    groupId,
+    username: request.requester,
+    group: freshGroup
+  });
+
+  // Broadcast welcome message to group
+  if (welcomeMsg) {
+    broadcastToGroup(freshGroup, {
+      type: 'GROUP_MESSAGE',
+      groupId,
+      groupName: group.name,
+      isCommunity: !!group.isCommunity,
+      sender: 'System',
+      message: welcomeMsg
+    });
+  }
+
+  // Send direct welcome notification mail to user inbox
+  if (directWelcomeMsg) {
+    sendToUser(request.requester, {
+      type: 'DIRECT_MESSAGE',
+      message: directWelcomeMsg
+    });
+  }
+
+  notifyInspector();
+  res.json({ success: true, request, group: freshGroup, welcomeMsg, directWelcomeMsg });
+});
+
+// Reject Community Join Request
+app.post('/api/groups/:groupId/join-requests/:requestId/reject', (req, res) => {
+  const { groupId, requestId } = req.params;
+  const { adminUsername } = req.body;
+  if (!adminUsername) return res.status(400).json({ error: 'adminUsername required' });
+
+  const group = db.getGroup(groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+
+  const isAdmin = group.creator?.toLowerCase() === adminUsername?.toLowerCase() ||
+    (group.roles && (group.roles[adminUsername] === 'admin' || group.roles[adminUsername?.toLowerCase()] === 'admin'));
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Only admins can reject requests' });
+  }
+
+  const result = db.rejectJoinRequest(groupId, requestId, adminUsername);
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  sendToUser(result.request.requester, {
+    type: 'COMMUNITY_JOIN_REJECTED',
+    groupId,
+    groupName: group.name,
+    adminUsername,
+    request: result.request
+  });
+
+  notifyInspector();
+  res.json({ success: true, request: result.request });
+});
+
+// Cancel Community Join Request
+app.delete('/api/groups/:groupId/join-requests', (req, res) => {
+  const { groupId } = req.params;
+  const requester = req.body?.requester || req.query.requester;
+  if (!requester) return res.status(400).json({ error: 'requester required' });
+
+  const success = db.cancelJoinRequest(groupId, requester);
+  res.json({ success });
+});
+
 // Send Encrypted Group Message
 app.post('/api/groups/:groupId/messages', (req, res) => {
   const { groupId } = req.params;

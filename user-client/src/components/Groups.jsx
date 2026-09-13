@@ -72,7 +72,14 @@ export default function Groups({
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState(false);
-  const [drawerTab, setDrawerTab] = useState('members'); // 'members' | 'settings' | 'media'
+  const [drawerTab, setDrawerTab] = useState('members'); // 'members' | 'settings' | 'media' | 'requests'
+
+  // Community Entry & Join Request States
+  const [joinModalGroup, setJoinModalGroup] = useState(null);
+  const [joinNote, setJoinNote] = useState('');
+  const [submittingJoin, setSubmittingJoin] = useState(false);
+  const [pendingModalGroup, setPendingModalGroup] = useState(null);
+  const [showProfileModalUser, setShowProfileModalUser] = useState(null);
 
   // Create Form State
   const [groupName, setGroupName] = useState('');
@@ -420,6 +427,15 @@ export default function Groups({
             }
             return m;
           }));
+        } else if (data.type === 'COMMUNITY_JOIN_REQUEST') {
+          loadGroups();
+        } else if (data.type === 'COMMUNITY_JOIN_APPROVED') {
+          loadGroups();
+          if (selectedGroup && data.groupId === selectedGroup.id) {
+            loadGroupMessages();
+          }
+        } else if (data.type === 'COMMUNITY_JOIN_REJECTED') {
+          loadGroups();
         }
       } catch (e) {}
     };
@@ -442,6 +458,100 @@ export default function Groups({
       }
     } catch (err) {
       console.error('Failed to delete group message:', err);
+    }
+  };
+
+  // ── COMMUNITY ENTRY & JOIN REQUEST ACTIONS ──────────────────
+  const handleSendJoinRequest = async (e) => {
+    e?.preventDefault();
+    if (!joinModalGroup || !currentUser?.username) return;
+    setSubmittingJoin(true);
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${joinModalGroup.id}/join-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requester: currentUser.username,
+          note: joinNote
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        setJoinModalGroup(null);
+        setJoinNote('');
+      } else {
+        alert(data.error || 'Failed to submit entry request');
+      }
+    } catch (err) {
+      console.error('Join request error:', err);
+      alert('Network error while sending join request');
+    } finally {
+      setSubmittingJoin(false);
+    }
+  };
+
+  const handleCancelJoinRequest = async (groupId) => {
+    if (!groupId || !currentUser?.username) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${groupId}/join-requests`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requester: currentUser.username })
+      });
+      if (res.ok) {
+        await loadGroups();
+        setPendingModalGroup(null);
+      }
+    } catch (err) {
+      console.error('Cancel join request error:', err);
+    }
+  };
+
+  const handleApproveJoinRequest = async (requestId, targetGroupId = selectedGroup?.id) => {
+    if (!targetGroupId || !currentUser?.username || !requestId) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${targetGroupId}/join-requests/${requestId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUsername: currentUser.username })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        if (selectedGroup && selectedGroup.id === targetGroupId) {
+          await loadGroupMessages();
+        }
+        if (showProfileModalUser?.request?.id === requestId) {
+          setShowProfileModalUser(null);
+        }
+      } else {
+        alert(data.error || 'Failed to confirm entry request');
+      }
+    } catch (err) {
+      console.error('Approve join request error:', err);
+    }
+  };
+
+  const handleRejectJoinRequest = async (requestId, targetGroupId = selectedGroup?.id) => {
+    if (!targetGroupId || !currentUser?.username || !requestId) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${targetGroupId}/join-requests/${requestId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUsername: currentUser.username })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        if (showProfileModalUser?.request?.id === requestId) {
+          setShowProfileModalUser(null);
+        }
+      } else {
+        alert(data.error || 'Failed to decline request');
+      }
+    } catch (err) {
+      console.error('Reject join request error:', err);
     }
   };
 
@@ -480,6 +590,23 @@ export default function Groups({
       for (const m of messages) {
         let msgMeta = decryptedMsgCache.current[m.id];
         if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message') {
+          if (m.isSystem || m.isWelcome) {
+            msgMeta = {
+              text: m.text || '',
+              mediaKey: null,
+              mediaId: null,
+              isVoice: false,
+              voiceDuration: 0,
+              replyTo: null,
+              isSystem: true,
+              isWelcome: !!m.isWelcome
+            };
+            decryptedMsgCache.current[m.id] = msgMeta;
+            newDecrypted[m.id] = msgMeta;
+            hasUpdates = true;
+            continue;
+          }
+
           try {
             const dec = await decryptPost(
               currentUser.username,
@@ -689,9 +816,9 @@ export default function Groups({
         if (uRes.ok) userList = await uRes.json();
       } catch (e) {}
 
-      const memberNames = selectedGroup.isCommunity
-        ? userList.map(u => u.username)
-        : (selectedGroup.members || [currentUser.username]);
+      const memberNames = (selectedGroup.members && selectedGroup.members.length > 0)
+        ? selectedGroup.members
+        : [currentUser.username];
 
       const recipientPublicKeys = userList
         .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
@@ -784,9 +911,9 @@ export default function Groups({
         }
       } catch (e) {}
 
-      const memberNames = selectedGroup.isCommunity
-        ? userList.map(u => u.username)
-        : (selectedGroup.members || [currentUser.username]);
+      const memberNames = (selectedGroup.members && selectedGroup.members.length > 0)
+        ? selectedGroup.members
+        : [currentUser.username];
 
       const recipientPublicKeys = userList
         .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
@@ -1178,16 +1305,276 @@ export default function Groups({
   // Shared media list in group
   const sharedMediaMessages = messages.filter(m => m.mediaId && decryptedMediaMap[m.mediaId]);
 
-  // Drawer roster filtered
-  const drawerMemberList = (selectedGroup?.isCommunity ? allUsers.map(u => u.username) : selectedGroup?.members || []).filter(m =>
+  // Drawer roster filtered (using confirmed members only)
+  const drawerMemberList = (selectedGroup?.members || []).filter(m =>
     !drawerMemberSearch.trim() || m.toLowerCase().includes(drawerMemberSearch.toLowerCase())
   );
 
+  // ── REUSABLE MODALS: ENTER COMMUNITY, PENDING STATUS, USER PROFILE ──
+  const renderJoinModal = () => {
+    if (!joinModalGroup) return null;
+    return (
+      <div className="modal-overlay" onClick={() => !submittingJoin && setJoinModalGroup(null)}>
+        <div className="create-group-modal enter-community-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <Globe size={18} color="#38bdf8" />
+              <h3>Enter Community</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => !submittingJoin && setJoinModalGroup(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <form onSubmit={handleSendJoinRequest} className="create-group-form">
+            <div className="community-join-preview">
+              {joinModalGroup.avatarUrl ? (
+                <img src={joinModalGroup.avatarUrl} alt={joinModalGroup.name} className="join-preview-avatar" />
+              ) : (
+                <div className="join-preview-avatar" style={{ backgroundColor: joinModalGroup.avatarColor || '#38bdf8' }}>
+                  <Globe size={24} />
+                </div>
+              )}
+              <div className="join-preview-info">
+                <h4>{joinModalGroup.name}</h4>
+                <span className="join-founder-tag">Founded by @{joinModalGroup.creator}</span>
+                {joinModalGroup.description && (
+                  <p className="join-preview-desc">{joinModalGroup.description}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="join-notice-box">
+              <Info size={16} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <span>
+                To keep this space authentic, entry requires admin confirmation.
+                An inbox confirmation request with your profile will be sent to the community admin.
+              </span>
+            </div>
+
+            <div className="form-group">
+              <label>Introduce yourself or add details (Description for Admin)</label>
+              <textarea
+                className="join-note-textarea"
+                rows={3}
+                placeholder="e.g. Hi! I'm passionate about cryptography and decentralized networks. I'd love to participate in discussions here."
+                value={joinNote}
+                onChange={e => setJoinNote(e.target.value)}
+                disabled={submittingJoin}
+                maxLength={400}
+              />
+              <span className="char-count">{joinNote.length}/400</span>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setJoinModalGroup(null)}
+                disabled={submittingJoin}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-btn submit-join-btn"
+                disabled={submittingJoin}
+              >
+                {submittingJoin ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+                <span>Send Request to Admin</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPendingModal = () => {
+    if (!pendingModalGroup) return null;
+    const myReq = (pendingModalGroup.joinRequests || []).find(
+      r => r.requester === currentUser?.username && r.status === 'pending'
+    );
+
+    return (
+      <div className="modal-overlay" onClick={() => setPendingModalGroup(null)}>
+        <div className="create-group-modal request-pending-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <Clock size={18} color="#fbbf24" />
+              <h3>Entry Request Pending</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => setPendingModalGroup(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="pending-modal-body">
+            <div className="pending-status-badge">
+              <Clock size={20} color="#fbbf24" />
+              <div>
+                <strong>Awaiting Admin Confirmation</strong>
+                <p>Your request to enter <strong>{pendingModalGroup.name}</strong> has been submitted to @{pendingModalGroup.creator}.</p>
+              </div>
+            </div>
+
+            {myReq?.note && (
+              <div className="pending-submitted-note">
+                <label>Your submitted introduction note:</label>
+                <blockquote>"{myReq.note}"</blockquote>
+              </div>
+            )}
+
+            <p className="pending-hint-text">
+              Once confirmed, an automated welcome message will be delivered to your direct messages and you will have full access to chat.
+            </p>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn danger-text"
+                onClick={() => handleCancelJoinRequest(pendingModalGroup.id)}
+              >
+                Cancel Request
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => setPendingModalGroup(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProfileModal = () => {
+    if (!showProfileModalUser) return null;
+    const { user, request } = showProfileModalUser;
+    const targetGroupId = request?.groupId || selectedGroup?.id;
+    const targetGroup = groups.find(g => g.id === targetGroupId) || selectedGroup;
+    const isTargetAdmin = targetGroup && (targetGroup.creator === currentUser?.username || targetGroup.roles?.[currentUser?.username] === 'admin');
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowProfileModalUser(null)}>
+        <div className="create-group-modal user-profile-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <ShieldCheck size={18} color="#38bdf8" />
+              <h3>User Profile Inspection</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => setShowProfileModalUser(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="profile-modal-body">
+            <div className="profile-hero">
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.username}
+                  className="profile-modal-avatar"
+                  style={{ border: `2.5px solid ${user.avatarColor || '#38bdf8'}` }}
+                />
+              ) : (
+                <div
+                  className="profile-modal-avatar placeholder"
+                  style={{ backgroundColor: user?.avatarColor || '#38bdf8' }}
+                >
+                  {(user?.username || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div className="profile-hero-names">
+                <h4>{user?.displayName || user?.username}</h4>
+                <span className="profile-username-tag">@{user?.username}</span>
+                <div className="profile-activity-row">
+                  {user?.isOnline ? (
+                    <span className="online-indicator active">
+                      <Circle size={8} fill="#10b981" color="#10b981" /> Active now
+                    </span>
+                  ) : (
+                    <span className="online-indicator offline">
+                      <Circle size={8} fill="#64748b" color="#64748b" /> Offline
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="profile-info-card">
+              <div className="info-card-label">Bio / About:</div>
+              <p className="info-card-value">
+                {user?.bio || 'No public bio set by user.'}
+              </p>
+            </div>
+
+            <div className="profile-info-card">
+              <div className="info-card-label">Cryptographic Fingerprint:</div>
+              <code className="info-card-key">
+                {user?.publicIdentityKey
+                  ? `${user.publicIdentityKey.slice(0, 30)}...${user.publicIdentityKey.slice(-14)}`
+                  : 'End-to-End Cryptographic Identity Active'}
+              </code>
+            </div>
+
+            {request?.note && (
+              <div className="profile-info-card request-note-highlight">
+                <div className="info-card-label">Community Entry Note:</div>
+                <p className="request-note-quote-box">"{request.note}"</p>
+              </div>
+            )}
+
+            {request?.status === 'pending' && isTargetAdmin && (
+              <div className="profile-admin-actions">
+                <button
+                  type="button"
+                  className="btn-approve-profile"
+                  onClick={() => handleApproveJoinRequest(request.id, targetGroupId)}
+                >
+                  <Check size={16} />
+                  <span>Confirm &amp; Welcome</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-reject-profile"
+                  onClick={() => handleRejectJoinRequest(request.id, targetGroupId)}
+                >
+                  <X size={16} />
+                  <span>Decline Request</span>
+                </button>
+              </div>
+            )}
+
+            <div className="modal-footer" style={{ borderTop: 'none', paddingTop: '8px' }}>
+              <button
+                type="button"
+                className="primary-btn"
+                style={{ width: '100%' }}
+                onClick={() => setShowProfileModalUser(null)}
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── ACTIVE GROUP CONVERSATION VIEW ───────────────────────────
   if (selectedGroup) {
-    const groupMemberNames = selectedGroup.isCommunity
-      ? allUsers.map(u => u.username)
-      : (selectedGroup.members && selectedGroup.members.length > 0 ? selectedGroup.members : [selectedGroup.creator]);
+    const isMember = (selectedGroup.members || []).includes(currentUser?.username);
+    const hasPendingJoin = (selectedGroup.joinRequests || []).some(
+      r => r.requester === currentUser?.username && r.status === 'pending'
+    );
+    const pendingRequests = (selectedGroup.joinRequests || []).filter(r => r.status === 'pending');
+    const groupMemberNames = selectedGroup.members && selectedGroup.members.length > 0
+      ? selectedGroup.members
+      : [selectedGroup.creator];
 
     const activeGroupMembers = groupMemberNames.filter(mName => {
       const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
@@ -1275,7 +1662,7 @@ export default function Groups({
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 400, flexShrink: 0 }}>•</span>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {selectedGroup.isCommunity ? 'Public Community' : `${groupMemberNames.length} members`}
+                      {selectedGroup.isCommunity ? `Public Community • ${groupMemberNames.length} members` : `${groupMemberNames.length} members`}
                     </span>
                   </span>
                 ) : (
@@ -1348,6 +1735,19 @@ export default function Groups({
                         <span>View members and roles</span>
                       </div>
                     </button>
+
+                    {isAdmin && (
+                      <button
+                        className="header-menu-item"
+                        onClick={() => { setDrawerTab('requests'); setShowMembersDrawer(true); setShowHeaderMenu(false); }}
+                      >
+                        <UserPlus size={16} color="#38bdf8" />
+                        <div className="menu-item-text">
+                          <strong>Entry Requests {pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}</strong>
+                          <span>Review pending community entry requests</span>
+                        </div>
+                      </button>
+                    )}
 
                     <button
                       className="header-menu-item"
@@ -1556,10 +1956,24 @@ export default function Groups({
                     </div>
                   )}
 
-                  <div
-                    ref={el => (messageRefs.current[msg.id] = el)}
-                    className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
-                  >
+                  {msg.isWelcome || msg.isSystem ? (
+                    <div
+                      ref={el => (messageRefs.current[msg.id] = el)}
+                      className="chat-system-message-row animate-fade-in"
+                    >
+                      <div className="msg-welcome-banner">
+                        <span className="welcome-banner-sparkle">🎉</span>
+                        <div className="welcome-banner-text-wrap">
+                          <div className="welcome-banner-text">{msg.text || msgMeta?.text}</div>
+                          <span className="welcome-banner-time">{formatMessageTime(msg.timestamp)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      ref={el => (messageRefs.current[msg.id] = el)}
+                      className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
+                    >
                     <div
                       className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''} ${msg.isDeleted ? 'deleted' : ''}`}
                       style={{ position: 'relative' }}
@@ -1725,7 +2139,8 @@ export default function Groups({
                       )}
                     </div>
                   </div>
-                </React.Fragment>
+                )}
+              </React.Fragment>
               );
             })
           )}
@@ -1807,7 +2222,36 @@ export default function Groups({
 
         {/* ── SLEEK FLOATING MESSAGE BAR ── */}
         <div className="group-chat-bottom-bar">
-          {canSendMessage ? (
+          {selectedGroup.isCommunity && !isMember && !isAdmin ? (
+            <div className="community-guest-join-bar">
+              <div className="guest-join-info">
+                <Globe size={18} color="#38bdf8" />
+                <span>You are exploring <strong>{selectedGroup.name}</strong> as a guest.</span>
+              </div>
+              {hasPendingJoin ? (
+                <button
+                  type="button"
+                  className="guest-pending-btn"
+                  onClick={() => setPendingModalGroup(selectedGroup)}
+                >
+                  <Clock size={15} />
+                  <span>Request Pending</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="guest-enter-btn"
+                  onClick={() => {
+                    setJoinModalGroup(selectedGroup);
+                    setJoinNote('');
+                  }}
+                >
+                  <UserPlus size={15} />
+                  <span>Enter Community</span>
+                </button>
+              )}
+            </div>
+          ) : canSendMessage ? (
             isRecordingVoice ? (
               <div style={{ width: '100%' }}>
                 <VoiceNoteRecorder
@@ -2027,6 +2471,18 @@ export default function Groups({
                   <ImageIcon size={14} />
                   <span>Media ({sharedMediaMessages.length})</span>
                 </button>
+                {isAdmin && (
+                  <button
+                    className={`drawer-tab-btn ${drawerTab === 'requests' ? 'active' : ''}`}
+                    onClick={() => setDrawerTab('requests')}
+                  >
+                    <UserPlus size={14} />
+                    <span>Requests {pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}</span>
+                    {pendingRequests.length > 0 && (
+                      <span className="drawer-badge-pulse">{pendingRequests.length}</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* TAB 1: MEMBERS & ROLES */}
@@ -2486,6 +2942,114 @@ export default function Groups({
                   )}
                 </div>
               )}
+
+              {/* TAB 4: PENDING JOIN REQUESTS (ADMIN ONLY) */}
+              {drawerTab === 'requests' && isAdmin && (
+                <div className="drawer-requests-section">
+                  {pendingRequests.length === 0 ? (
+                    <div className="empty-requests-box">
+                      <UserPlus size={32} color="#64748b" />
+                      <p>No pending entry requests.</p>
+                      <span>New requests to enter this community will appear here for admin confirmation.</span>
+                    </div>
+                  ) : (
+                    <div className="drawer-requests-list">
+                      {pendingRequests.map(req => {
+                        const reqUser = allUsers.find(u => u.username === req.requester) || { username: req.requester, displayName: req.requester };
+                        return (
+                          <div key={req.id} className="drawer-request-card animate-fade-in">
+                            <div className="request-card-header">
+                              <div
+                                className="request-user-info"
+                                onClick={() => setShowProfileModalUser({ user: reqUser, request: req })}
+                                style={{ cursor: 'pointer' }}
+                                title="Click to view full user profile"
+                              >
+                                {reqUser.avatarUrl ? (
+                                  <img
+                                    src={reqUser.avatarUrl}
+                                    alt={req.requester}
+                                    className="request-user-avatar"
+                                    style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      borderRadius: '50%',
+                                      objectFit: 'cover',
+                                      border: `2px solid ${reqUser.avatarColor || '#38bdf8'}`
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    className="request-user-avatar"
+                                    style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      borderRadius: '50%',
+                                      backgroundColor: reqUser.avatarColor || '#38bdf8',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 'bold',
+                                      color: '#fff'
+                                    }}
+                                  >
+                                    {req.requester[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="request-names-column">
+                                  <div className="request-display-name">
+                                    <strong>{reqUser.displayName || req.requester}</strong>
+                                    {reqUser.isOnline && <span className="online-dot-mini" title="Online now" />}
+                                  </div>
+                                  <span className="request-username-tag">@{req.requester}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="view-profile-link-btn"
+                                onClick={() => setShowProfileModalUser({ user: reqUser, request: req })}
+                              >
+                                View Profile
+                              </button>
+                            </div>
+
+                            {req.note ? (
+                              <div className="request-note-quote">
+                                <div className="note-quote-label">Intro / Reason to Join:</div>
+                                <div className="note-quote-text">"{req.note}"</div>
+                              </div>
+                            ) : (
+                              <div className="request-note-quote empty">
+                                <em>No introduction note provided.</em>
+                              </div>
+                            )}
+
+                            <div className="request-card-actions">
+                              <button
+                                type="button"
+                                className="btn-approve-request"
+                                onClick={() => handleApproveJoinRequest(req.id, selectedGroup.id)}
+                              >
+                                <Check size={14} />
+                                <span>Confirm &amp; Welcome</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-reject-request"
+                                onClick={() => handleRejectJoinRequest(req.id, selectedGroup.id)}
+                              >
+                                <X size={14} />
+                                <span>Decline</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2678,6 +3242,10 @@ export default function Groups({
             onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
           />
         )}
+
+        {renderJoinModal()}
+        {renderPendingModal()}
+        {renderProfileModal()}
       </div>
     );
   }
@@ -2778,7 +3346,11 @@ export default function Groups({
           {filteredGroups.map(group => {
             const isGroupOwner = group.creator === currentUser.username;
             const groupRole = group.roles?.[currentUser.username] || (isGroupOwner ? 'admin' : 'member');
-            const memberNames = group.isCommunity ? allUsers.map(u => u.username) : group.members || [group.creator];
+            const isGroupMember = (group.members || []).includes(currentUser?.username);
+            const hasPendingReq = (group.joinRequests || []).some(
+              r => r.requester === currentUser?.username && r.status === 'pending'
+            );
+            const memberNames = (group.members && group.members.length > 0) ? group.members : [group.creator];
             const activeCardMembers = memberNames.filter(mName => {
               const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
               return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
@@ -2923,9 +3495,38 @@ export default function Groups({
 
                 <div className="group-card-footer">
                   <span className="group-creator-label">Founded by {group.creator}</span>
-                  <button className="open-group-btn" type="button">
-                    <span>{group.isCommunity ? 'Open Space' : 'Open Chat'}</span>
-                  </button>
+                  {group.isCommunity && !isGroupMember && !isGroupOwner ? (
+                    hasPendingReq ? (
+                      <button
+                        className="open-group-btn pending-btn"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingModalGroup(group);
+                        }}
+                      >
+                        <Clock size={13} />
+                        <span>Request Pending</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="open-group-btn enter-btn"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setJoinModalGroup(group);
+                          setJoinNote('');
+                        }}
+                      >
+                        <UserPlus size={13} />
+                        <span>Enter Community</span>
+                      </button>
+                    )
+                  ) : (
+                    <button className="open-group-btn" type="button">
+                      <span>{group.isCommunity ? 'Open Space' : 'Open Chat'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -3128,6 +3729,10 @@ export default function Groups({
           </div>
         </div>
       )}
+
+      {renderJoinModal()}
+      {renderPendingModal()}
+      {renderProfileModal()}
     </div>
   );
 }

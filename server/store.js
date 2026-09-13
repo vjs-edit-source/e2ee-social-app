@@ -611,6 +611,7 @@ class ZeroKnowledgeStore {
         g.settings = { disappearingTimer: 0, announcementOnly: false };
       }
       if (!g.polls) g.polls = [];
+      if (!g.joinRequests) g.joinRequests = [];
       return g;
     }).filter(
       g => g.isCommunity || (g.members && g.members.includes(username))
@@ -638,6 +639,7 @@ class ZeroKnowledgeStore {
       group.settings = { disappearingTimer: 0, announcementOnly: false };
     }
     if (!group.polls) group.polls = [];
+    if (!group.joinRequests) group.joinRequests = [];
     return group;
   }
 
@@ -721,6 +723,164 @@ class ZeroKnowledgeStore {
       this.syncDocToMongo('groups', { id: group.id }, group);
     }
     return group;
+  }
+
+  // ── COMMUNITY & GROUP JOIN REQUESTS ────────────────────────
+  createJoinRequest(groupId, requester, note = '') {
+    const group = this.getGroup(groupId);
+    if (!group) return { error: 'Group not found' };
+    if (group.members && group.members.includes(requester)) {
+      return { error: 'Already a member of this space' };
+    }
+    if (!group.joinRequests) group.joinRequests = [];
+
+    // Check if there is already a pending request
+    const existing = group.joinRequests.find(r => r.requester === requester && r.status === 'pending');
+    if (existing) {
+      existing.note = String(note || '').trim() || existing.note;
+      existing.updatedAt = new Date().toISOString();
+      this.scheduleSave();
+      this.syncDocToMongo('groups', { id: group.id }, group);
+      return { request: existing, isUpdate: true, group };
+    }
+
+    const request = {
+      id: `jreq_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      groupId,
+      requester,
+      note: String(note || '').trim(),
+      status: 'pending', // 'pending' | 'approved' | 'rejected'
+      createdAt: new Date().toISOString()
+    };
+
+    group.joinRequests.push(request);
+    this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
+    return { request, isNew: true, group };
+  }
+
+  getJoinRequests(groupId) {
+    const group = this.getGroup(groupId);
+    if (!group) return [];
+    return group.joinRequests || [];
+  }
+
+  approveJoinRequest(groupId, requestId, adminUsername) {
+    const group = this.getGroup(groupId);
+    if (!group) return { error: 'Group not found' };
+    if (!group.joinRequests) group.joinRequests = [];
+
+    const req = group.joinRequests.find(r => r.id === requestId);
+    if (!req) return { error: 'Join request not found' };
+    if (req.status === 'approved') return { error: 'Already approved', group, request: req };
+
+    req.status = 'approved';
+    req.reviewedBy = adminUsername;
+    req.reviewedAt = new Date().toISOString();
+
+    // Add requester as a full member of the group
+    this.addGroupMember(groupId, req.requester);
+
+    // Create an automated welcome message inside the community
+    const welcomeMsg = this.addSystemGroupMessage(
+      groupId,
+      `🎉 Welcome @${req.requester} to ${group.name}! Entry request confirmed by @${adminUsername}.`,
+      { isWelcome: true, requester: req.requester, admin: adminUsername }
+    );
+
+    // Create an automated welcome notification in user's direct messages from the admin
+    const directWelcomeMsg = this.addSystemDirectMessage(
+      adminUsername,
+      req.requester,
+      `🎉 Welcome to ${group.name}! Your request to enter has been confirmed by @${adminUsername}. You now have full access to chat and collaborate in the space!`,
+      { isWelcome: true, groupId: group.id, groupName: group.name }
+    );
+
+    this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
+    return { success: true, group, request: req, welcomeMsg, directWelcomeMsg };
+  }
+
+  rejectJoinRequest(groupId, requestId, adminUsername) {
+    const group = this.getGroup(groupId);
+    if (!group) return { error: 'Group not found' };
+    if (!group.joinRequests) group.joinRequests = [];
+
+    const req = group.joinRequests.find(r => r.id === requestId);
+    if (!req) return { error: 'Join request not found' };
+
+    req.status = 'rejected';
+    req.reviewedBy = adminUsername;
+    req.reviewedAt = new Date().toISOString();
+
+    this.scheduleSave();
+    this.syncDocToMongo('groups', { id: group.id }, group);
+    return { success: true, group, request: req };
+  }
+
+  cancelJoinRequest(groupId, requester) {
+    const group = this.getGroup(groupId);
+    if (!group || !group.joinRequests) return false;
+
+    const initialLen = group.joinRequests.length;
+    group.joinRequests = group.joinRequests.filter(
+      r => !(r.requester === requester && r.status === 'pending')
+    );
+    if (group.joinRequests.length !== initialLen) {
+      this.scheduleSave();
+      this.syncDocToMongo('groups', { id: group.id }, group);
+      return true;
+    }
+    return false;
+  }
+
+  addSystemGroupMessage(groupId, text, extra = {}) {
+    const group = this.getGroup(groupId);
+    if (!group) return null;
+    const msg = {
+      id: `gmsg_sys_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      groupId,
+      sender: 'System',
+      text,
+      isSystem: true,
+      ciphertext: '',
+      iv: '',
+      keyEnvelopes: {},
+      status: 'sent',
+      seenBy: [],
+      isDeleted: false,
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+    if (!this.groupMessages.has(groupId)) {
+      this.groupMessages.set(groupId, []);
+    }
+    this.groupMessages.get(groupId).push(msg);
+    this.scheduleSave();
+    this.syncDocToMongo('groupMessages', { id: msg.id }, msg);
+    return msg;
+  }
+
+  addSystemDirectMessage(sender, recipient, text, extra = {}) {
+    const msg = {
+      id: `msg_sys_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      sender,
+      recipient,
+      text,
+      isSystem: true,
+      ciphertext: '',
+      iv: '',
+      status: 'sent',
+      seen: false,
+      seenAt: null,
+      isDeleted: false,
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+    this.messages.push(msg);
+    this.scheduleSave();
+    this.syncDocToMongo('messages', { id: msg.id }, msg);
+    return msg;
   }
 
   addGroupMessage(groupId, sender, ciphertext, iv, keyEnvelopes, mediaId = null, pollId = null) {

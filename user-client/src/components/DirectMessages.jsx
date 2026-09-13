@@ -277,6 +277,18 @@ export default function DirectMessages({
         if (!peerUser) continue;
 
         const sharedKey = await getSharedKeyForPeer(peerUser);
+        if (lastMessage.isSystem || lastMessage.isWelcome) {
+          previewUpdates[peerUsername] = {
+            text: lastMessage.text || '🎉 Community Entry Confirmed',
+            timestamp: lastMessage.timestamp,
+            isMine: lastMessage.sender === currentUser.username,
+            sender: lastMessage.sender,
+            isMedia: false,
+            mediaType: null
+          };
+          continue;
+        }
+
         if (!sharedKey) continue;
 
         let previewText = 'Encrypted message';
@@ -412,6 +424,25 @@ export default function DirectMessages({
         let msgMeta = decryptedMsgCache.current[m.id];
 
         if (!msgMeta) {
+          if (m.isSystem || m.isWelcome) {
+            msgMeta = {
+              text: m.text || '',
+              mediaId: null,
+              mediaKeyB64: null,
+              originalName: null,
+              mimeType: null,
+              isVoice: false,
+              voiceDuration: 0,
+              replyTo: null,
+              isSystem: true,
+              isWelcome: !!m.isWelcome
+            };
+            decryptedMsgCache.current[m.id] = msgMeta;
+            newMapEntries[m.id] = msgMeta;
+            hasNewDecryptions = true;
+            continue;
+          }
+
           let decryptedRaw = null;
           if (m.ratchetSeq) {
             try {
@@ -1412,7 +1443,7 @@ export default function DirectMessages({
                   className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
                 >
                   <div
-                    className={`message-bubble ${msg.isDeleted ? 'deleted' : ''}`}
+                    className={`message-bubble ${msg.isDeleted ? 'deleted' : ''} ${msg.isWelcome || msgMeta.isWelcome ? 'is-welcome-bubble' : ''}`}
                     style={{ position: 'relative' }}
                     onContextMenu={(e) => !msg.isDeleted && handleContextMenu(msg, msgMeta, isMine, e)}
                     onTouchStart={(e) => !msg.isDeleted && handleTouchStart(msg, msgMeta, isMine, e)}
@@ -1427,6 +1458,11 @@ export default function DirectMessages({
                       </div>
                     ) : (
                       <>
+                        {(msg.isWelcome || msgMeta.isWelcome) && (
+                          <div className="welcome-direct-badge">
+                            <span>🎉 Community Entry Confirmed</span>
+                          </div>
+                        )}
                         {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
                         {msgMeta.replyTo && (
                           <div

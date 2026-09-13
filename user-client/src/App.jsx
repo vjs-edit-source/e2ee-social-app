@@ -473,6 +473,41 @@ export default function App() {
               }
             } else if (data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED' || data.type === 'GROUP_UPDATED') {
               loadUserGroups();
+            } else if (data.type === 'COMMUNITY_JOIN_REQUEST') {
+              loadUserGroups();
+              playNotificationChime();
+              setInAppNotification({
+                id: `jreq_${Date.now()}`,
+                sender: data.groupName || 'Community',
+                displayName: `🚪 Entry Request: ${data.groupName}`,
+                avatarUrl: null,
+                avatarColor: '#3b82f6',
+                previewText: `@${data.request?.requester} requested to enter the community`,
+                peerObj: null
+              });
+            } else if (data.type === 'COMMUNITY_JOIN_APPROVED') {
+              loadUserGroups();
+              playNotificationChime();
+              setInAppNotification({
+                id: `japp_${Date.now()}`,
+                sender: data.groupName || 'Community',
+                displayName: `🎉 Entry Confirmed!`,
+                avatarUrl: null,
+                avatarColor: '#10b981',
+                previewText: `You are now a member of ${data.groupName}! Confirmed by @${data.adminUsername}`,
+                peerObj: null
+              });
+            } else if (data.type === 'COMMUNITY_JOIN_REJECTED') {
+              loadUserGroups();
+              setInAppNotification({
+                id: `jrej_${Date.now()}`,
+                sender: data.groupName || 'Community',
+                displayName: `Notice: ${data.groupName}`,
+                avatarUrl: null,
+                avatarColor: '#ef4444',
+                previewText: `Your request to enter ${data.groupName} was declined.`,
+                peerObj: null
+              });
             } else if (data.type === 'GROUP_REMOVED') {
               if (data.groupId) {
                 handleClearGroupUnread(data.groupId);
@@ -484,10 +519,11 @@ export default function App() {
               const groupName = data.groupName || 'Community';
               const sender = data.sender || msg?.sender;
 
-              // Security & Privacy check: Current user MUST be an actual member of this group (or public community)
-              const isMember = userGroupsRef.current.some(g => g.id === groupId);
-              if (!data.isCommunity && !isMember) {
-                // User is NOT in this private group! Ignore message, do not increment unread or notify!
+              // Security & Privacy check: Current user MUST be an actual confirmed member of this group or community
+              const foundGroup = userGroupsRef.current.find(g => g.id === groupId);
+              const isConfirmedMember = foundGroup && foundGroup.members && foundGroup.members.includes(currentUser?.username);
+              if (!isConfirmedMember) {
+                // User is NOT an active member of this group/community! Ignore message, do not increment unread or notify!
                 return;
               }
 
