@@ -92,7 +92,7 @@ function formatLastSeen(lastSeenDateStr, isOnline) {
 
 export default function DirectMessages({
   currentUser,
-  allUsers,
+  allUsers = [],
   serverUrl,
   wsClient,
   onChatStateChange,
@@ -585,18 +585,19 @@ export default function DirectMessages({
 
   // Load chat history
   const loadChatHistory = async () => {
-    if (!selectedPeer || !currentUser) return;
+    if (!selectedPeer?.username || !currentUser?.username) return;
     try {
       const res = await fetch(`${serverUrl}/api/messages/${currentUser.username}/${selectedPeer.username}`);
       if (res.ok) {
         const history = await res.json();
-        setMessages(prev => {
-          // Only update state if message count or last message ID changed to prevent unnecessary re-renders
-          if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
-            return prev;
-          }
-          return history;
-        });
+        if (Array.isArray(history)) {
+          setMessages(prev => {
+            if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
+              return prev;
+            }
+            return history;
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to load chat history:', err);
@@ -1300,6 +1301,17 @@ export default function DirectMessages({
 
   const canSend = !sending && !mediaUploading && (Boolean(inputMessage && inputMessage.trim()) || Boolean(attachedMedia && attachedMedia.mediaId));
 
+  // Filter out cleared messages unconditionally at the top level to adhere to React Hook rules
+  const clearedAt = selectedPeer?.username ? clearedTimestamps[selectedPeer.username] : null;
+  const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
+  const nonClearedMessages = useMemo(() => {
+    if (!clearTime || !Array.isArray(messages)) return messages || [];
+    return (messages || []).filter(m => {
+      if (!m || !m.timestamp) return true;
+      return new Date(m.timestamp).getTime() > clearTime;
+    });
+  }, [messages, clearTime]);
+
   // ── MODAL RENDERERS FOR PIN LOCK & CHAT ACTIONS ───────────
   const renderDirectActionAndLockModals = () => (
     <>
@@ -1742,30 +1754,19 @@ export default function DirectMessages({
 
   // ── CONVERSATION SCREEN ───────────────────────────────────────
   const activePeer = selectedPeer
-    ? (allUsers.find(u => u.username === selectedPeer.username) || allUsers.find(u => u.username.toLowerCase().trim() === selectedPeer.username.toLowerCase().trim()) || selectedPeer)
+    ? ((allUsers || []).find(u => u?.username && selectedPeer?.username && u.username.toLowerCase().trim() === selectedPeer.username.toLowerCase().trim()) || selectedPeer)
     : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 
-  const clearedAt = selectedPeer ? clearedTimestamps[selectedPeer.username] : null;
-  const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
-  const nonClearedMessages = useMemo(() => {
-    if (!clearTime) return messages;
-    return messages.filter(m => {
-      if (!m.timestamp) return true;
-      return new Date(m.timestamp).getTime() > clearTime;
-    });
-  }, [messages, clearTime]);
-
-  const visibleMessages = searchQuery.trim()
+  const visibleMessages = (searchQuery && searchQuery.trim())
     ? nonClearedMessages.filter(m => {
-        const meta = decryptedMsgMap[m.id];
+        const meta = decryptedMsgMap[m?.id];
         return meta?.text?.toLowerCase().includes(searchQuery.toLowerCase());
       })
     : nonClearedMessages;
 
   return (
     <div className="dm-chat-screen">
-      {/* Chat Header with Call Buttons & In-Chat Search */}
       {/* Chat Header with Call Buttons & In-Chat Search */}
       <div className="chat-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -1774,17 +1775,17 @@ export default function DirectMessages({
           </button>
 
           <div className="peer-profile" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            {activePeer.avatarUrl ? (
+            {activePeer?.avatarUrl ? (
               <img
                 src={activePeer.avatarUrl}
-                alt={activePeer.username}
+                alt={activePeer?.displayName || activePeer?.username || 'Contact'}
                 className="avatar-circle"
                 style={{
                   width: '40px',
                   height: '40px',
                   borderRadius: '50%',
                   objectFit: 'cover',
-                  border: `2px solid ${activePeer.avatarColor || '#ee7882'}`,
+                  border: `2px solid ${activePeer?.avatarColor || '#ee7882'}`,
                   flexShrink: 0
                 }}
               />
@@ -1795,7 +1796,7 @@ export default function DirectMessages({
                   width: '40px',
                   height: '40px',
                   borderRadius: '50%',
-                  backgroundColor: activePeer.avatarColor || '#e06c75',
+                  backgroundColor: activePeer?.avatarColor || '#e06c75',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1805,7 +1806,7 @@ export default function DirectMessages({
                   flexShrink: 0
                 }}
               >
-                {activePeer.username[0].toUpperCase()}
+                {((activePeer?.displayName || activePeer?.username) || '?')[0].toUpperCase()}
               </div>
             )}
             <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -1823,9 +1824,9 @@ export default function DirectMessages({
                     flexShrink: 1,
                     minWidth: 0
                   }}
-                  title={activePeer.displayName || activePeer.username}
+                  title={activePeer?.displayName || activePeer?.username || 'Chat'}
                 >
-                  {activePeer.displayName || activePeer.username}
+                  {activePeer?.displayName || activePeer?.username || 'Chat'}
                 </h4>
               </div>
 
