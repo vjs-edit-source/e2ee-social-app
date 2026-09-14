@@ -8223,8 +8223,8 @@ input:checked + .toggle-slider:before {
   background: rgba(238, 120, 130, 0.12);
   color: #ee7882;
   border: 1px solid rgba(238, 120, 130, 0.35);
-  border-radius: 16px;
-  padding: 5px 14px;
+  border-radius: 9999px;
+  padding: 6px 16px;
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -8251,7 +8251,7 @@ input:checked + .toggle-slider:before {
   right: 22px;
   width: 52px;
   height: 52px;
-  border-radius: 20px;
+  border-radius: 24px;
   background: linear-gradient(135deg, #ee7882 0%, #d64045 100%);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -8274,15 +8274,44 @@ input:checked + .toggle-slider:before {
 }
 
 /* Add Contact Search Box & Result Cards */
+.contact-search-box {
+  border-radius: 9999px !important;
+}
+
 .contact-search-box:focus-within {
   border-color: #ee7882 !important;
-  box-shadow: 0 0 0 2px rgba(238, 120, 130, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 0 0 2px rgba(238, 120, 130, 0.28), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+.contact-results-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.contact-results-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.contact-results-scroll::-webkit-scrollbar-thumb {
+  background: rgba(238, 120, 130, 0.35);
+  border-radius: 9999px;
+}
+
+.contact-results-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(238, 120, 130, 0.6);
+}
+
+.contact-match-card {
+  border-radius: 26px !important;
 }
 
 .contact-match-card:hover {
   background-color: rgba(238, 120, 130, 0.08) !important;
   border-color: rgba(238, 120, 130, 0.3) !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.add-contact-btn {
+  border-radius: 9999px !important;
 }
 
 .add-contact-btn:hover {
@@ -8292,6 +8321,10 @@ input:checked + .toggle-slider:before {
 
 .add-contact-btn:active {
   transform: scale(0.96);
+}
+
+.empty-add-contact-btn {
+  border-radius: 9999px !important;
 }
 
 .empty-add-contact-btn:hover {

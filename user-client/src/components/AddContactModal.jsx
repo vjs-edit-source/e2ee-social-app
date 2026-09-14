@@ -70,9 +70,9 @@ export default function AddContactModal({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(10, 6, 12, 0.78)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        backgroundColor: 'rgba(10, 6, 12, 0.82)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -88,12 +88,12 @@ export default function AddContactModal({
           maxWidth: '460px',
           backgroundColor: '#16121c',
           border: '1px solid rgba(238, 120, 130, 0.35)',
-          borderRadius: '24px',
-          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(238, 120, 130, 0.18)',
+          borderRadius: '32px',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(238, 120, 130, 0.22)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          animation: 'fadeInScale 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+          animation: 'fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
       >
         {/* Header */}
@@ -102,27 +102,28 @@ export default function AddContactModal({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '18px 22px 14px',
+            padding: '20px 24px 14px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.07)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '16px',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
                 backgroundColor: 'rgba(238, 120, 130, 0.14)',
-                border: '1px solid rgba(238, 120, 130, 0.3)',
+                border: '1px solid rgba(238, 120, 130, 0.35)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                boxShadow: '0 0 12px rgba(238, 120, 130, 0.2)'
               }}
             >
               <MessageSquarePlus size={20} color="#ee7882" />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#ffffff' }}>
+              <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 750, color: '#ffffff', letterSpacing: '-0.01em' }}>
                 New Message
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: '#a69ea2' }}>
@@ -136,16 +137,16 @@ export default function AddContactModal({
             className="modal-close-btn"
             style={{
               background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '14px',
-              width: '32px',
-              height: '32px',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '50%',
+              width: '34px',
+              height: '34px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#cbd5e1',
               cursor: 'pointer',
-              transition: 'all 0.15s ease'
+              transition: 'all 0.18s ease'
             }}
             title="Close"
           >
@@ -153,8 +154,8 @@ export default function AddContactModal({
           </button>
         </div>
 
-        {/* Search Input Box */}
-        <div style={{ padding: '16px 20px 10px' }}>
+        {/* Search Input Box with Full Pill Rounded Corners */}
+        <div style={{ padding: '16px 22px 10px' }}>
           <div
             className="contact-search-box"
             style={{
@@ -163,8 +164,8 @@ export default function AddContactModal({
               gap: '10px',
               backgroundColor: 'rgba(0, 0, 0, 0.35)',
               border: '1px solid rgba(238, 120, 130, 0.35)',
-              borderRadius: '16px',
-              padding: '10px 16px',
+              borderRadius: '9999px',
+              padding: '10px 18px',
               transition: 'all 0.2s ease',
               boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)'
             }}
@@ -207,19 +208,22 @@ export default function AddContactModal({
 
         {/* Results List */}
         <div
+          className="contact-results-scroll"
           style={{
             maxHeight: '340px',
             overflowY: 'auto',
-            padding: '6px 20px 18px',
+            padding: '6px 22px 20px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px'
+            gap: '12px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(238, 120, 130, 0.35) transparent'
           }}
         >
           {searchQuery.trim() === '' ? (
             <div
               style={{
-                padding: '28px 16px',
+                padding: '30px 16px',
                 textAlign: 'center',
                 color: '#a69ea2',
                 display: 'flex',
@@ -228,18 +232,18 @@ export default function AddContactModal({
                 gap: '8px'
               }}
             >
-              <Sparkles size={28} color="#ee7882" style={{ opacity: 0.7 }} />
-              <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600 }}>
+              <Sparkles size={28} color="#ee7882" style={{ opacity: 0.8 }} />
+              <div style={{ fontSize: '0.88rem', color: '#f1f5f9', fontWeight: 600 }}>
                 Start typing to find a friend
               </div>
-              <div style={{ fontSize: '0.74rem', color: '#8e8690', maxWidth: '280px' }}>
+              <div style={{ fontSize: '0.74rem', color: '#8e8690', maxWidth: '280px', lineHeight: 1.4 }}>
                 Enter their username or registered phone number to add them and begin chatting securely.
               </div>
             </div>
           ) : matchingUsers.length === 0 ? (
             <div
               style={{
-                padding: '28px 16px',
+                padding: '30px 16px',
                 textAlign: 'center',
                 color: '#a69ea2',
                 display: 'flex',
@@ -249,10 +253,10 @@ export default function AddContactModal({
               }}
             >
               <User size={28} color="#64748b" />
-              <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600 }}>
+              <div style={{ fontSize: '0.88rem', color: '#f1f5f9', fontWeight: 600 }}>
                 No users found matching "{searchQuery}"
               </div>
-              <div style={{ fontSize: '0.74rem', color: '#8e8690', maxWidth: '300px' }}>
+              <div style={{ fontSize: '0.74rem', color: '#8e8690', maxWidth: '300px', lineHeight: 1.4 }}>
                 Double check the handle or phone number. Friends must have registered an account to be contacted.
               </div>
             </div>
@@ -284,11 +288,11 @@ export default function AddContactModal({
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '10px',
+                    gap: '12px',
                     backgroundColor: 'rgba(255, 255, 255, 0.04)',
                     border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '18px',
-                    padding: '14px',
+                    borderRadius: '26px',
+                    padding: '16px',
                     transition: 'all 0.18s ease'
                   }}
                 >
@@ -300,8 +304,8 @@ export default function AddContactModal({
                           src={user.avatarUrl}
                           alt={user.username}
                           style={{
-                            width: '44px',
-                            height: '44px',
+                            width: '46px',
+                            height: '46px',
                             borderRadius: '50%',
                             objectFit: 'cover',
                             border: `2px solid ${user.avatarColor || '#3b82f6'}`
@@ -310,8 +314,8 @@ export default function AddContactModal({
                       ) : (
                         <div
                           style={{
-                            width: '44px',
-                            height: '44px',
+                            width: '46px',
+                            height: '46px',
                             borderRadius: '50%',
                             backgroundColor: user.avatarColor || '#3b82f6',
                             display: 'flex',
@@ -319,7 +323,7 @@ export default function AddContactModal({
                             justifyContent: 'center',
                             fontWeight: 'bold',
                             color: '#fff',
-                            fontSize: '1.05rem'
+                            fontSize: '1.1rem'
                           }}
                         >
                           {((user.displayName || user.username) || '?')[0].toUpperCase()}
@@ -335,11 +339,11 @@ export default function AddContactModal({
                             width: '11px',
                             height: '11px',
                             borderRadius: '50%',
-                            backgroundColor: '#10b981',
+                            backgroundColor: '#ee7882',
                             border: '2px solid #16121c',
-                            boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)'
+                            boxShadow: '0 0 8px rgba(238, 120, 130, 0.9)'
                           }}
-                          title="Online"
+                          title="Active now"
                         />
                       )}
                     </div>
@@ -356,16 +360,16 @@ export default function AddContactModal({
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '3px',
-                              background: 'rgba(16, 185, 129, 0.12)',
-                              color: '#34d399',
-                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              background: 'rgba(238, 120, 130, 0.15)',
+                              color: '#ee7882',
+                              border: '1px solid rgba(238, 120, 130, 0.35)',
                               borderRadius: '9999px',
-                              padding: '1px 6px',
+                              padding: '1px 8px',
                               fontSize: '0.64rem',
-                              fontWeight: 600
+                              fontWeight: 700
                             }}
                           >
-                            <Check size={9} /> Contact
+                            <Check size={9} color="#ee7882" /> Contact
                           </span>
                         )}
                       </div>
@@ -390,22 +394,22 @@ export default function AddContactModal({
                   </div>
 
                   {/* Access Badges & Action Button */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', paddingTop: '4px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       {hasBothAccess ? (
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '3px',
-                          background: 'rgba(16, 185, 129, 0.12)',
-                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          background: 'rgba(238, 120, 130, 0.12)',
+                          border: '1px solid rgba(238, 120, 130, 0.35)',
                           borderRadius: '9999px',
-                          padding: '2px 8px',
+                          padding: '2px 9px',
                           fontSize: '0.68rem',
-                          color: '#34d399',
+                          color: '#ff9ea8',
                           fontWeight: 600
                         }}>
-                          <ShieldCheck size={10} color="#10b981" />
+                          <ShieldCheck size={10} color="#ee7882" />
                           <span>Both Spaces</span>
                         </span>
                       ) : communitiesCount > 0 ? (
@@ -416,7 +420,7 @@ export default function AddContactModal({
                           background: 'rgba(96, 165, 250, 0.10)',
                           border: '1px solid rgba(96, 165, 250, 0.25)',
                           borderRadius: '9999px',
-                          padding: '2px 7px',
+                          padding: '2px 8px',
                           fontSize: '0.67rem',
                           color: '#60a5fa'
                         }}>
@@ -431,7 +435,7 @@ export default function AddContactModal({
                           background: 'rgba(244, 114, 182, 0.10)',
                           border: '1px solid rgba(244, 114, 182, 0.25)',
                           borderRadius: '9999px',
-                          padding: '2px 7px',
+                          padding: '2px 8px',
                           fontSize: '0.67rem',
                           color: '#f472b6'
                         }}>
@@ -452,13 +456,13 @@ export default function AddContactModal({
                         background: 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)',
                         color: '#ffffff',
                         border: 'none',
-                        borderRadius: '14px',
-                        padding: '6px 14px',
+                        borderRadius: '9999px',
+                        padding: '7px 16px',
                         fontSize: '0.78rem',
-                        fontWeight: 600,
+                        fontWeight: 700,
                         cursor: 'pointer',
-                        boxShadow: '0 4px 12px rgba(238, 120, 130, 0.35)',
-                        transition: 'all 0.15s ease'
+                        boxShadow: '0 4px 14px rgba(238, 120, 130, 0.45)',
+                        transition: 'all 0.18s ease'
                       }}
                     >
                       <MessageSquarePlus size={14} />

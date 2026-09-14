@@ -1179,19 +1179,20 @@ export default function DirectMessages({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '5px',
-                  background: contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.12)',
-                  color: contactsOnlyBothAccess ? '#ffffff' : '#34d399',
-                  border: `1px solid ${contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.35)'}`,
-                  borderRadius: '16px',
-                  padding: '4px 12px',
+                  background: contactsOnlyBothAccess ? 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)' : 'rgba(238, 120, 130, 0.12)',
+                  color: contactsOnlyBothAccess ? '#ffffff' : '#ee7882',
+                  border: `1px solid ${contactsOnlyBothAccess ? '#ee7882' : 'rgba(238, 120, 130, 0.35)'}`,
+                  borderRadius: '9999px',
+                  padding: '5px 14px',
                   fontSize: '0.74rem',
                   cursor: 'pointer',
                   fontWeight: 600,
+                  boxShadow: contactsOnlyBothAccess ? '0 0 12px rgba(238, 120, 130, 0.4)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
                 title="Filter contacts who have access to both communities and groups"
               >
-                <ShieldCheck size={13} color={contactsOnlyBothAccess ? '#ffffff' : '#10b981'} />
+                <ShieldCheck size={13} color={contactsOnlyBothAccess ? '#ffffff' : '#ee7882'} />
                 <span>Both Communities & Groups ({bothAccessPeersCount})</span>
               </button>
             )}
@@ -1200,6 +1201,7 @@ export default function DirectMessages({
               type="button"
               className="advanced-msg-icon-btn"
               onClick={() => setShowAddContactModal(true)}
+              style={{ borderRadius: '9999px' }}
               title="New Message / Add Contact"
             >
               <MessageSquarePlus size={16} color="#ee7882" />
@@ -1325,9 +1327,9 @@ export default function DirectMessages({
                           width: '12px',
                           height: '12px',
                           borderRadius: '50%',
-                          backgroundColor: '#10b981',
+                          backgroundColor: '#ee7882',
                           border: '2px solid #0f172a',
-                          boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)'
+                          boxShadow: '0 0 6px rgba(238, 120, 130, 0.9)'
                         }}
                         title="Online"
                       />
@@ -1373,15 +1375,15 @@ export default function DirectMessages({
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            background: 'rgba(238, 120, 130, 0.12)',
+                            border: '1px solid rgba(238, 120, 130, 0.35)',
                             borderRadius: '9999px',
                             padding: '1px 8px',
                             fontSize: '0.68rem',
-                            color: '#34d399',
+                            color: '#ff9ea8',
                             fontWeight: 600
                           }} title="Has access to both Communities and Groups">
-                            <ShieldCheck size={10} color="#10b981" />
+                            <ShieldCheck size={10} color="#ee7882" />
                             <span>Both Spaces ({access.communitiesCount} Comm • {access.groupsCount} Grp)</span>
                           </span>
                         ) : access.communitiesCount > 0 ? (
@@ -1447,8 +1449,8 @@ export default function DirectMessages({
                     </div>
 
                     {/* Bottom Row: Last Seen Presence */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: isPeerActive ? '#34d399' : '#64748b' }}>
-                      <Circle size={6} color={isPeerActive ? '#10b981' : '#64748b'} fill={isPeerActive ? '#10b981' : '#64748b'} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: isPeerActive ? '#ff9ea8' : '#64748b' }}>
+                      <Circle size={6} color={isPeerActive ? '#ee7882' : '#64748b'} fill={isPeerActive ? '#ee7882' : '#64748b'} />
                       <span>{lastSeenText}</span>
                     </div>
                   </div>
