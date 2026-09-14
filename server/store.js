@@ -25,6 +25,7 @@ class ZeroKnowledgeStore {
     this.groupMessages = new Map();  // groupId -> Array of { id, groupId, sender, ciphertext, iv, keyEnvelopes, mediaId, timestamp }
     this.statuses = [];             // Array of { id, author, ciphertext, iv, keyEnvelopes, mediaId, backgroundGradient, likes, comments, timestamp, expiresAt }
     this.otps = new Map();         // phone -> { otp, expiresAt, username }
+    this.userContacts = new Map(); // username -> Set of contact usernames
 
     this.saveTimeout = null;
     this.mongoClient = null;
@@ -167,6 +168,14 @@ class ZeroKnowledgeStore {
         if (parsed.statuses && Array.isArray(parsed.statuses)) {
           this.statuses = parsed.statuses;
         }
+        if (parsed.contacts && Array.isArray(parsed.contacts)) {
+          this.userContacts = new Map();
+          for (const [u, list] of parsed.contacts) {
+            if (u && Array.isArray(list)) {
+              this.userContacts.set(u, new Set(list));
+            }
+          }
+        }
 
         if (this.groups.size === 0) {
           this.seedDefaultCommunities();
@@ -221,6 +230,7 @@ class ZeroKnowledgeStore {
         groups: Array.from(this.groups.entries()),
         groupMessages: Array.from(this.groupMessages.entries()),
         statuses: this.statuses,
+        contacts: Array.from(this.userContacts.entries()).map(([u, s]) => [u, Array.from(s)]),
         savedAt: new Date().toISOString()
       };
 
@@ -346,6 +356,84 @@ class ZeroKnowledgeStore {
   getUser(username) {
     if (!username) return null;
     return this.users.get(username) || this.findUserByUsername(username) || null;
+  }
+
+  getContacts(username) {
+    if (!username) return [];
+    const cleanUser = String(username).trim();
+    let set = this.userContacts.get(cleanUser);
+    if (!set) {
+      for (const [u, s] of this.userContacts.entries()) {
+        if (u.toLowerCase() === cleanUser.toLowerCase()) {
+          set = s;
+          break;
+        }
+      }
+    }
+    return set ? Array.from(set) : [];
+  }
+
+  addContact(username, contactUsername) {
+    if (!username || !contactUsername) return [];
+    const cleanUser = String(username).trim();
+    const cleanContact = String(contactUsername).trim();
+    if (cleanUser.toLowerCase() === cleanContact.toLowerCase()) return this.getContacts(cleanUser);
+
+    let set = this.userContacts.get(cleanUser);
+    if (!set) {
+      set = new Set();
+      this.userContacts.set(cleanUser, set);
+    }
+    set.add(cleanContact);
+    this.scheduleSave();
+    return Array.from(set);
+  }
+
+  removeContact(username, contactUsername) {
+    if (!username || !contactUsername) return [];
+    const cleanUser = String(username).trim();
+    const cleanContact = String(contactUsername).trim();
+    const set = this.userContacts.get(cleanUser);
+    if (set) {
+      set.delete(cleanContact);
+      this.scheduleSave();
+      return Array.from(set);
+    }
+    return [];
+  }
+
+  searchUsers(query, excludeUsername = null) {
+    if (!query || typeof query !== 'string') return [];
+    const cleanQuery = query.toLowerCase().trim().replace(/^@/, '');
+    const cleanPhoneDigits = query.replace(/\D/g, '');
+    const excludeLower = excludeUsername ? String(excludeUsername).toLowerCase().trim() : '';
+
+    const results = [];
+    for (const u of this.users.values()) {
+      const uLower = (u.username || '').toLowerCase().trim();
+      if (excludeLower && uLower === excludeLower) continue;
+
+      const dLower = (u.displayName || '').toLowerCase().trim();
+      const userPhoneDigits = (u.phoneNumber || '').replace(/\D/g, '');
+
+      const usernameMatch = uLower.includes(cleanQuery);
+      const displayMatch = dLower.includes(cleanQuery);
+      const phoneMatch = cleanPhoneDigits.length >= 3 && userPhoneDigits.includes(cleanPhoneDigits);
+
+      if (usernameMatch || displayMatch || phoneMatch) {
+        results.push({
+          username: u.username,
+          displayName: u.displayName || u.username,
+          phoneNumber: u.phoneNumber || null,
+          avatarUrl: u.avatarUrl || null,
+          avatarColor: u.avatarColor || '#3b82f6',
+          bio: u.bio || '',
+          isOnline: !!u.isOnline,
+          lastSeen: u.lastSeen || u.registeredAt
+        });
+      }
+    }
+    return results;
   }
 
   updateUserPresence(username, isOnline) {

@@ -8211,5 +8211,101 @@ input:checked + .toggle-slider:before {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   MANUAL CONTACTS & ADVANCED MESSAGE ICON (THEMED & ROUNDED)
+   ══════════════════════════════════════════════════════════════ */
 
+/* Advanced Message Icon Button in Contacts Header */
+.advanced-msg-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(238, 120, 130, 0.12);
+  color: #ee7882;
+  border: 1px solid rgba(238, 120, 130, 0.35);
+  border-radius: 16px;
+  padding: 5px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
 
+.advanced-msg-icon-btn:hover {
+  background: rgba(238, 120, 130, 0.22);
+  border-color: rgba(238, 120, 130, 0.6);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 14px rgba(238, 120, 130, 0.35);
+}
+
+.advanced-msg-icon-btn:active {
+  transform: scale(0.97);
+}
+
+/* Floating Action Button (FAB) for Advanced Message */
+.fab-advanced-msg-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 22px;
+  width: 52px;
+  height: 52px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ee7882 0%, #d64045 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(238, 120, 130, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 90;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fab-advanced-msg-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6), 0 0 28px rgba(238, 120, 130, 0.65);
+}
+
+.fab-advanced-msg-btn:active {
+  transform: scale(0.95);
+}
+
+/* Add Contact Search Box & Result Cards */
+.contact-search-box:focus-within {
+  border-color: #ee7882 !important;
+  box-shadow: 0 0 0 2px rgba(238, 120, 130, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+.contact-match-card:hover {
+  background-color: rgba(238, 120, 130, 0.08) !important;
+  border-color: rgba(238, 120, 130, 0.3) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.add-contact-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(238, 120, 130, 0.5) !important;
+}
+
+.add-contact-btn:active {
+  transform: scale(0.96);
+}
+
+.empty-add-contact-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(238, 120, 130, 0.5) !important;
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.93) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

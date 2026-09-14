@@ -308,6 +308,53 @@ app.get('/api/conversations/:username', (req, res) => {
   res.json(db.getRecentConversations(req.params.username));
 });
 
+// 2d. User Contacts & Manual Contact Directory Management
+app.get('/api/contacts/:username', (req, res) => {
+  const username = req.params.username;
+  const contacts = db.getContacts(username);
+  res.json({ success: true, username, contacts });
+});
+
+app.post('/api/contacts/:username', (req, res) => {
+  const username = req.params.username;
+  const { contactUsername, query } = req.body;
+
+  let targetUser = null;
+  if (contactUsername) {
+    targetUser = db.getUser(contactUsername);
+  } else if (query) {
+    const results = db.searchUsers(query, username);
+    if (results && results.length > 0) {
+      targetUser = results[0];
+    }
+  }
+
+  if (!targetUser && !contactUsername) {
+    return res.status(404).json({ error: 'Contact user not found' });
+  }
+
+  const contactHandle = targetUser ? targetUser.username : contactUsername;
+  const updatedContacts = db.addContact(username, contactHandle);
+
+  res.json({
+    success: true,
+    contacts: updatedContacts,
+    contactUser: targetUser || db.getUser(contactHandle)
+  });
+});
+
+app.delete('/api/contacts/:username/:contact', (req, res) => {
+  const { username, contact } = req.params;
+  const updatedContacts = db.removeContact(username, contact);
+  res.json({ success: true, contacts: updatedContacts });
+});
+
+app.get('/api/users/search', (req, res) => {
+  const { q, exclude } = req.query;
+  if (!q) return res.json([]);
+  res.json(db.searchUsers(q, exclude));
+});
+
 // 3. Create Envelope-Encrypted Feed Post
 app.post('/api/posts', (req, res) => {
   const { author, ciphertext, iv, keyEnvelopes, mediaId, isPublic, postKeyB64 } = req.body;

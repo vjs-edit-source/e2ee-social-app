@@ -26,7 +26,10 @@ import {
   CheckCheck,
   Clock,
   AlertCircle,
-  Trash2
+  Trash2,
+  Users,
+  MessageSquarePlus,
+  UserPlus
 } from 'lucide-react';
 import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
@@ -43,6 +46,7 @@ import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import MessageActionPopup from './MessageActionPopup';
+import AddContactModal from './AddContactModal';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { decryptionCache } from '../utils/decryptionCache';
 
@@ -117,6 +121,72 @@ export default function DirectMessages({
       return new Set();
     }
   });
+
+  // Manual Saved Contacts State
+  const [savedContacts, setSavedContacts] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`ciphersocial_contacts_${currentUser?.username}`);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch (e) {
+      return new Set();
+    }
+  });
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+
+  // Sync saved contacts from server on mount
+  useEffect(() => {
+    if (!currentUser?.username) return;
+    const fetchContacts = async () => {
+      try {
+        const res = await fetch(`${serverUrl}/api/contacts/${encodeURIComponent(currentUser.username)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.contacts && Array.isArray(data.contacts)) {
+            setSavedContacts(prev => {
+              const merged = new Set([...prev, ...data.contacts]);
+              try {
+                localStorage.setItem(`ciphersocial_contacts_${currentUser.username}`, JSON.stringify(Array.from(merged)));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to sync contacts from server:', err);
+      }
+    };
+    fetchContacts();
+  }, [currentUser?.username, serverUrl]);
+
+  // Handler for adding contact and opening chat immediately
+  const handleAddContact = async (targetUser) => {
+    if (!targetUser || !targetUser.username) return;
+    const contactHandle = targetUser.username;
+
+    // 1. Update local state & localStorage immediately
+    setSavedContacts(prev => {
+      const next = new Set(prev);
+      next.add(contactHandle);
+      try {
+        localStorage.setItem(`ciphersocial_contacts_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+
+    // 2. Sync to server in background
+    try {
+      fetch(`${serverUrl}/api/contacts/${encodeURIComponent(currentUser?.username)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactUsername: contactHandle })
+      }).catch(err => console.warn('Failed to persist contact to server:', err));
+    } catch (e) {}
+
+    // 3. Close modal & activate chat immediately ready for messaging
+    setShowAddContactModal(false);
+    setSelectedPeer(targetUser);
+  };
+
   const chatEndRef = useRef(null);
 
   // Sync initialSelectedPeer if passed from notification click
@@ -1005,7 +1075,13 @@ export default function DirectMessages({
 
   const peers = useMemo(() => {
     const myNameLower = (currentUser?.username || '').toLowerCase().trim();
-    const list = allUsers.filter(u => u.username !== currentUser?.username && u.username.toLowerCase().trim() !== myNameLower);
+    const list = allUsers.filter(u => {
+      const uLower = (u.username || '').toLowerCase().trim();
+      if (u.username === currentUser?.username || uLower === myNameLower) return false;
+      const isSaved = savedContacts.has(u.username) || savedContacts.has(uLower);
+      const hasChatHistory = Boolean(conversationPreviews[u.username] || (peerUnreadMap[u.username] || 0) > 0);
+      return isSaved || hasChatHistory;
+    });
     return list.sort((a, b) => {
       const unreadA = peerUnreadMap[a.username] || 0;
       const unreadB = peerUnreadMap[b.username] || 0;
@@ -1021,7 +1097,7 @@ export default function DirectMessages({
       const nameB = b.displayName || b.username;
       return nameA.localeCompare(nameB);
     });
-  }, [allUsers, currentUser.username, peerUnreadMap, conversationPreviews]);
+  }, [allUsers, currentUser.username, savedContacts, peerUnreadMap, conversationPreviews]);
 
   const peerAccessMap = useMemo(() => {
     const map = {};
@@ -1094,30 +1170,42 @@ export default function DirectMessages({
             </span>
           </div>
 
-          {bothAccessPeersCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {bothAccessPeersCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setContactsOnlyBothAccess(prev => !prev)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.12)',
+                  color: contactsOnlyBothAccess ? '#ffffff' : '#34d399',
+                  border: `1px solid ${contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.35)'}`,
+                  borderRadius: '16px',
+                  padding: '4px 12px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease'
+                }}
+                title="Filter contacts who have access to both communities and groups"
+              >
+                <ShieldCheck size={13} color={contactsOnlyBothAccess ? '#ffffff' : '#10b981'} />
+                <span>Both Communities & Groups ({bothAccessPeersCount})</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => setContactsOnlyBothAccess(prev => !prev)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                background: contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.12)',
-                color: contactsOnlyBothAccess ? '#ffffff' : '#34d399',
-                border: `1px solid ${contactsOnlyBothAccess ? '#10b981' : 'rgba(16, 185, 129, 0.35)'}`,
-                borderRadius: '16px',
-                padding: '4px 12px',
-                fontSize: '0.74rem',
-                cursor: 'pointer',
-                fontWeight: 600,
-                transition: 'all 0.15s ease'
-              }}
-              title="Filter contacts who have access to both communities and groups"
+              className="advanced-msg-icon-btn"
+              onClick={() => setShowAddContactModal(true)}
+              title="New Message / Add Contact"
             >
-              <ShieldCheck size={13} color={contactsOnlyBothAccess ? '#ffffff' : '#10b981'} />
-              <span>Both Communities & Groups ({bothAccessPeersCount})</span>
+              <MessageSquarePlus size={16} color="#ee7882" />
+              <span>New Chat</span>
             </button>
-          )}
+          </div>
         </div>
 
         {/* Contacts Search Bar */}
@@ -1139,8 +1227,32 @@ export default function DirectMessages({
         {filteredPeers.length === 0 ? (
           <div className="dm-contacts-empty">
             <Lock size={40} color="#94a3b8" />
-            <p>{contactsSearchQuery ? `No contacts matching "${contactsSearchQuery}"` : (contactsOnlyBothAccess ? 'No contacts found with access to both communities and groups.' : 'No contacts online yet.')}</p>
-            <span>{contactsSearchQuery ? 'Try searching another name or space.' : 'Ask a friend to join and their name will appear here!'}</span>
+            <p>{contactsSearchQuery ? `No contacts matching "${contactsSearchQuery}"` : (contactsOnlyBothAccess ? 'No contacts found with access to both communities and groups.' : 'No contacts added yet.')}</p>
+            <span>{contactsSearchQuery ? 'Try searching another name or space.' : 'Add a friend by their username or phone number to begin chatting securely.'}</span>
+            <button
+              type="button"
+              className="empty-add-contact-btn"
+              onClick={() => setShowAddContactModal(true)}
+              style={{
+                marginTop: '14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '16px',
+                padding: '10px 20px',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(238, 120, 130, 0.35)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <MessageSquarePlus size={16} />
+              <span>Add Friend / Start Chat</span>
+            </button>
           </div>
         ) : (
           <div className="dm-contacts-list">
@@ -1345,6 +1457,28 @@ export default function DirectMessages({
             })}
           </div>
         )}
+
+        {/* Floating Action Button for New Message / Add Contact */}
+        <button
+          type="button"
+          className="fab-advanced-msg-btn"
+          onClick={() => setShowAddContactModal(true)}
+          title="New Message / Add Contact"
+          aria-label="New Message"
+        >
+          <MessageSquarePlus size={22} color="#ffffff" />
+        </button>
+
+        {/* Add Contact Modal */}
+        <AddContactModal
+          isOpen={showAddContactModal}
+          onClose={() => setShowAddContactModal(false)}
+          allUsers={allUsers}
+          currentUser={currentUser}
+          savedContacts={savedContacts}
+          userGroups={userGroups}
+          onAddContact={handleAddContact}
+        />
       </div>
     );
   }
