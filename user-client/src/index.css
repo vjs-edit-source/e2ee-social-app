@@ -8342,3 +8342,51 @@ input:checked + .toggle-slider:before {
     transform: scale(1) translateY(0);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAT ACTION MENU & PIN LOCK MODAL STYLING
+   ═══════════════════════════════════════════════════════════════ */
+.peer-menu-btn:hover {
+  background: rgba(238, 120, 130, 0.2) !important;
+  border-color: rgba(238, 120, 130, 0.45) !important;
+  color: #ee7882 !important;
+  transform: scale(1.05);
+}
+
+.peer-menu-btn:active {
+  transform: scale(0.92);
+}
+
+.chat-action-menu-btn:hover {
+  background: rgba(238, 120, 130, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.chat-action-menu-btn:active {
+  transform: scale(0.98);
+}
+
+.chat-action-menu-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+.archived-chats-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(238, 120, 130, 0.35);
+}
+
+.archived-chats-toggle-btn:active {
+  transform: scale(0.97);
+}
+
+.num-pad-btn:hover {
+  background: rgba(238, 120, 130, 0.18) !important;
+  border-color: rgba(238, 120, 130, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.num-pad-btn:active {
+  transform: scale(0.92) !important;
+  background: rgba(238, 120, 130, 0.3) !important;
+}
+

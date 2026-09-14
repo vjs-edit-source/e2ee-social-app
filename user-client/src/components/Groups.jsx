@@ -41,7 +41,13 @@ import {
   Circle,
   Phone,
   Clock,
-  Trash2
+  Trash2,
+  PinOff,
+  Archive,
+  ArchiveRestore,
+  Bell,
+  BellOff,
+  KeyRound
 } from 'lucide-react';
 import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
@@ -54,6 +60,8 @@ import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import MessageActionPopup from './MessageActionPopup';
+import ChatLockModal from './ChatLockModal';
+import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { localSearchIndex } from '../search/searchIndex';
 import { decryptionCache } from '../utils/decryptionCache';
@@ -74,6 +82,161 @@ export default function Groups({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState(false);
   const [drawerTab, setDrawerTab] = useState('members'); // 'members' | 'settings' | 'media' | 'requests'
+
+  // ── PIN, ARCHIVE, LOCK, MUTE & CLEAR GROUP STATES ─────────
+  const [pinnedGroups, setPinnedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_pinned_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [archivedGroups, setArchivedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_archived_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [lockedGroups, setLockedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_locked_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [mutedGroups, setMutedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_muted_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [clearedGroupTimestamps, setClearedGroupTimestamps] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_cleared_groups_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [showArchivedView, setShowArchivedView] = useState(false);
+  const [unlockingGroup, setUnlockingGroup] = useState(null);
+  const [actionMenuGroup, setActionMenuGroup] = useState(null);
+
+  const togglePinGroup = (gid) => {
+    if (!gid) return;
+    setPinnedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_pinned_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleArchiveGroup = (gid) => {
+    if (!gid) return;
+    setArchivedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_archived_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleLockGroup = (gid) => {
+    if (!gid) return;
+    setLockedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_locked_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleMuteGroup = (gid) => {
+    if (!gid) return;
+    setMutedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_muted_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const clearGroupChatHistory = (gid) => {
+    if (!gid) return;
+    const nowIso = new Date().toISOString();
+    setClearedGroupTimestamps(prev => {
+      const next = { ...prev, [gid]: nowIso };
+      try {
+        localStorage.setItem(`ciphersocial_cleared_groups_${currentUser?.username}`, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    if (selectedGroup?.id === gid) {
+      setMessages([]);
+    }
+  };
+
+  const handleSelectGroupWithLock = (g) => {
+    if (!g) return;
+    if (lockedGroups.has(g.id)) {
+      setUnlockingGroup(g);
+    } else {
+      setSelectedGroup(g);
+    }
+  };
+
+  // ── MODAL RENDERERS FOR GROUP PIN LOCK & CHAT ACTIONS ─────
+  const renderChatActionAndLockModals = () => (
+    <>
+      <ChatActionMenu
+        isOpen={!!actionMenuGroup}
+        onClose={() => setActionMenuGroup(null)}
+        chatName={actionMenuGroup?.name}
+        isPinned={actionMenuGroup ? pinnedGroups.has(actionMenuGroup.id) : false}
+        isLocked={actionMenuGroup ? lockedGroups.has(actionMenuGroup.id) : false}
+        isArchived={actionMenuGroup ? archivedGroups.has(actionMenuGroup.id) : false}
+        isMuted={actionMenuGroup ? mutedGroups.has(actionMenuGroup.id) : false}
+        onTogglePin={() => actionMenuGroup && togglePinGroup(actionMenuGroup.id)}
+        onToggleLock={() => actionMenuGroup && toggleLockGroup(actionMenuGroup.id)}
+        onToggleArchive={() => actionMenuGroup && toggleArchiveGroup(actionMenuGroup.id)}
+        onToggleMute={() => actionMenuGroup && toggleMuteGroup(actionMenuGroup.id)}
+        onClearChat={() => actionMenuGroup && clearGroupChatHistory(actionMenuGroup.id)}
+      />
+
+      <ChatLockModal
+        isOpen={!!unlockingGroup}
+        onClose={() => setUnlockingGroup(null)}
+        onUnlock={() => {
+          if (unlockingGroup) {
+            setSelectedGroup(unlockingGroup);
+            if (onClearGroupUnread) onClearGroupUnread(unlockingGroup.id);
+            triggerMarkGroupSeen(unlockingGroup.id);
+          }
+          setUnlockingGroup(null);
+        }}
+        title={unlockingGroup?.name || 'Locked Group'}
+      />
+    </>
+  );
 
   // Community Entry & Join Request States
   const [joinModalGroup, setJoinModalGroup] = useState(null);
@@ -1304,20 +1467,42 @@ export default function Groups({
     return `${Math.floor(totalSecs / 3600)}h left`;
   };
 
-  // Filter groups in list
-  const filteredGroups = groups.filter(g => {
-    const matchesFilter = activeFilter === 'all' || (activeFilter === 'groups' ? !g.isCommunity : g.isCommunity);
-    const matchesSearch = !listSearchQuery.trim() ||
-      g.name.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
-      (g.description && g.description.toLowerCase().includes(listSearchQuery.toLowerCase()));
-    return matchesFilter && matchesSearch;
-  });
+  // Filter and sort groups with Pin priority and Archive view
+  const filteredGroups = useMemo(() => {
+    return groups.filter(g => {
+      const isArchived = archivedGroups.has(g.id);
+      if (showArchivedView) {
+        if (!isArchived) return false;
+      } else {
+        if (isArchived) return false;
+      }
+      const matchesFilter = activeFilter === 'all' || (activeFilter === 'groups' ? !g.isCommunity : g.isCommunity);
+      const matchesSearch = !listSearchQuery.trim() ||
+        g.name.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+        (g.description && g.description.toLowerCase().includes(listSearchQuery.toLowerCase()));
+      return matchesFilter && matchesSearch;
+    }).sort((a, b) => {
+      const aPinned = pinnedGroups.has(a.id);
+      const bPinned = pinnedGroups.has(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
 
-  // Filter and deduplicate messages in chat search
+      const timeA = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.createdAt || 0).getTime();
+      const timeB = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [groups, archivedGroups, showArchivedView, activeFilter, listSearchQuery, pinnedGroups]);
+
+  // Filter and deduplicate messages in chat search (excluding messages before cleared timestamp)
+  const clearedAt = selectedGroup ? clearedGroupTimestamps[selectedGroup.id] : null;
+  const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
   const uniqueMessages = [];
   const seenMsgIds = new Set();
   for (const m of messages) {
     if (m && m.id && !seenMsgIds.has(m.id)) {
+      if (clearTime && new Date(m.timestamp).getTime() <= clearTime) {
+        continue;
+      }
       seenMsgIds.add(m.id);
       uniqueMessages.push(m);
     }
@@ -1689,8 +1874,8 @@ export default function Groups({
               </div>
               <div className="group-meta-subtitle" style={{ minWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeGroupCount > 0 ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600, fontSize: '0.73rem', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                    <Circle size={6} color="#10b981" fill="#10b981" style={{ flexShrink: 0 }} />
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#ff9ea8', fontWeight: 600, fontSize: '0.73rem', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    <Circle size={6} color="#ee7882" fill="#ee7882" style={{ flexShrink: 0 }} />
                     <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {activeGroupCount} active now
                     </span>
@@ -1761,6 +1946,20 @@ export default function Groups({
                   <div className="group-header-dropdown-menu">
                     <button
                       className="header-menu-item"
+                      onClick={() => {
+                        setActionMenuGroup(selectedGroup);
+                        setShowHeaderMenu(false);
+                      }}
+                    >
+                      <Shield size={16} color="#ee7882" />
+                      <div className="menu-item-text">
+                        <strong>Chat Options &amp; Security</strong>
+                        <span>Pin, Lock, Archive, Mute, or Clear</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="header-menu-item"
                       onClick={() => { setDrawerTab('members'); setShowMembersDrawer(true); setShowHeaderMenu(false); }}
                     >
                       <Info size={16} color="#ee7882" />
@@ -1799,7 +1998,7 @@ export default function Groups({
                         className="header-menu-item"
                         onClick={() => { setMemberSearchQuery(''); setShowAddMemberModal(true); setShowHeaderMenu(false); }}
                       >
-                        <UserPlus size={16} color="#10b981" />
+                        <UserPlus size={16} color="#ee7882" />
                         <div className="menu-item-text">
                           <strong>Add Members</strong>
                           <span>Invite contacts to group</span>
@@ -3341,6 +3540,7 @@ export default function Groups({
         {renderJoinModal()}
         {renderPendingModal()}
         {renderProfileModal()}
+        {renderChatActionAndLockModals()}
       </div>
     );
   }
@@ -3403,6 +3603,25 @@ export default function Groups({
           <Globe size={14} />
           <span>Communities</span>
         </button>
+
+        {archivedGroups.size > 0 && (
+          <button
+            type="button"
+            className={`filter-pill ${showArchivedView ? 'active' : ''}`}
+            onClick={() => setShowArchivedView(prev => !prev)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: showArchivedView ? 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)' : 'rgba(238, 120, 130, 0.12)',
+              color: showArchivedView ? '#ffffff' : '#ee7882',
+              border: `1px solid ${showArchivedView ? '#ee7882' : 'rgba(238, 120, 130, 0.35)'}`
+            }}
+          >
+            {showArchivedView ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+            <span>{showArchivedView ? 'All Spaces' : `Archived (${archivedGroups.size})`}</span>
+          </button>
+        )}
       </div>
 
       {/* Groups Grid / List */}
@@ -3458,7 +3677,7 @@ export default function Groups({
                 key={group.id}
                 className="group-card"
                 onClick={() => {
-                  setSelectedGroup(group);
+                  handleSelectGroupWithLock(group);
                   if (onClearGroupUnread) onClearGroupUnread(group.id);
                   triggerMarkGroupSeen(group.id);
                 }}
@@ -3508,21 +3727,62 @@ export default function Groups({
                             {unreadGroupMap[group.id] > 99 ? '99+' : unreadGroupMap[group.id]}
                           </span>
                         )}
+                        {pinnedGroups.has(group.id) && (
+                          <span title="Pinned to top" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Pin size={12} fill="#ee7882" />
+                          </span>
+                        )}
+                        {lockedGroups.has(group.id) && (
+                          <span title="Locked with PIN" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Lock size={12} />
+                          </span>
+                        )}
+                        {mutedGroups.has(group.id) && (
+                          <span title="Notifications muted" style={{ display: 'inline-flex', alignItems: 'center', color: '#a69ea2', flexShrink: 0 }}>
+                            <BellOff size={12} />
+                          </span>
+                        )}
                       </div>
-                      <div className="group-card-badges">
-                        {isGroupOwner && <span className="group-role-badge creator"><Crown size={10} /> Owner</span>}
-                        {!isGroupOwner && groupRole === 'admin' && <span className="group-role-badge admin"><Shield size={10} /> Admin</span>}
-                        <span className={`group-type-badge ${group.isCommunity ? 'community' : 'group'}`}>
-                          {group.isCommunity ? 'Community' : 'Private'}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                        <div className="group-card-badges">
+                          {isGroupOwner && <span className="group-role-badge creator"><Crown size={10} /> Owner</span>}
+                          {!isGroupOwner && groupRole === 'admin' && <span className="group-role-badge admin"><Shield size={10} /> Admin</span>}
+                          <span className={`group-type-badge ${group.isCommunity ? 'community' : 'group'}`}>
+                            {group.isCommunity ? 'Community' : 'Private'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="peer-menu-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActionMenuGroup(group);
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '50%',
+                            width: '28px',
+                            height: '28px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#cbd5e1',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                          title="Group Options (Pin, Lock, Archive, Mute, Clear)"
+                        >
+                          <MoreVertical size={13} />
+                        </button>
                       </div>
                     </div>
 
                     {/* Active Count OR Members Names at bottom of Group/Community Name */}
                     <div style={{ margin: '3px 0 5px', fontSize: '0.73rem', minWidth: 0 }}>
                       {cardActiveCount > 0 ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontWeight: 600 }}>
-                          <Circle size={6} color="#10b981" fill="#10b981" />
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#ff9ea8', fontWeight: 600 }}>
+                          <Circle size={6} color="#ee7882" fill="#ee7882" />
                           <span>{cardActiveCount} active now</span>
                           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>•</span>
                           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
@@ -3828,6 +4088,7 @@ export default function Groups({
       {renderJoinModal()}
       {renderPendingModal()}
       {renderProfileModal()}
+      {renderChatActionAndLockModals()}
     </div>
   );
 }

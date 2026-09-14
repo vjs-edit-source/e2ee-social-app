@@ -29,7 +29,15 @@ import {
   Trash2,
   Users,
   MessageSquarePlus,
-  UserPlus
+  UserPlus,
+  Pin,
+  PinOff,
+  Archive,
+  ArchiveRestore,
+  Bell,
+  BellOff,
+  MoreVertical,
+  KeyRound
 } from 'lucide-react';
 import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
@@ -47,6 +55,8 @@ import VoiceWaveformPlayer from './VoiceWaveformPlayer';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import MessageActionPopup from './MessageActionPopup';
 import AddContactModal from './AddContactModal';
+import ChatLockModal from './ChatLockModal';
+import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { decryptionCache } from '../utils/decryptionCache';
 
@@ -185,6 +195,128 @@ export default function DirectMessages({
     // 3. Close modal & activate chat immediately ready for messaging
     setShowAddContactModal(false);
     setSelectedPeer(targetUser);
+  };
+
+  // ── PIN, ARCHIVE, LOCK, MUTE & CLEAR CHAT STATES ───────────
+  const [pinnedPeers, setPinnedPeers] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_pinned_dms_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [archivedPeers, setArchivedPeers] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_archived_dms_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [lockedPeers, setLockedPeers] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_locked_dms_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [mutedPeers, setMutedPeers] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_muted_dms_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [clearedTimestamps, setClearedTimestamps] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_cleared_dms_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [showArchivedView, setShowArchivedView] = useState(false);
+  const [unlockingPeer, setUnlockingPeer] = useState(null);
+  const [activeActionPeer, setActiveActionPeer] = useState(null);
+
+  const togglePinPeer = (uName) => {
+    if (!uName) return;
+    setPinnedPeers(prev => {
+      const next = new Set(prev);
+      if (next.has(uName)) next.delete(uName);
+      else next.add(uName);
+      try {
+        localStorage.setItem(`ciphersocial_pinned_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleArchivePeer = (uName) => {
+    if (!uName) return;
+    setArchivedPeers(prev => {
+      const next = new Set(prev);
+      if (next.has(uName)) next.delete(uName);
+      else next.add(uName);
+      try {
+        localStorage.setItem(`ciphersocial_archived_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleLockPeer = (uName) => {
+    if (!uName) return;
+    setLockedPeers(prev => {
+      const next = new Set(prev);
+      if (next.has(uName)) next.delete(uName);
+      else next.add(uName);
+      try {
+        localStorage.setItem(`ciphersocial_locked_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleMutePeer = (uName) => {
+    if (!uName) return;
+    setMutedPeers(prev => {
+      const next = new Set(prev);
+      if (next.has(uName)) next.delete(uName);
+      else next.add(uName);
+      try {
+        localStorage.setItem(`ciphersocial_muted_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const clearPeerChat = (uName) => {
+    if (!uName) return;
+    const nowIso = new Date().toISOString();
+    setClearedTimestamps(prev => {
+      const next = { ...prev, [uName]: nowIso };
+      try {
+        localStorage.setItem(`ciphersocial_cleared_dms_${currentUser?.username}`, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    if (selectedPeer?.username === uName) {
+      setMessages([]);
+    }
+  };
+
+  const handleSelectPeer = (peer) => {
+    if (!peer) return;
+    const isLocked = lockedPeers.has(peer.username) || lockedPeers.has((peer.username || '').toLowerCase());
+    if (isLocked) {
+      setUnlockingPeer(peer);
+    } else {
+      setSelectedPeer(peer);
+    }
   };
 
   const chatEndRef = useRef(null);
@@ -1080,9 +1212,21 @@ export default function DirectMessages({
       if (u.username === currentUser?.username || uLower === myNameLower) return false;
       const isSaved = savedContacts.has(u.username) || savedContacts.has(uLower);
       const hasChatHistory = Boolean(conversationPreviews[u.username] || (peerUnreadMap[u.username] || 0) > 0);
-      return isSaved || hasChatHistory;
+      if (!isSaved && !hasChatHistory) return false;
+
+      const isArchived = archivedPeers.has(u.username) || archivedPeers.has(uLower);
+      if (showArchivedView) {
+        return isArchived;
+      } else {
+        return !isArchived;
+      }
     });
     return list.sort((a, b) => {
+      const aPinned = pinnedPeers.has(a.username) || pinnedPeers.has((a.username || '').toLowerCase());
+      const bPinned = pinnedPeers.has(b.username) || pinnedPeers.has((b.username || '').toLowerCase());
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
       const unreadA = peerUnreadMap[a.username] || 0;
       const unreadB = peerUnreadMap[b.username] || 0;
       if (unreadA > 0 && unreadB === 0) return -1;
@@ -1097,7 +1241,7 @@ export default function DirectMessages({
       const nameB = b.displayName || b.username;
       return nameA.localeCompare(nameB);
     });
-  }, [allUsers, currentUser.username, savedContacts, peerUnreadMap, conversationPreviews]);
+  }, [allUsers, currentUser.username, savedContacts, peerUnreadMap, conversationPreviews, archivedPeers, showArchivedView, pinnedPeers]);
 
   const peerAccessMap = useMemo(() => {
     const map = {};
@@ -1155,6 +1299,36 @@ export default function DirectMessages({
   }, [peers, contactsSearchQuery, contactsOnlyBothAccess, peerAccessMap]);
 
   const canSend = !sending && !mediaUploading && (Boolean(inputMessage && inputMessage.trim()) || Boolean(attachedMedia && attachedMedia.mediaId));
+
+  // ── MODAL RENDERERS FOR PIN LOCK & CHAT ACTIONS ───────────
+  const renderDirectActionAndLockModals = () => (
+    <>
+      <ChatActionMenu
+        isOpen={!!activeActionPeer}
+        onClose={() => setActiveActionPeer(null)}
+        chatName={activeActionPeer?.displayName || activeActionPeer?.username}
+        isPinned={activeActionPeer ? (pinnedPeers.has(activeActionPeer.username) || pinnedPeers.has((activeActionPeer.username || '').toLowerCase())) : false}
+        isLocked={activeActionPeer ? (lockedPeers.has(activeActionPeer.username) || lockedPeers.has((activeActionPeer.username || '').toLowerCase())) : false}
+        isArchived={activeActionPeer ? (archivedPeers.has(activeActionPeer.username) || archivedPeers.has((activeActionPeer.username || '').toLowerCase())) : false}
+        isMuted={activeActionPeer ? (mutedPeers.has(activeActionPeer.username) || mutedPeers.has((activeActionPeer.username || '').toLowerCase())) : false}
+        onTogglePin={() => activeActionPeer && togglePinPeer(activeActionPeer.username)}
+        onToggleLock={() => activeActionPeer && toggleLockPeer(activeActionPeer.username)}
+        onToggleArchive={() => activeActionPeer && toggleArchivePeer(activeActionPeer.username)}
+        onToggleMute={() => activeActionPeer && toggleMutePeer(activeActionPeer.username)}
+        onClearChat={() => activeActionPeer && clearPeerChat(activeActionPeer.username)}
+      />
+
+      <ChatLockModal
+        isOpen={!!unlockingPeer}
+        onClose={() => setUnlockingPeer(null)}
+        onUnlock={() => {
+          if (unlockingPeer) setSelectedPeer(unlockingPeer);
+          setUnlockingPeer(null);
+        }}
+        title={unlockingPeer?.displayName || unlockingPeer?.username || 'Locked Chat'}
+      />
+    </>
+  );
 
   // ── CONTACTS LIST SCREEN ─────────────────────────────────────
   if (!selectedPeer) {
@@ -1226,6 +1400,37 @@ export default function DirectMessages({
           )}
         </div>
 
+        {/* Archived Chats Toggle Banner */}
+        {archivedPeers.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 10px' }}>
+            <button
+              type="button"
+              className="archived-chats-toggle-btn"
+              onClick={() => setShowArchivedView(prev => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: showArchivedView ? 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)' : 'rgba(238, 120, 130, 0.12)',
+                color: showArchivedView ? '#ffffff' : '#ee7882',
+                border: `1px solid ${showArchivedView ? '#ee7882' : 'rgba(238, 120, 130, 0.35)'}`,
+                borderRadius: '9999px',
+                padding: '6px 14px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {showArchivedView ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+              <span>{showArchivedView ? '← Back to All Chats' : `Archived Chats (${archivedPeers.size})`}</span>
+            </button>
+            {showArchivedView && (
+              <span style={{ fontSize: '0.72rem', color: '#a69ea2' }}>Showing archived chats</span>
+            )}
+          </div>
+        )}
+
         {filteredPeers.length === 0 ? (
           <div className="dm-contacts-empty">
             <Lock size={40} color="#94a3b8" />
@@ -1267,10 +1472,12 @@ export default function DirectMessages({
               const access = peerAccessMap[peer.username];
 
               return (
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   key={peer.username}
                   className={`dm-contact-card ${unreadCount > 0 ? 'has-unread' : ''}`}
-                  onClick={() => setSelectedPeer(peer)}
+                  onClick={() => handleSelectPeer(peer)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1280,7 +1487,8 @@ export default function DirectMessages({
                     boxSizing: 'border-box',
                     textAlign: 'left',
                     borderRadius: '24px',
-                    margin: '2px 0'
+                    margin: '2px 0',
+                    cursor: 'pointer'
                   }}
                 >
                   {/* Contact Avatar with Online Badge */}
@@ -1338,11 +1546,28 @@ export default function DirectMessages({
 
                   {/* Contact Info & Message Preview */}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {/* Top Row: Name + Time & Unread Badge */}
+                    {/* Top Row: Name + Badges + Time & Unread Badge */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span style={{ fontWeight: unreadCount > 0 ? '700' : '600', color: '#f8fafc', fontSize: '0.94rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {peer.displayName || peer.username}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                        <span style={{ fontWeight: unreadCount > 0 ? '700' : '600', color: '#f8fafc', fontSize: '0.94rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {peer.displayName || peer.username}
+                        </span>
+                        {(pinnedPeers.has(peer.username) || pinnedPeers.has((peer.username || '').toLowerCase())) && (
+                          <span title="Pinned chat" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Pin size={12} fill="#ee7882" />
+                          </span>
+                        )}
+                        {(lockedPeers.has(peer.username) || lockedPeers.has((peer.username || '').toLowerCase())) && (
+                          <span title="Locked with PIN" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Lock size={12} />
+                          </span>
+                        )}
+                        {(mutedPeers.has(peer.username) || mutedPeers.has((peer.username || '').toLowerCase())) && (
+                          <span title="Notifications muted" style={{ display: 'inline-flex', alignItems: 'center', color: '#a69ea2', flexShrink: 0 }}>
+                            <BellOff size={12} />
+                          </span>
+                        )}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                         {messageTime && (
                           <span style={{ fontSize: '0.72rem', color: unreadCount > 0 ? '#ee7882' : '#94a3b8', fontWeight: unreadCount > 0 ? '600' : '400', flexShrink: 0 }}>
@@ -1454,7 +1679,35 @@ export default function DirectMessages({
                       <span>{lastSeenText}</span>
                     </div>
                   </div>
-                </button>
+
+                  {/* 3-Dots Action Button */}
+                  <button
+                    type="button"
+                    className="peer-menu-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveActionPeer(peer);
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '50%',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#cbd5e1',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      marginLeft: '4px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Chat Options (Pin, Lock, Archive, Mute, Clear)"
+                  >
+                    <MoreVertical size={15} />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -1481,6 +1734,8 @@ export default function DirectMessages({
           userGroups={userGroups}
           onAddContact={handleAddContact}
         />
+
+        {renderDirectActionAndLockModals()}
       </div>
     );
   }
@@ -1491,12 +1746,22 @@ export default function DirectMessages({
     : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 
+  const clearedAt = selectedPeer ? clearedTimestamps[selectedPeer.username] : null;
+  const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
+  const nonClearedMessages = useMemo(() => {
+    if (!clearTime) return messages;
+    return messages.filter(m => {
+      if (!m.timestamp) return true;
+      return new Date(m.timestamp).getTime() > clearTime;
+    });
+  }, [messages, clearTime]);
+
   const visibleMessages = searchQuery.trim()
-    ? messages.filter(m => {
+    ? nonClearedMessages.filter(m => {
         const meta = decryptedMsgMap[m.id];
         return meta?.text?.toLowerCase().includes(searchQuery.toLowerCase());
       })
-    : messages;
+    : nonClearedMessages;
 
   return (
     <div className="dm-chat-screen">
@@ -1609,33 +1874,33 @@ export default function DirectMessages({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '4px',
-                    color: isPeerActive ? '#34d399' : '#a69ea2',
+                    color: isPeerActive ? '#ff9ea8' : '#a69ea2',
                     fontWeight: isPeerActive ? 600 : 400,
                     whiteSpace: 'nowrap',
                     flexShrink: 0
                   }}
                   title={formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
                 >
-                  <Circle size={6} color={isPeerActive ? '#10b981' : '#94a3b8'} fill={isPeerActive ? '#10b981' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                  <Circle size={6} color={isPeerActive ? '#ee7882' : '#94a3b8'} fill={isPeerActive ? '#ee7882' : '#94a3b8'} style={{ flexShrink: 0 }} />
                   <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
                 </span>
 
                 <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
 
-                {/* Compact E2EE badge - no more 22-character truncation! */}
+                {/* Compact E2EE badge */}
                 <span
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '3px',
-                    color: '#10b981',
+                    color: '#ff9ea8',
                     fontSize: '0.68rem',
                     fontWeight: 600,
                     flexShrink: 0
                   }}
                   title="Zero-Knowledge End-to-End Encrypted (AES-GCM 256)"
                 >
-                  <ShieldCheck size={11} color="#10b981" style={{ flexShrink: 0 }} />
+                  <ShieldCheck size={11} color="#ee7882" style={{ flexShrink: 0 }} />
                   <span>E2EE</span>
                 </span>
               </div>
@@ -1643,7 +1908,7 @@ export default function DirectMessages({
           </div>
         </div>
 
-        {/* Header Action Buttons: Call & In-Chat Search */}
+        {/* Header Action Buttons: Search, Call & Chat Options */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <button
             type="button"
@@ -1672,12 +1937,12 @@ export default function DirectMessages({
             type="button"
             onClick={() => onStartCall && onStartCall(activePeer, false)}
             style={{
-              background: 'rgba(52, 211, 153, 0.12)',
-              border: '1px solid rgba(52, 211, 153, 0.3)',
+              background: 'rgba(238, 120, 130, 0.15)',
+              border: '1px solid rgba(238, 120, 130, 0.35)',
               borderRadius: '50%',
               width: '35px',
               height: '35px',
-              color: '#34d399',
+              color: '#ee7882',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1709,6 +1974,28 @@ export default function DirectMessages({
             title="Encrypted Video Call"
           >
             <Video size={16} />
+          </button>
+
+          <button
+            type="button"
+            className="header-icon-btn"
+            onClick={() => setActiveActionPeer(activePeer)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(238, 120, 130, 0.2)',
+              borderRadius: '50%',
+              width: '35px',
+              height: '35px',
+              color: '#cbd5e1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            title="Chat Options (Pin, Lock, Archive, Mute, Clear)"
+          >
+            <MoreVertical size={16} />
           </button>
         </div>
       </div>
@@ -2165,6 +2452,8 @@ export default function DirectMessages({
           onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
         />
       )}
+
+      {renderDirectActionAndLockModals()}
     </div>
   );
 }
