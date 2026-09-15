@@ -66,7 +66,7 @@ async function optimizeImageForEncryption(file) {
 }
 
 const MediaUploader = forwardRef(function MediaUploader(
-  { sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, serverUrl, variant = 'default' },
+  { sharedKey, onMediaEncrypted, onUploadStateChange, uploaderName, currentUser, serverUrl, variant = 'default' },
   ref
 ) {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -127,6 +127,7 @@ const MediaUploader = forwardRef(function MediaUploader(
 
       // 3. Upload encrypted blob to server
       const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const effectiveUploader = uploaderName || currentUser?.username || 'user';
       const res = await fetch(`${serverUrl}/api/media`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,7 +136,7 @@ const MediaUploader = forwardRef(function MediaUploader(
           ciphertextBlob,
           iv,
           mimeType: optimizedMime || file.type || 'application/octet-stream',
-          uploader: uploaderName
+          uploader: effectiveUploader
         })
       });
 
@@ -211,7 +212,7 @@ const MediaUploader = forwardRef(function MediaUploader(
               onClick={(e) => { e.stopPropagation(); imageInputRef.current?.click(); }}
               title="Add Photo or Video"
             >
-              <ImageIcon size={18} color="#34d399" />
+              <ImageIcon size={18} color="#ee7882" />
             </button>
 
             <button
@@ -220,14 +221,69 @@ const MediaUploader = forwardRef(function MediaUploader(
               onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
               title="Attach Document or File"
             >
-              <Paperclip size={18} color="#a78bfa" />
+              <Paperclip size={18} color="#ff9ea8" />
             </button>
           </div>
         ) : (
-          <label className="upload-dropzone" onClick={(e) => e.stopPropagation()}>
-            <FileText size={18} color="#e06c75" />
-            <span>Attach file (photos, docs, videos)</span>
-          </label>
+          <div className="upload-dropzone-group" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+            <button
+              type="button"
+              className="upload-dropzone photo-dropzone"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                imageInputRef.current?.click();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                padding: '14px 18px',
+                background: 'rgba(238, 120, 130, 0.15)',
+                border: '1.5px solid rgba(238, 120, 130, 0.45)',
+                borderRadius: '20px',
+                color: '#ffffff',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
+            >
+              <ImageIcon size={18} color="#ee7882" />
+              <span>Choose Photo or Video from Gallery</span>
+            </button>
+
+            <button
+              type="button"
+              className="upload-dropzone file-dropzone"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                padding: '12px 18px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px dashed rgba(238, 120, 130, 0.3)',
+                borderRadius: '20px',
+                color: '#ff9ea8',
+                fontSize: '0.82rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
+            >
+              <Paperclip size={16} color="#ff9ea8" />
+              <span>Attach Any File or Document</span>
+            </button>
+          </div>
         )
       ) : (
         <div className="file-preview-card master-attached-chip">
@@ -235,7 +291,7 @@ const MediaUploader = forwardRef(function MediaUploader(
           {previewUrl ? (
             <img src={previewUrl} alt="Attached thumbnail" className="mini-attached-thumbnail" />
           ) : (
-            <Lock size={14} color="#10b981" />
+            <Lock size={14} color="#ee7882" />
           )}
 
           <div className="file-info" style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>

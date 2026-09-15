@@ -693,6 +693,7 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
           <MediaUploader
             ref={mediaUploaderRef}
             currentUser={currentUser}
+            uploaderName={currentUser?.username}
             serverUrl={serverUrl}
             onMediaEncrypted={payload => {
               setMediaPayload(payload);
