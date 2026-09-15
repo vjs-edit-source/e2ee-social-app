@@ -400,7 +400,7 @@ export default function SettingsScreen({
       <div style={{
         background: 'rgba(255, 255, 255, 0.03)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: '32px',
+        borderRadius: '36px',
         padding: '24px',
         marginBottom: '18px',
         backdropFilter: 'blur(10px)',
@@ -436,26 +436,31 @@ export default function SettingsScreen({
         display: 'flex',
         background: 'rgba(255, 255, 255, 0.04)',
         borderRadius: '9999px',
-        padding: '6px',
+        padding: '5px',
         marginBottom: '20px',
         gap: '6px',
-        border: '1px solid rgba(255, 255, 255, 0.08)'
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        WebkitOverflowScrolling: 'touch'
       }}>
         <button
           type="button"
           onClick={() => setActiveTab('profile')}
           style={{
-            flex: 1,
+            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             padding: '10px 14px',
             borderRadius: '9999px',
             fontSize: '0.84rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
+            whiteSpace: 'nowrap',
             background: activeTab === 'profile' ? '#ee7882' : 'transparent',
             color: activeTab === 'profile' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'profile' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
@@ -463,24 +468,25 @@ export default function SettingsScreen({
           }}
         >
           <User size={16} />
-          <span>Profile Photo</span>
+          <span>Profile</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('security')}
           style={{
-            flex: 1,
+            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             padding: '10px 14px',
             borderRadius: '9999px',
             fontSize: '0.84rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
+            whiteSpace: 'nowrap',
             background: activeTab === 'security' ? '#ee7882' : 'transparent',
             color: activeTab === 'security' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'security' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
@@ -488,24 +494,25 @@ export default function SettingsScreen({
           }}
         >
           <ShieldCheck size={16} />
-          <span>Security & Keys</span>
+          <span>Security</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('starred')}
           style={{
-            flex: 1,
+            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             padding: '10px 14px',
             borderRadius: '9999px',
             fontSize: '0.84rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
+            whiteSpace: 'nowrap',
             background: activeTab === 'starred' ? '#ee7882' : 'transparent',
             color: activeTab === 'starred' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'starred' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
@@ -520,17 +527,18 @@ export default function SettingsScreen({
           type="button"
           onClick={() => setActiveTab('preferences')}
           style={{
-            flex: 1,
+            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
             padding: '10px 14px',
             borderRadius: '9999px',
             fontSize: '0.84rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
+            whiteSpace: 'nowrap',
             background: activeTab === 'preferences' ? '#ee7882' : 'transparent',
             color: activeTab === 'preferences' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'preferences' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
@@ -547,7 +555,7 @@ export default function SettingsScreen({
         <form onSubmit={handleSaveProfile} style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '32px',
+          borderRadius: '36px',
           padding: '28px',
           backdropFilter: 'blur(10px)'
         }}>
@@ -817,7 +825,7 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '32px',
+          borderRadius: '36px',
           padding: '28px',
           backdropFilter: 'blur(10px)'
         }}>
@@ -1174,7 +1182,7 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '32px',
+          borderRadius: '36px',
           padding: '26px',
           backdropFilter: 'blur(10px)'
         }}>
@@ -1242,7 +1250,7 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '32px',
+          borderRadius: '36px',
           padding: '24px',
           backdropFilter: 'blur(10px)',
           display: 'flex',
