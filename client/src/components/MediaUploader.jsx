@@ -225,7 +225,7 @@ const MediaUploader = forwardRef(function MediaUploader(
             </button>
           </div>
         ) : (
-          <div className="upload-dropzone-group" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          <div className="upload-dropzone-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '6px 0' }}>
             <button
               type="button"
               className="upload-dropzone photo-dropzone"
@@ -239,19 +239,20 @@ const MediaUploader = forwardRef(function MediaUploader(
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '10px',
-                padding: '14px 18px',
-                background: 'rgba(238, 120, 130, 0.15)',
-                border: '1.5px solid rgba(238, 120, 130, 0.45)',
-                borderRadius: '20px',
+                padding: '14px 20px',
+                background: '#ee7882',
+                border: 'none',
+                borderRadius: '9999px',
                 color: '#ffffff',
-                fontSize: '0.88rem',
-                fontWeight: 600,
+                fontSize: '0.9rem',
+                fontWeight: 700,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
+                boxShadow: '0 4px 18px rgba(238, 120, 130, 0.45)',
                 width: '100%'
               }}
             >
-              <ImageIcon size={18} color="#ee7882" />
+              <ImageIcon size={19} color="#ffffff" />
               <span>Choose Photo or Video from Gallery</span>
             </button>
 
@@ -268,19 +269,20 @@ const MediaUploader = forwardRef(function MediaUploader(
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '10px',
-                padding: '12px 18px',
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px dashed rgba(238, 120, 130, 0.3)',
-                borderRadius: '20px',
-                color: '#ff9ea8',
-                fontSize: '0.82rem',
-                fontWeight: 500,
+                padding: '13px 20px',
+                background: '#2b131f',
+                border: '1.5px solid #ee7882',
+                borderRadius: '9999px',
+                color: '#ffffff',
+                fontSize: '0.86rem',
+                fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.5)',
                 width: '100%'
               }}
             >
-              <Paperclip size={16} color="#ff9ea8" />
+              <Paperclip size={17} color="#ee7882" />
               <span>Attach Any File or Document</span>
             </button>
           </div>
