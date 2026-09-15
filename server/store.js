@@ -1170,7 +1170,7 @@ class ZeroKnowledgeStore {
   }
 
   // ── 24-HOUR EPHEMERAL STATUSES (STORIES) ───────────────────
-  addStatus(author, ciphertext, iv, keyEnvelopes, mediaId = null, backgroundGradient = null, durationHours = 24) {
+  addStatus(author, ciphertext, iv, keyEnvelopes, mediaId = null, backgroundGradient = null, durationHours = 24, metadata = {}) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + durationHours * 60 * 60 * 1000).toISOString();
 
@@ -1182,14 +1182,44 @@ class ZeroKnowledgeStore {
       keyEnvelopes, // Encrypted for contacts/followers
       mediaId,
       backgroundGradient: backgroundGradient || 'linear-gradient(135deg, #e06c75 0%, #ee7882 100%)',
+      music: metadata.music || null,
+      stickers: Array.isArray(metadata.stickers) ? metadata.stickers : [],
+      fontStyle: metadata.fontStyle || 'modern',
+      textAlignment: metadata.textAlignment || 'center',
+      textHighlight: metadata.textHighlight || 'none',
       likes: [],    // Array of usernames who liked
       comments: [], // Array of { id, author, ciphertext, iv, keyEnvelopes, timestamp }
+      views: [author], // Array of usernames who viewed
       timestamp: now.toISOString(),
       expiresAt
     };
     this.statuses.unshift(status);
     this.scheduleSave();
     this.syncDocToMongo('statuses', { id: status.id }, status);
+    return status;
+  }
+
+  deleteStatus(statusId, username) {
+    const index = this.statuses.findIndex(
+      s => s.id === statusId && s.author?.toLowerCase() === username?.toLowerCase()
+    );
+    if (index === -1) return false;
+    const [deleted] = this.statuses.splice(index, 1);
+    this.scheduleSave();
+    return deleted;
+  }
+
+  recordStatusView(statusId, username) {
+    if (!username) return null;
+    const status = this.statuses.find(s => s.id === statusId);
+    if (!status) return null;
+
+    if (!status.views) status.views = [];
+    if (!status.views.includes(username)) {
+      status.views.push(username);
+      this.scheduleSave();
+      this.syncDocToMongo('statuses', { id: status.id }, status);
+    }
     return status;
   }
 

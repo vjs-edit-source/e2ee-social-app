@@ -7,13 +7,21 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  Lock,
   Send,
   Loader2,
-  Check
+  Check,
+  Music,
+  Volume2,
+  VolumeX,
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { decryptPost, encryptPost, decryptMediaBuffer } from '../crypto/e2ee';
+import { decryptionCache } from '../utils/decryptionCache';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
+import { musicEngine } from '../utils/musicEngine';
+
+const QUICK_EMOJIS = ['❤️', '🔥', '😂', '😮', '😢', '👏'];
 
 export default function StatusViewerModal({
   statuses = [],
@@ -22,20 +30,53 @@ export default function StatusViewerModal({
   allUsers = [],
   serverUrl,
   onClose,
-  onStatusUpdated
+  onStatusUpdated,
+  onStatusDeleted
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [decryptedStatuses, setDecryptedStatuses] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedStatuses, setDecryptedStatuses] = useState(() => decryptionCache.getAllStatuses());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [decryptedCommentsMap, setDecryptedCommentsMap] = useState({});
   const [sharedToast, setSharedToast] = useState(false);
   const [likesState, setLikesState] = useState({});
+  const [isMuted, setIsMuted] = useState(() => musicEngine.isMuted());
+  const [floatingReaction, setFloatingReaction] = useState(null);
 
   const currentStatus = statuses[currentIndex];
-  const timerRef = useRef(null);
+
+  // Stop audio on unmount or close
+  useEffect(() => {
+    return () => {
+      musicEngine.stop();
+    };
+  }, []);
+
+  // Sync music playback and record view on story change
+  useEffect(() => {
+    if (!currentStatus) {
+      musicEngine.stop();
+      return;
+    }
+
+    // Play music if attached
+    if (currentStatus.music) {
+      musicEngine.playTrack(currentStatus.music);
+    } else {
+      musicEngine.stop();
+    }
+
+    // Record view receipt
+    if (currentUser?.username) {
+      fetch(`${serverUrl}/api/status/${currentStatus.id}/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      }).catch(() => {});
+    }
+  }, [currentIndex, currentStatus, currentUser, serverUrl]);
 
   // Sync likes state
   useEffect(() => {
@@ -54,26 +95,56 @@ export default function StatusViewerModal({
 
     async function decryptCurrent() {
       const statusId = currentStatus.id;
-      if (decryptedStatuses[statusId]) return;
+      let decrypted = decryptionCache.getStatus(statusId) || decryptedStatuses[statusId];
 
-      try {
-        const decrypted = await decryptPost(
-          currentUser.username,
-          currentStatus.ciphertext,
-          currentStatus.iv,
-          currentStatus.keyEnvelopes,
-          currentUser.keyPair.privateKey
-        );
+      if (!decrypted || !decrypted.mediaKey) {
+        try {
+          decrypted = await decryptPost(
+            currentUser.username,
+            currentStatus.ciphertext,
+            currentStatus.iv,
+            currentStatus.keyEnvelopes,
+            currentUser.keyPair.privateKey
+          );
+          decryptionCache.setStatus(statusId, decrypted);
 
-        if (isMounted) {
+          if (isMounted) {
+            setDecryptedStatuses(prev => ({
+              ...prev,
+              [statusId]: decrypted
+            }));
+          }
+        } catch (err) {
+          console.warn('Status decryption error:', err);
+          if (isMounted) {
+            setDecryptedStatuses(prev => ({
+              ...prev,
+              [statusId]: { text: '🔒 Encrypted Status (Private)' }
+            }));
+          }
+          return;
+        }
+      } else {
+        if (!decryptedStatuses[statusId] && isMounted) {
           setDecryptedStatuses(prev => ({
             ...prev,
             [statusId]: decrypted
           }));
         }
+      }
 
-        // Decrypt media if attached
-        if (currentStatus.mediaId && decrypted.mediaKey) {
+      // Decrypt media if attached
+      if (currentStatus.mediaId) {
+        const cachedMedia = decryptionCache.getMedia(currentStatus.mediaId);
+        if (cachedMedia) {
+          if (!decryptedMediaMap[currentStatus.mediaId] && isMounted) {
+            setDecryptedMediaMap(prev => ({
+              ...prev,
+              [currentStatus.mediaId]: cachedMedia
+            }));
+          }
+        } else if (decrypted && decrypted.mediaKey && !decryptionCache.isMediaPending(currentStatus.mediaId)) {
+          decryptionCache.setMediaPending(currentStatus.mediaId);
           try {
             const mediaRes = await fetch(`${serverUrl}/api/media/${currentStatus.mediaId}`);
             if (mediaRes.ok && isMounted) {
@@ -86,23 +157,19 @@ export default function StatusViewerModal({
               );
 
               if (objectUrl && isMounted) {
+                const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
+                decryptionCache.setMedia(currentStatus.mediaId, mediaEntry);
                 setDecryptedMediaMap(prev => ({
                   ...prev,
-                  [currentStatus.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
+                  [currentStatus.mediaId]: mediaEntry
                 }));
               }
             }
           } catch (mErr) {
             console.warn('Status media decryption error:', mErr);
+          } finally {
+            decryptionCache.clearMediaPending(currentStatus.mediaId);
           }
-        }
-      } catch (err) {
-        console.warn('Status decryption error:', err);
-        if (isMounted) {
-          setDecryptedStatuses(prev => ({
-            ...prev,
-            [statusId]: { text: '🔒 Encrypted Status (Private)' }
-          }));
         }
       }
     }
@@ -176,6 +243,58 @@ export default function StatusViewerModal({
     }
   };
 
+  // Quick Emoji Reaction Tap
+  const handleQuickReaction = async (emoji) => {
+    setFloatingReaction(emoji);
+    setTimeout(() => setFloatingReaction(null), 1500);
+
+    // If heart, also trigger like
+    if (emoji === '❤️') {
+      const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
+      if (!currentLikes.includes(currentUser.username)) {
+        handleLike();
+      }
+    }
+
+    // Post as reaction comment
+    try {
+      const recipientPublicKeys = allUsers.map(u => ({
+        username: u.username,
+        spkiPublicKey: u.publicIdentityKey
+      }));
+
+      const { ciphertext, iv, keyEnvelopes } = await encryptPost(
+        emoji,
+        recipientPublicKeys
+      );
+
+      const res = await fetch(`${serverUrl}/api/status/${currentStatus.id}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          author: currentUser.username,
+          ciphertext,
+          iv,
+          keyEnvelopes
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDecryptedCommentsMap(prev => ({
+          ...prev,
+          [data.comment.id]: emoji
+        }));
+        if (onStatusUpdated) {
+          onStatusUpdated({
+            ...currentStatus,
+            comments: [...(currentStatus.comments || []), data.comment]
+          });
+        }
+      }
+    } catch (e) {}
+  };
+
   // Submit Encrypted Comment
   const handleSendComment = async (e) => {
     e.preventDefault();
@@ -206,10 +325,11 @@ export default function StatusViewerModal({
 
       if (res.ok) {
         const data = await res.json();
+        const sentText = commentInput.trim();
         setCommentInput('');
         setDecryptedCommentsMap(prev => ({
           ...prev,
-          [data.comment.id]: commentInput.trim()
+          [data.comment.id]: sentText
         }));
 
         if (onStatusUpdated) {
@@ -227,6 +347,34 @@ export default function StatusViewerModal({
     }
   };
 
+  // Delete status story (author only)
+  const handleDeleteStatus = async () => {
+    if (!currentStatus) return;
+    if (!window.confirm('Delete this status story permanently?')) return;
+
+    try {
+      const res = await fetch(`${serverUrl}/api/status/${currentStatus.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      });
+
+      if (res.ok) {
+        musicEngine.stop();
+        if (onStatusDeleted) onStatusDeleted(currentStatus.id);
+        if (statuses.length > 1) {
+          if (currentIndex >= statuses.length - 1) {
+            setCurrentIndex(statuses.length - 2);
+          }
+        } else {
+          onClose();
+        }
+      }
+    } catch (e) {
+      alert('Failed to delete status: ' + e.message);
+    }
+  };
+
   // Share Status
   const handleShare = () => {
     navigator.clipboard?.writeText(window.location.origin);
@@ -234,8 +382,15 @@ export default function StatusViewerModal({
     setTimeout(() => setSharedToast(false), 2500);
   };
 
+  // Handle Mute Toggle
+  const handleToggleMute = () => {
+    const muted = musicEngine.toggleMute();
+    setIsMuted(muted);
+  };
+
   if (!currentStatus) return null;
 
+  const isAuthor = currentStatus.author?.toLowerCase() === currentUser?.username?.toLowerCase();
   const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
   const isLiked = currentLikes.includes(currentUser.username);
   const statusDecrypted = decryptedStatuses[currentStatus.id];
@@ -268,17 +423,66 @@ export default function StatusViewerModal({
               {currentStatus.author[0].toUpperCase()}
             </div>
             <div>
-              <div className="status-author-name">{currentStatus.author}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="status-author-name">{currentStatus.author}</span>
+                {/* Music pill badge in header */}
+                {currentStatus.music && (
+                  <div className="viewer-music-badge" title={`${currentStatus.music.title} - ${currentStatus.music.artist}`}>
+                    <Music size={11} color="#ee7882" />
+                    <div className="equalizer-wave">
+                      <span className="equalizer-bar" />
+                      <span className="equalizer-bar" />
+                      <span className="equalizer-bar" />
+                    </div>
+                    <span>{currentStatus.music.title}</span>
+                  </div>
+                )}
+              </div>
               <div className="status-time-badge">
-                <ShieldCheck size={11} color="#10b981" />
+                <ShieldCheck size={11} color="#ee7882" />
                 <span>{timeAgo(currentStatus.timestamp)} • 24h E2EE</span>
               </div>
             </div>
           </div>
 
-          <button className="status-close-btn" onClick={onClose} title="Close story">
-            <X size={20} />
-          </button>
+          {/* Header Action Tools: Mute, Views, Delete, Close */}
+          <div className="viewer-tool-btns">
+            {/* Mute button when story has music */}
+            {currentStatus.music && (
+              <button
+                type="button"
+                className="viewer-mute-btn"
+                onClick={handleToggleMute}
+                title={isMuted ? 'Unmute music' : 'Mute music'}
+              >
+                {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+            )}
+
+            {/* View count for author */}
+            {isAuthor && (
+              <div className="viewer-views-pill" title="People who viewed your status">
+                <Eye size={12} color="#ff9ea8" />
+                <span>{currentStatus.views?.length || 1}</span>
+              </div>
+            )}
+
+            {/* Delete button for author */}
+            {isAuthor && (
+              <button
+                type="button"
+                className="viewer-delete-btn"
+                onClick={handleDeleteStatus}
+                title="Delete this status story"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
+
+            <button className="status-close-btn" onClick={onClose} title="Close story">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Status Content Body */}
@@ -286,6 +490,34 @@ export default function StatusViewerModal({
           className="status-content-body"
           style={{ background: currentStatus.backgroundGradient || '#190a0f' }}
         >
+          {/* Floating Music Sticker on Canvas if attached */}
+          {currentStatus.music && (
+            <div className="story-music-sticker" style={{ marginBottom: '16px' }}>
+              <Music size={15} color="#ee7882" />
+              <div className="equalizer-wave">
+                <span className="equalizer-bar" />
+                <span className="equalizer-bar" />
+                <span className="equalizer-bar" />
+                <span className="equalizer-bar" />
+              </div>
+              <div className="sticker-music-info">
+                <span className="sticker-music-title">{currentStatus.music.title}</span>
+                <span className="sticker-music-artist">{currentStatus.music.artist}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Active Mood / Location Stickers */}
+          {currentStatus.stickers && currentStatus.stickers.length > 0 && (
+            <div className="story-active-stickers" style={{ marginBottom: '16px' }}>
+              {currentStatus.stickers.map((st, i) => (
+                <div key={i} className="story-sticker-item">
+                  <span>{st.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Media View (if any) */}
           {currentStatus.mediaId && (
             <div className="status-media-wrapper">
@@ -297,24 +529,43 @@ export default function StatusViewerModal({
                 />
               ) : (
                 <div className="status-decrypting-badge">
-                  <Loader2 size={16} className="animate-spin" color="#f59e0b" />
+                  <Loader2 size={16} className="animate-spin" color="#ee7882" />
                   <span>Decrypting secure attachment...</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Status Text Content */}
+          {/* Status Text Content with custom font style & alignment */}
           {statusDecrypted?.text ? (
-            <div className="status-text-display">
+            <div
+              className={`status-text-display font-${currentStatus.fontStyle || 'modern'} highlight-${currentStatus.textHighlight || 'none'}`}
+              style={{ textAlign: currentStatus.textAlignment || 'center', maxWidth: '90%' }}
+            >
               <p>{statusDecrypted.text}</p>
             </div>
           ) : !currentStatus.mediaId && !statusDecrypted ? (
             <div className="status-loading-text">
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={16} className="animate-spin" color="#ee7882" />
               <span>Decrypting status...</span>
             </div>
           ) : null}
+
+          {/* Floating Emoji Reaction Burst */}
+          {floatingReaction && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '45%',
+                fontSize: '4.5rem',
+                animation: 'eqBounce 0.6s ease-out',
+                pointerEvents: 'none',
+                filter: 'drop-shadow(0 0 20px rgba(238, 120, 130, 0.8))'
+              }}
+            >
+              {floatingReaction}
+            </div>
+          )}
         </div>
 
         {/* Navigation Arrows */}
@@ -380,6 +631,36 @@ export default function StatusViewerModal({
           </div>
         )}
 
+        {/* Quick Reactions Bar */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '56px',
+            left: '14px',
+            right: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            zIndex: 25,
+            pointerEvents: showComments ? 'none' : 'auto'
+          }}
+        >
+          <div className="viewer-reactions-row">
+            {QUICK_EMOJIS.map((emoji, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="quick-reaction-btn"
+                onClick={() => handleQuickReaction(emoji)}
+                title={`React with ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Interactive Bottom Action Bar */}
         <div className="status-action-bar">
           {/* Like Button */}
@@ -402,13 +683,13 @@ export default function StatusViewerModal({
             <span className="action-count">{currentStatus.comments?.length || 0}</span>
           </button>
 
-          {/* Share Button */}
+          {/* Share Button with rose check */}
           <button
             className="status-action-btn share-btn"
             onClick={handleShare}
             title="Share status"
           >
-            {sharedToast ? <Check size={20} color="#10b981" /> : <Share2 size={20} />}
+            {sharedToast ? <Check size={20} color="#ee7882" /> : <Share2 size={20} />}
             <span className="action-count">{sharedToast ? 'Copied!' : 'Share'}</span>
           </button>
         </div>

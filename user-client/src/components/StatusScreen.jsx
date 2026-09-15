@@ -10,7 +10,8 @@ import {
   Lock,
   ChevronRight,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Music
 } from 'lucide-react';
 import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
 import { decryptionCache } from '../utils/decryptionCache';
@@ -59,7 +60,9 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
         if (
           data.type === 'NEW_STATUS' ||
           data.type === 'STATUS_LIKED' ||
-          data.type === 'STATUS_COMMENT'
+          data.type === 'STATUS_COMMENT' ||
+          data.type === 'STATUS_DELETED' ||
+          data.type === 'STATUS_VIEWED'
         ) {
           loadStatuses();
         }
@@ -322,6 +325,32 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                       overflow: 'hidden'
                     }}
                   >
+                    {status.music && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'rgba(22, 18, 28, 0.8)',
+                          border: '1px solid rgba(238, 120, 130, 0.45)',
+                          borderRadius: '9999px',
+                          padding: '3px 8px',
+                          fontSize: '0.68rem',
+                          color: '#ffffff',
+                          backdropFilter: 'blur(8px)',
+                          zIndex: 3
+                        }}
+                      >
+                        <Music size={10} color="#ee7882" />
+                        <span style={{ maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {status.music.title}
+                        </span>
+                      </div>
+                    )}
+
                     {mediaDecrypted ? (
                       <img
                         src={mediaDecrypted.objectUrl}
@@ -419,6 +448,10 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           serverUrl={serverUrl}
           onClose={() => setViewerIndex(null)}
           onStatusUpdated={handleStatusUpdated}
+          onStatusDeleted={deletedId => {
+            setStatuses(prev => prev.filter(s => s.id !== deletedId));
+            setViewerIndex(null);
+          }}
         />
       )}
     </div>

@@ -957,12 +957,35 @@ app.post('/api/groups/:groupId/polls/:pollId/vote', (req, res) => {
 
 // Publish 24h Status
 app.post('/api/status', (req, res) => {
-  const { author, ciphertext, iv, keyEnvelopes, mediaId, backgroundGradient, durationHours } = req.body;
+  const {
+    author,
+    ciphertext,
+    iv,
+    keyEnvelopes,
+    mediaId,
+    backgroundGradient,
+    durationHours,
+    music,
+    stickers,
+    fontStyle,
+    textAlignment,
+    textHighlight
+  } = req.body;
+
   if (!author || !ciphertext || !keyEnvelopes) {
     return res.status(400).json({ error: 'Missing required status fields' });
   }
 
-  const status = db.addStatus(author, ciphertext, iv, keyEnvelopes, mediaId, backgroundGradient, durationHours);
+  const status = db.addStatus(
+    author,
+    ciphertext,
+    iv,
+    keyEnvelopes,
+    mediaId,
+    backgroundGradient,
+    durationHours,
+    { music, stickers, fontStyle, textAlignment, textHighlight }
+  );
   broadcast({ type: 'NEW_STATUS', status });
   notifyInspector();
 
@@ -972,6 +995,32 @@ app.post('/api/status', (req, res) => {
 // Get Active 24h Statuses
 app.get('/api/status', (req, res) => {
   res.json(db.getActiveStatuses());
+});
+
+// Delete Status (Author only)
+app.delete('/api/status/:statusId', (req, res) => {
+  const { username } = req.body || req.query;
+  if (!username) return res.status(400).json({ error: 'Username required for status deletion' });
+
+  const deleted = db.deleteStatus(req.params.statusId, username);
+  if (!deleted) return res.status(404).json({ error: 'Status not found or unauthorized' });
+
+  broadcast({ type: 'STATUS_DELETED', statusId: req.params.statusId });
+  notifyInspector();
+
+  res.json({ success: true, statusId: req.params.statusId });
+});
+
+// Record Status View
+app.post('/api/status/:statusId/view', (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+
+  const status = db.recordStatusView(req.params.statusId, username);
+  if (!status) return res.status(404).json({ error: 'Status not found' });
+
+  broadcast({ type: 'STATUS_VIEWED', statusId: status.id, views: status.views });
+  res.json({ success: true, views: status.views });
 });
 
 // Like / Toggle Like on Status
