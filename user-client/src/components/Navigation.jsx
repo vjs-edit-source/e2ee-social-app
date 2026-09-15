@@ -1,6 +1,20 @@
 import React from 'react';
 import { RefreshCw, Rss, MessageSquare, Users, Sparkles, Search, Server, Sliders, Settings } from 'lucide-react';
 
+const getAvatarColor = (c) => {
+  if (!c) return '#ee7882';
+  const lower = String(c).toLowerCase().trim();
+  if (
+    lower === '#3b82f6' || lower === '#06b6d4' || lower === '#10b981' || 
+    lower === '#6366f1' || lower === '#14b8a6' || lower === '#60a5fa' ||
+    lower.startsWith('#00') || lower.startsWith('#06') || lower.startsWith('#3b') ||
+    lower === 'blue' || lower === 'cyan'
+  ) {
+    return '#ee7882';
+  }
+  return c;
+};
+
 export default function Navigation({
   activeTab,
   setActiveTab,
@@ -14,6 +28,8 @@ export default function Navigation({
   unreadChatsCount = 0,
   unreadGroupsCount = 0
 }) {
+  const avatarSafeColor = getAvatarColor(user?.avatarColor);
+
   return (
     <>
       {/* ── Minimal Transparent Top Header (Name in Left Corner) ── */}
@@ -65,11 +81,11 @@ export default function Navigation({
                     height: '24px',
                     borderRadius: '50%',
                     objectFit: 'cover',
-                    border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                    border: `1.5px solid ${avatarSafeColor}`
                   }}
                 />
               ) : (
-                <div className="user-avatar" style={{ backgroundColor: user.avatarColor }}>
+                <div className="user-avatar" style={{ backgroundColor: avatarSafeColor }}>
                   {user.username[0].toUpperCase()}
                 </div>
               )}

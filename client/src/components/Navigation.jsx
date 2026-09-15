@@ -1,133 +1,220 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Rss, MessageSquare, Database, ShieldCheck, RefreshCw, Search, Users, Sparkles, X } from 'lucide-react';
+import React from 'react';
+import { RefreshCw, Rss, MessageSquare, Users, Sparkles, Search, Server, Sliders, Settings } from 'lucide-react';
 
-export default function Navigation({ activeTab, setActiveTab, user, onSwitchUser, onOpenSearch }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
+const getAvatarColor = (c) => {
+  if (!c) return '#ee7882';
+  const lower = String(c).toLowerCase().trim();
+  if (
+    lower === '#3b82f6' || lower === '#06b6d4' || lower === '#10b981' || 
+    lower === '#6366f1' || lower === '#14b8a6' || lower === '#60a5fa' ||
+    lower.startsWith('#00') || lower.startsWith('#06') || lower.startsWith('#3b') ||
+    lower === 'blue' || lower === 'cyan'
+  ) {
+    return '#ee7882';
+  }
+  return c;
+};
 
-  // Close menu on outside click
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
-    }
-    if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
-
-  // Close menu after tab switch
-  const handleTabSwitch = (tab) => {
-    setActiveTab(tab);
-    setMenuOpen(false);
-  };
-
-  const handleSearch = () => {
-    onOpenSearch();
-    setMenuOpen(false);
-  };
+export default function Navigation({
+  activeTab,
+  setActiveTab,
+  user,
+  onSwitchUser,
+  onOpenSearch,
+  onOpenEngineSettings,
+  onOpenSettings,
+  engineOnline = true,
+  hideBottomNav = false,
+  unreadChatsCount = 0,
+  unreadGroupsCount = 0
+}) {
+  const avatarSafeColor = getAvatarColor(user?.avatarColor);
 
   return (
-    <header className="app-navbar">
-      {/* Brand */}
-      <div className="nav-brand">
-        <div className="brand-logo">
-          <ShieldCheck size={20} color="#f43f5e" />
+    <>
+      {/* ── Minimal Transparent Top Header (Name in Left Corner) ── */}
+      <header className="app-top-header">
+        <div className="top-brand">
+          <span className="brand-name">SadiSocial</span>
         </div>
-        <div className="brand-titles">
-          <h1>SadiSocial</h1>
-          <span className="subtitle">E2EE Architecture</span>
+
+        {/* Global Search Bar (prominent on full screen / desktop) */}
+        <div
+          className="top-header-search-bar"
+          onClick={onOpenSearch}
+          role="button"
+          tabIndex={0}
+          title="Search contacts, chats, groups, and posts (Ctrl+K)"
+        >
+          <Search size={14} className="top-search-icon" />
+          <span className="top-search-placeholder">Search contacts, chats, groups...</span>
+          <kbd className="top-search-kbd">Ctrl K</kbd>
         </div>
-      </div>
 
-      {/* Right side: user pill + hamburger */}
-      <div className="nav-right">
-        {/* User pill (compact) */}
-        {user && (
-          <div className="user-profile-pill" onClick={onSwitchUser} title="Click to switch persona">
-            <div className="user-avatar" style={{ backgroundColor: user.avatarColor }}>
-              {user.username[0].toUpperCase()}
-            </div>
-            <div className="user-meta">
-              <span className="user-name">{user.username}</span>
-              <span className="key-snippet" title={user.spkiPublicKey}>
-                {user.spkiPublicKey.slice(0, 8)}...
-              </span>
-            </div>
-            <button className="switch-user-btn" onClick={(e) => { e.stopPropagation(); onSwitchUser(); }} title="Switch active test persona">
-              <RefreshCw size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Animated Hamburger Button */}
-        <div className="hamburger-wrapper" ref={menuRef}>
+        <div className="top-header-right">
+          {/* Engine Connectivity Pill */}
           <button
-            className={`hamburger-btn ${menuOpen ? 'open' : ''}`}
-            onClick={() => setMenuOpen(prev => !prev)}
-            aria-label="Toggle menu"
+            className={`engine-status-pill ${engineOnline ? 'online' : 'offline'}`}
+            onClick={onOpenEngineSettings}
+            title="Configure Backend Engine"
+            type="button"
           >
-            <span className="ham-line ham-top" />
-            <span className="ham-line ham-mid" />
-            <span className="ham-line ham-bot" />
+            <span className="engine-pulse-dot" />
+            <Server size={12} />
+            <span className="engine-pill-label">Engine</span>
           </button>
 
-          {/* Dropdown Menu */}
-          <nav className={`nav-dropdown ${menuOpen ? 'visible' : ''}`}>
-            <button
-              className={`nav-dropdown-item ${activeTab === 'feed' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('feed')}
+          {user && (
+            <div
+              className={`user-profile-pill ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+              title="Profile & Settings"
+              style={{ cursor: 'pointer' }}
             >
-              <Rss size={18} />
-              <span>Encrypted Feed</span>
-            </button>
-
-            <button
-              className={`nav-dropdown-item ${activeTab === 'messages' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('messages')}
-            >
-              <MessageSquare size={18} />
-              <span>E2EE Messages</span>
-            </button>
-
-            <button
-              className={`nav-dropdown-item ${activeTab === 'groups' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('groups')}
-            >
-              <Users size={18} />
-              <span>Groups & Communities</span>
-            </button>
-
-            <button
-              className={`nav-dropdown-item ${activeTab === 'status' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('status')}
-            >
-              <Sparkles size={18} />
-              <span>24h Status</span>
-            </button>
-
-            <button
-              className={`nav-dropdown-item inspector-tab-btn ${activeTab === 'inspector' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('inspector')}
-            >
-              <Database size={18} />
-              <span>Server Inspector</span>
-              <span className="live-dot" title="Real-time zero-knowledge stream" />
-            </button>
-
-            <div className="nav-dropdown-divider" />
-
-            <button
-              className="nav-dropdown-item search-item"
-              onClick={handleSearch}
-            >
-              <Search size={18} color="#3b82f6" />
-              <span>Search</span>
-              <span className="search-hint">Local device only</span>
-            </button>
-          </nav>
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.username}
+                  className="user-avatar"
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: `1.5px solid ${avatarSafeColor}`
+                  }}
+                />
+              ) : (
+                <div className="user-avatar" style={{ backgroundColor: avatarSafeColor }}>
+                  {user.username[0].toUpperCase()}
+                </div>
+              )}
+              <span className="user-name">{user.displayName || user.username}</span>
+              <button
+                className="switch-user-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTab('settings');
+                }}
+                title="Profile & Settings"
+              >
+                <Settings size={11} />
+              </button>
+            </div>
+          )}
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* ── Floating Low-Opacity Rounded Bottom Navigation Bar (Hidden in Active Chat) ── */}
+      {!hideBottomNav && (
+        <nav className="bottom-nav-container" aria-label="Main Navigation">
+          <button
+            className={`bottom-nav-item ${activeTab === 'feed' ? 'active' : ''}`}
+            onClick={() => setActiveTab('feed')}
+            type="button"
+          >
+            <Rss size={18} />
+            <span>Feed</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'messages' ? 'active' : ''}`}
+            onClick={() => setActiveTab('messages')}
+            type="button"
+            style={{ position: 'relative' }}
+          >
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <MessageSquare size={18} />
+              {unreadChatsCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-9px',
+                    background: '#ee7882',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 'bold',
+                    borderRadius: '10px',
+                    padding: '0 4px',
+                    minWidth: '14px',
+                    height: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 8px rgba(238, 120, 130, 0.7)'
+                  }}
+                >
+                  {unreadChatsCount > 9 ? '9+' : unreadChatsCount}
+                </span>
+              )}
+            </div>
+            <span>Chats</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'groups' ? 'active' : ''}`}
+            onClick={() => setActiveTab('groups')}
+            type="button"
+            style={{ position: 'relative' }}
+          >
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <Users size={18} />
+              {unreadGroupsCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-9px',
+                    background: '#ee7882',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 'bold',
+                    borderRadius: '10px',
+                    padding: '0 4px',
+                    minWidth: '14px',
+                    height: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 8px rgba(238, 120, 130, 0.7)'
+                  }}
+                >
+                  {unreadGroupsCount > 9 ? '9+' : unreadGroupsCount}
+                </span>
+              )}
+            </div>
+            <span>Groups</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'status' ? 'active' : ''}`}
+            onClick={() => setActiveTab('status')}
+            type="button"
+          >
+            <Sparkles size={18} />
+            <span>Status</span>
+          </button>
+
+          <button
+            className={`bottom-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+            type="button"
+          >
+            <Settings size={18} />
+            <span>Settings</span>
+          </button>
+
+          <button
+            className="bottom-nav-item search-item"
+            onClick={onOpenSearch}
+            type="button"
+          >
+            <Search size={18} />
+            <span>Search</span>
+          </button>
+        </nav>
+      )}
+    </>
   );
 }
