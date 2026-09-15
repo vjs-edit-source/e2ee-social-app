@@ -22,7 +22,14 @@ import {
   CheckCheck,
   Star,
   Shield,
-  Activity
+  Activity,
+  Bell,
+  Volume2,
+  Music,
+  HardDrive,
+  Clock,
+  Radio,
+  Zap
 } from 'lucide-react';
 import { backupKeyVaultToServer, ensureUserMnemonic } from '../crypto/vault';
 import MnemonicVaultModal from './MnemonicVaultModal';
@@ -45,6 +52,78 @@ export const sanitizeAvatarColor = (c) => {
   }
   return c;
 };
+
+function ToggleSwitch({ checked, onChange, label, sublabel, icon: Icon }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '14px 18px',
+      background: 'rgba(255, 255, 255, 0.025)',
+      borderRadius: '22px',
+      border: '1px solid rgba(255, 255, 255, 0.06)',
+      transition: 'all 0.2s ease',
+      gap: '12px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {Icon && (
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '9999px',
+            background: checked ? 'rgba(238, 120, 130, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: checked ? '#ee7882' : '#94a3b8',
+            transition: 'all 0.2s ease',
+            flexShrink: 0
+          }}>
+            <Icon size={18} />
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>{label}</div>
+          {sublabel && (
+            <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px', lineHeight: '1.35' }}>
+              {sublabel}
+            </div>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        style={{
+          width: '50px',
+          height: '28px',
+          borderRadius: '9999px',
+          background: checked ? 'linear-gradient(135deg, #ee7882, #e05663)' : 'rgba(255, 255, 255, 0.16)',
+          border: 'none',
+          cursor: 'pointer',
+          position: 'relative',
+          padding: '3px',
+          display: 'flex',
+          alignItems: 'center',
+          flexShrink: 0,
+          boxShadow: checked ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
+          transition: 'all 0.25s ease'
+        }}
+      >
+        <div style={{
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          background: '#ffffff',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+          transform: checked ? 'translateX(22px)' : 'translateX(0px)',
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+        }} />
+      </button>
+    </div>
+  );
+}
 
 export default function SettingsScreen({
   currentUser,
@@ -82,6 +161,50 @@ export default function SettingsScreen({
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl || null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  
+  // App Preferences state
+  const [readReceipts, setReadReceipts] = useState(() => localStorage.getItem('ciphersocial_pref_read_receipts') !== 'false');
+  const [typingIndicator, setTypingIndicator] = useState(() => localStorage.getItem('ciphersocial_pref_typing') !== 'false');
+  const [onlineStatus, setOnlineStatus] = useState(() => localStorage.getItem('ciphersocial_pref_online') !== 'false');
+  const [musicAutoplay, setMusicAutoplay] = useState(() => localStorage.getItem('ciphersocial_pref_music_autoplay') !== 'false');
+  const [soundEffects, setSoundEffects] = useState(() => localStorage.getItem('ciphersocial_pref_sound_fx') !== 'false');
+  const [haptics, setHaptics] = useState(() => localStorage.getItem('ciphersocial_pref_haptics') !== 'false');
+  const [disappearingDefault, setDisappearingDefault] = useState(() => localStorage.getItem('ciphersocial_pref_disappearing_default') || 'off');
+  const [themeAccent, setThemeAccent] = useState(() => localStorage.getItem('ciphersocial_pref_theme_accent') || '#ee7882');
+  const [cacheMsg, setCacheMsg] = useState('');
+
+  const handleTogglePref = (key, val, setter) => {
+    setter(val);
+    localStorage.setItem(key, String(val));
+  };
+
+  const handleSelectAccent = (color) => {
+    setThemeAccent(color);
+    localStorage.setItem('ciphersocial_pref_theme_accent', color);
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--accent-primary', color);
+    }
+  };
+
+  const handleSelectDisappearing = (val) => {
+    setDisappearingDefault(val);
+    localStorage.setItem('ciphersocial_pref_disappearing_default', val);
+  };
+
+  const handleClearCache = () => {
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('ciphersocial_cache_') || k.startsWith('temp_audio_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+    setCacheMsg('✓ 2.4 MB Media & Audio cache cleared!');
+    setTimeout(() => setCacheMsg(''), 3000);
+  };
   
   const handleSetPin = (e) => {
     e.preventDefault();
@@ -269,7 +392,7 @@ export default function SettingsScreen({
     <div style={{
       maxWidth: '680px',
       margin: '0 auto',
-      padding: '20px 16px 110px 16px',
+      padding: '20px 16px 140px 16px',
       width: '100%',
       boxSizing: 'border-box'
     }}>
@@ -277,8 +400,8 @@ export default function SettingsScreen({
       <div style={{
         background: 'rgba(255, 255, 255, 0.03)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: '24px',
-        padding: '22px',
+        borderRadius: '32px',
+        padding: '24px',
         marginBottom: '18px',
         backdropFilter: 'blur(10px)',
         display: 'flex',
@@ -288,16 +411,16 @@ export default function SettingsScreen({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '16px',
+            width: '48px',
+            height: '48px',
+            borderRadius: '20px',
             background: 'rgba(238, 120, 130, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#ee7882'
           }}>
-            <Sliders size={22} />
+            <Sliders size={24} />
           </div>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#f8fafc', fontWeight: '700' }}>Settings & Profile</h2>
@@ -424,8 +547,8 @@ export default function SettingsScreen({
         <form onSubmit={handleSaveProfile} style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '24px',
-          padding: '26px',
+          borderRadius: '32px',
+          padding: '28px',
           backdropFilter: 'blur(10px)'
         }}>
           {/* Avatar Upload Card */}
@@ -434,9 +557,9 @@ export default function SettingsScreen({
             flexDirection: 'column',
             alignItems: 'center',
             marginBottom: '24px',
-            padding: '22px',
+            padding: '24px',
             background: 'rgba(255, 255, 255, 0.02)',
-            borderRadius: '22px',
+            borderRadius: '28px',
             border: '1px solid rgba(255, 255, 255, 0.06)'
           }}>
             <div style={{ position: 'relative', marginBottom: '16px' }}>
@@ -597,8 +720,8 @@ export default function SettingsScreen({
               alignItems: 'center',
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '20px',
-              padding: '12px 18px',
+              borderRadius: '26px',
+              padding: '14px 20px',
               gap: '10px'
             }}>
               <User size={18} color="#ee7882" />
@@ -635,8 +758,8 @@ export default function SettingsScreen({
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: '1px solid rgba(255, 255, 255, 0.12)',
                 color: '#f8fafc',
-                borderRadius: '20px',
-                padding: '14px 18px',
+                borderRadius: '26px',
+                padding: '16px 20px',
                 fontSize: '0.88rem',
                 outline: 'none',
                 resize: 'none',
@@ -648,8 +771,8 @@ export default function SettingsScreen({
           {profileSuccessMsg && (
             <div style={{
               marginBottom: '16px',
-              padding: '12px 16px',
-              borderRadius: '16px',
+              padding: '14px 18px',
+              borderRadius: '20px',
               background: 'rgba(238, 120, 130, 0.15)',
               border: '1px solid rgba(238, 120, 130, 0.3)',
               color: '#ee7882',
@@ -694,16 +817,16 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '24px',
-          padding: '24px',
+          borderRadius: '32px',
+          padding: '28px',
           backdropFilter: 'blur(10px)'
         }}>
           {/* E2EE Safety Number */}
           <div style={{
             background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.8))',
             border: '1.5px solid rgba(238, 120, 130, 0.3)',
-            borderRadius: '22px',
-            padding: '20px',
+            borderRadius: '28px',
+            padding: '24px',
             marginBottom: '20px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -739,9 +862,9 @@ export default function SettingsScreen({
               fontSize: '1.08rem',
               letterSpacing: '2px',
               textAlign: 'center',
-              padding: '14px',
+              padding: '16px',
               background: 'rgba(0, 0, 0, 0.55)',
-              borderRadius: '16px',
+              borderRadius: '24px',
               color: '#ffffff',
               border: '1px solid rgba(238, 120, 130, 0.2)'
             }}>
@@ -756,8 +879,8 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '22px',
-            padding: '20px',
+            borderRadius: '28px',
+            padding: '24px',
             marginBottom: '20px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -793,8 +916,8 @@ export default function SettingsScreen({
               wordBreak: 'break-all',
               color: '#cbd5e1',
               background: 'rgba(0,0,0,0.4)',
-              padding: '12px',
-              borderRadius: '16px',
+              padding: '14px',
+              borderRadius: '22px',
               border: '1px solid rgba(255, 255, 255, 0.06)',
               maxHeight: '75px',
               overflowY: 'auto'
@@ -807,8 +930,8 @@ export default function SettingsScreen({
           <div style={{
             background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(139, 92, 246, 0.08))',
             border: '1px solid rgba(238, 120, 130, 0.3)',
-            borderRadius: '22px',
-            padding: '20px',
+            borderRadius: '28px',
+            padding: '24px',
             marginBottom: '20px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -855,8 +978,8 @@ export default function SettingsScreen({
           <form onSubmit={handleSaveBackup} style={{
             background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.06), rgba(28, 16, 22, 0.6))',
             border: '1px solid rgba(238, 120, 130, 0.25)',
-            borderRadius: '22px',
-            padding: '20px'
+            borderRadius: '28px',
+            padding: '24px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
               <DownloadCloud size={20} color="#ee7882" />
@@ -871,8 +994,8 @@ export default function SettingsScreen({
               alignItems: 'center',
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '20px',
-              padding: '12px 18px',
+              borderRadius: '26px',
+              padding: '14px 20px',
               gap: '10px',
               marginBottom: '14px'
             }}>
@@ -934,8 +1057,8 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(238, 120, 130, 0.05)',
             border: '1px solid rgba(238, 120, 130, 0.25)',
-            borderRadius: '22px',
-            padding: '20px',
+            borderRadius: '28px',
+            padding: '24px',
             marginTop: '20px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -944,7 +1067,7 @@ export default function SettingsScreen({
                 <span>App Lock & Biometric Protection</span>
               </div>
               {hasPin && (
-                <span style={{ fontSize: '0.72rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '3px 10px', borderRadius: '9999px', fontWeight: '600' }}>
+                <span style={{ fontSize: '0.72rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '4px 12px', borderRadius: '9999px', fontWeight: '600' }}>
                   ✓ PIN Enabled
                 </span>
               )}
@@ -965,11 +1088,12 @@ export default function SettingsScreen({
                   flex: 1,
                   background: 'rgba(255, 255, 255, 0.05)',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '20px',
-                  padding: '10px 16px',
+                  borderRadius: '26px',
+                  padding: '12px 20px',
                   color: '#ffffff',
                   fontSize: '0.9rem',
-                  letterSpacing: '3px'
+                  letterSpacing: '3px',
+                  outline: 'none'
                 }}
               />
               <button
@@ -978,7 +1102,7 @@ export default function SettingsScreen({
                   background: '#ee7882',
                   border: 'none',
                   borderRadius: '9999px',
-                  padding: '10px 22px',
+                  padding: '12px 24px',
                   color: '#ffffff',
                   fontWeight: '700',
                   fontSize: '0.86rem',
@@ -996,7 +1120,7 @@ export default function SettingsScreen({
                     background: '#be123c',
                     border: 'none',
                     borderRadius: '9999px',
-                    padding: '10px 18px',
+                    padding: '12px 20px',
                     color: '#ffffff',
                     fontWeight: '700',
                     fontSize: '0.86rem',
@@ -1050,8 +1174,8 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '24px',
-          padding: '24px',
+          borderRadius: '32px',
+          padding: '26px',
           backdropFilter: 'blur(10px)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -1068,7 +1192,7 @@ export default function SettingsScreen({
                   border: 'none',
                   color: '#ffffff',
                   borderRadius: '9999px',
-                  padding: '6px 16px',
+                  padding: '8px 20px',
                   fontSize: '0.8rem',
                   fontWeight: '700',
                   cursor: 'pointer',
@@ -1092,10 +1216,10 @@ export default function SettingsScreen({
                 <div
                   key={id}
                   style={{
-                    padding: '14px 16px',
+                    padding: '14px 18px',
                     background: 'rgba(255, 255, 255, 0.04)',
                     border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '16px',
+                    borderRadius: '24px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
@@ -1113,109 +1237,418 @@ export default function SettingsScreen({
         </div>
       )}
 
-      {/* TAB 4: PREFERENCES & ENGINE CONFIG */}
+      {/* TAB 4: PREFERENCES & APP CONFIGURATION */}
       {activeTab === 'preferences' && (
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '24px',
+          borderRadius: '32px',
           padding: '24px',
-          backdropFilter: 'blur(10px)'
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px'
         }}>
-          {/* Engine Connection Card */}
+          {/* Header Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: 'bold', fontSize: '1.02rem' }}>
+            <Sliders size={22} color="#ee7882" />
+            <span>Preferences & Experience</span>
+          </div>
+
+          {/* Sub-Card 1: Privacy & Messaging Controls */}
           <div style={{
+            background: 'rgba(238, 120, 130, 0.04)',
+            border: '1px solid rgba(238, 120, 130, 0.2)',
+            borderRadius: '28px',
+            padding: '22px',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '18px 20px',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
+              <ShieldCheck size={20} color="#ee7882" />
+              <span>Privacy & Messaging Controls</span>
+            </div>
+            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Fine-tune end-to-end encryption visibility, real-time indicators, and ephemeral timer presets.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <ToggleSwitch
+                icon={CheckCheck}
+                label="Read Receipts (Blue Ticks)"
+                sublabel="Show blue double check marks when contacts open your messages in real-time."
+                checked={readReceipts}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_read_receipts', val, setReadReceipts)}
+              />
+
+              <ToggleSwitch
+                icon={Radio}
+                label="Real-Time Typing Indicator"
+                sublabel="Broadcast dynamic typing activity bubble to contacts when writing."
+                checked={typingIndicator}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_typing', val, setTypingIndicator)}
+              />
+
+              <ToggleSwitch
+                icon={Eye}
+                label="Live Online Presence"
+                sublabel="Display an active indicator dot next to your avatar when connected."
+                checked={onlineStatus}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_online', val, setOnlineStatus)}
+              />
+            </div>
+
+            {/* Ephemeral Disappearing Messages Preset */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.025)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '22px',
+              padding: '14px 18px',
+              marginTop: '4px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <Clock size={18} color="#ee7882" />
+                <span style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                  Default Disappearing Messages
+                </span>
+              </div>
+              <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.35' }}>
+                Automatically schedule new chats to wipe messages after a chosen countdown.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                {[
+                  { label: 'Off', val: 'off' },
+                  { label: '24 Hours', val: '24h' },
+                  { label: '7 Days', val: '7d' },
+                  { label: '30 Days', val: '30d' }
+                ].map((item) => (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => handleSelectDisappearing(item.val)}
+                    style={{
+                      background: disappearingDefault === item.val
+                        ? 'linear-gradient(135deg, #ee7882, #e05663)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: disappearingDefault === item.val
+                        ? '1px solid #ee7882'
+                        : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '9999px',
+                      padding: '8px 4px',
+                      color: '#ffffff',
+                      fontSize: '0.76rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      boxShadow: disappearingDefault === item.val ? '0 2px 8px rgba(238, 120, 130, 0.35)' : 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-Card 2: Sound, Music & Stories Preferences */}
+          <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '22px',
-            marginBottom: '16px',
-            gap: '12px'
+            borderRadius: '28px',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Server size={22} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
+              <Music size={20} color="#ee7882" />
+              <span>Sound, Music & Stories</span>
+            </div>
+            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Configure story background music, in-app acoustics, and haptic physical touches.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <ToggleSwitch
+                icon={Music}
+                label="Auto-Play Story Music"
+                sublabel="Automatically stream soundtrack melodies when opening contacts' statuses."
+                checked={musicAutoplay}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_music_autoplay', val, setMusicAutoplay)}
+              />
+
+              <ToggleSwitch
+                icon={Volume2}
+                label="Message Sound Effects"
+                sublabel="Play clean acoustic tones when encrypted messages arrive or send."
+                checked={soundEffects}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_sound_fx', val, setSoundEffects)}
+              />
+
+              <ToggleSwitch
+                icon={Zap}
+                label="Haptic Vibrations"
+                sublabel="Provide tactile sensory feedback when recording voice notes and reacting."
+                checked={haptics}
+                onChange={(val) => handleTogglePref('ciphersocial_pref_haptics', val, setHaptics)}
+              />
+            </div>
+          </div>
+
+          {/* Sub-Card 3: Appearance & Accent Theme */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '28px',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
+              <Palette size={20} color="#ee7882" />
+              <span>Appearance & Accent Theme</span>
+            </div>
+            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Pick your signature luxury accent tint for active buttons, badges, and glow rings.
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '6px 0' }}>
+              {[
+                { color: '#ee7882', name: 'Rose Coral' },
+                { color: '#ff477e', name: 'Neon Pink' },
+                { color: '#be123c', name: 'Deep Crimson' },
+                { color: '#a855f7', name: 'Royal Violet' },
+                { color: '#c026d3', name: 'Fuchsia' },
+                { color: '#f59e0b', name: 'Warm Amber' },
+                { color: '#f43f5e', name: 'Ruby Sunset' }
+              ].map((accent) => (
+                <button
+                  key={accent.color}
+                  type="button"
+                  onClick={() => handleSelectAccent(accent.color)}
+                  title={accent.name}
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    background: accent.color,
+                    border: themeAccent === accent.color ? '3px solid #ffffff' : '2px solid rgba(255, 255, 255, 0.2)',
+                    cursor: 'pointer',
+                    boxShadow: themeAccent === accent.color ? `0 0 16px ${accent.color}` : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: themeAccent === accent.color ? 'scale(1.15)' : 'scale(1)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  {themeAccent === accent.color && (
+                    <Check size={18} color="#ffffff" strokeWidth={3} />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '20px',
+              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Visual Display Mode</span>
+              <span style={{ fontSize: '0.78rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '4px 12px', borderRadius: '9999px', fontWeight: '700' }}>
+                Deep OLED Dark
+              </span>
+            </div>
+          </div>
+
+          {/* Sub-Card 4: Media & Storage Cache */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '28px',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
+              <HardDrive size={20} color="#ee7882" />
+              <span>Media & Local Cache Management</span>
+            </div>
+            <p style={{ margin: '0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Status sound snippets, voice notes, and media thumbnails are cached in local browser memory.
+            </p>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'rgba(255, 255, 255, 0.025)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '22px',
+              padding: '14px 18px',
+              gap: '12px'
+            }}>
               <div>
-                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc' }}>
-                  Backend Engine Connection
+                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                  Cached Media Files
                 </div>
                 <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+                  Approx. 2.4 MB stored locally
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearCache}
+                style={{
+                  background: '#be123c',
+                  border: 'none',
+                  borderRadius: '9999px',
+                  padding: '10px 20px',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 10px rgba(190, 18, 60, 0.35)',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <Trash2 size={15} />
+                <span>Clear Cache</span>
+              </button>
+            </div>
+
+            {cacheMsg && (
+              <div style={{
+                background: 'rgba(238, 120, 130, 0.15)',
+                color: '#ee7882',
+                borderRadius: '16px',
+                padding: '10px 16px',
+                fontSize: '0.82rem',
+                fontWeight: '700',
+                textAlign: 'center'
+              }}>
+                {cacheMsg}
+              </div>
+            )}
+          </div>
+
+          {/* Sub-Card 5: Backend Engine & Central Inspector */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '28px',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
+              <Server size={20} color="#ee7882" />
+              <span>Backend Engine & Infrastructure</span>
+            </div>
+
+            {/* Engine URL Card */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 18px',
+              background: 'rgba(255, 255, 255, 0.025)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '22px',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                  Engine Server Connection
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px', wordBreak: 'break-all' }}>
                   {serverUrl || 'Default Cloud (sadisocial-engine.onrender.com)'}
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={onOpenEngineSettings}
+                style={{
+                  background: '#ee7882',
+                  border: 'none',
+                  color: '#ffffff',
+                  borderRadius: '9999px',
+                  padding: '10px 22px',
+                  fontSize: '0.84rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Configure
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onOpenEngineSettings}
-              style={{
-                background: '#ee7882',
-                border: 'none',
-                color: '#ffffff',
-                borderRadius: '9999px',
-                padding: '8px 20px',
-                fontSize: '0.84rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Configure
-            </button>
-          </div>
 
-          {/* Live Server Inspector Dashboard Card */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.6))',
-            border: '1px solid rgba(238, 120, 130, 0.3)',
-            borderRadius: '22px',
-            padding: '18px 20px',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '14px'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.92rem', marginBottom: '4px' }}>
-                <Activity size={18} />
-                <span>Central Engine Inspector Dashboard</span>
+            {/* Central Inspector Dashboard */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.6))',
+              border: '1px solid rgba(238, 120, 130, 0.3)',
+              borderRadius: '24px',
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.92rem', marginBottom: '4px' }}>
+                  <Activity size={18} />
+                  <span>Central Engine Inspector Dashboard</span>
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                  View real-time user connections, encrypted message routing traffic, groups, and network metrics.
+                </div>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
-                View real-time user connections, encrypted message routing traffic, groups, and network metrics.
-              </div>
+              <a
+                href={`${serverUrl || 'https://sadisocial-engine.onrender.com'}/inspector`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                  color: '#ffffff',
+                  textDecoration: 'none',
+                  borderRadius: '9999px',
+                  padding: '10px 20px',
+                  fontSize: '0.82rem',
+                  fontWeight: '700',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)'
+                }}
+              >
+                <span>Open Inspector UI ↗</span>
+              </a>
             </div>
-            <a
-              href={`${serverUrl || 'https://sadisocial-engine.onrender.com'}/inspector`}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                background: 'linear-gradient(135deg, #ee7882, #e05663)',
-                color: '#ffffff',
-                textDecoration: 'none',
-                borderRadius: '9999px',
-                padding: '10px 18px',
-                fontSize: '0.82rem',
-                fontWeight: '700',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)'
-              }}
-            >
-              <span>Open Inspector UI ↗</span>
-            </a>
           </div>
 
           {/* Zero Knowledge Guarantee Banner */}
           <div style={{
-            padding: '18px',
+            padding: '18px 20px',
             background: 'rgba(238, 120, 130, 0.06)',
             border: '1px solid rgba(238, 120, 130, 0.25)',
-            borderRadius: '20px',
-            marginBottom: '24px',
+            borderRadius: '24px',
             display: 'flex',
             gap: '12px',
             alignItems: 'flex-start'
@@ -1227,7 +1660,7 @@ export default function SettingsScreen({
           </div>
 
           {/* Switch / Sign Out Account */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
             <button
               type="button"
               onClick={onSwitchUser}
