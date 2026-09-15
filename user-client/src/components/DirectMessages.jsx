@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Send,
   Lock,
@@ -111,6 +111,39 @@ export default function DirectMessages({
   const [conversationPreviews, setConversationPreviews] = useState({});
   const [peerUnreadMap, setPeerUnreadMap] = useState({});
   const [inputMessage, setInputMessage] = useState('');
+  const [peerTypingMap, setPeerTypingMap] = useState({});
+  const typingTimeoutRef = useRef(null);
+  const peerTypingTimersRef = useRef({});
+
+  const sendTypingStatus = useCallback((isTyping) => {
+    if (!wsClient || wsClient.readyState !== 1 /* WebSocket.OPEN */ || !selectedPeer?.username || !currentUser?.username) return;
+    try {
+      wsClient.send(JSON.stringify({
+        type: 'TYPING_STATUS',
+        sender: currentUser.username,
+        recipient: selectedPeer.username,
+        isTyping: Boolean(isTyping)
+      }));
+    } catch (e) {}
+  }, [wsClient, selectedPeer?.username, currentUser?.username]);
+
+  const onMessageInputChange = (e) => {
+    const val = e.target.value;
+    setInputMessage(val);
+
+    if (!selectedPeer?.username) return;
+
+    if (val.trim().length > 0) {
+      sendTypingStatus(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        sendTypingStatus(false);
+      }, 2500);
+    } else {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      sendTypingStatus(false);
+    }
+  };
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
@@ -941,7 +974,7 @@ export default function DirectMessages({
     }).catch(err => console.error('Error marking seen:', err));
   };
 
-  // Auto mark seen on opening chat & clear unread count for selected peer
+  // Auto mark seen on opening chat & clear unread count for selected peer, notify server of active peer
   useEffect(() => {
     if (selectedPeer?.username) {
       triggerMarkSeen(selectedPeer.username);
@@ -951,9 +984,17 @@ export default function DirectMessages({
       }
       setPeerUnreadMap(prev => ({ ...prev, [selectedPeer.username]: 0 }));
     }
-  }, [selectedPeer?.username]);
+    if (wsClient && wsClient.readyState === 1 /* WebSocket.OPEN */) {
+      try {
+        wsClient.send(JSON.stringify({
+          type: 'ACTIVE_CHAT_PEER',
+          peer: selectedPeer?.username || null
+        }));
+      } catch (e) {}
+    }
+  }, [selectedPeer?.username, wsClient]);
 
-  // Receive live messages & receipts via WebSocket
+  // Receive live messages, typing indicators & receipts via WebSocket
   useEffect(() => {
     if (!wsClient) return;
     const handleWSMessage = (event) => {
@@ -961,8 +1002,13 @@ export default function DirectMessages({
         const data = JSON.parse(event.data);
         if (data.type === 'DIRECT_MESSAGE') {
           const msg = data.message;
-          if (msg && msg.recipient === currentUser?.username) {
-            if (selectedPeer?.username !== msg.sender) {
+          const sLower = (msg?.sender || '').toLowerCase().trim();
+          const rLower = (msg?.recipient || '').toLowerCase().trim();
+          const pLower = (selectedPeer?.username || '').toLowerCase().trim();
+          const myLower = (currentUser?.username || '').toLowerCase().trim();
+
+          if (msg && rLower === myLower) {
+            if (pLower !== sLower) {
               setPeerUnreadMap(prev => ({
                 ...prev,
                 [msg.sender]: (prev[msg.sender] || 0) + 1
@@ -972,8 +1018,8 @@ export default function DirectMessages({
           loadConversationsOverview();
 
           if (
-            (msg.sender === selectedPeer?.username && msg.recipient === currentUser?.username) ||
-            (msg.sender === currentUser?.username && msg.recipient === selectedPeer?.username)
+            (sLower === pLower && rLower === myLower) ||
+            (sLower === myLower && rLower === pLower)
           ) {
             setMessages(prev => {
               const idx = prev.findIndex(existing => existing.id === msg.id);
@@ -985,18 +1031,40 @@ export default function DirectMessages({
               return [...prev, msg];
             });
 
-            if (msg.sender === selectedPeer?.username) {
+            if (sLower === pLower) {
               triggerMarkSeen(selectedPeer.username);
             }
           }
         } else if (data.type === 'MESSAGES_SEEN') {
-          if (data.reader === selectedPeer?.username) {
+          const rLower = (data.reader || '').toLowerCase().trim();
+          const peerLower = (selectedPeer?.username || '').toLowerCase().trim();
+          if (rLower === peerLower) {
             setMessages(prev => prev.map(m => {
-              if (m.sender === currentUser?.username && (!m.seen || m.status !== 'seen')) {
-                return { ...m, seen: true, status: 'seen', seenAt: data.seenAt };
+              const sLower = (m.sender || '').toLowerCase().trim();
+              const myLower = (currentUser?.username || '').toLowerCase().trim();
+              if (sLower === myLower) {
+                return { ...m, seen: true, status: 'seen', seenAt: data.seenAt || new Date().toISOString() };
               }
               return m;
             }));
+          }
+        } else if (data.type === 'TYPING_STATUS') {
+          const sLower = (data.sender || '').toLowerCase().trim();
+          const isTyping = Boolean(data.isTyping);
+          setPeerTypingMap(prev => ({
+            ...prev,
+            [sLower]: isTyping
+          }));
+          if (peerTypingTimersRef.current[sLower]) {
+            clearTimeout(peerTypingTimersRef.current[sLower]);
+          }
+          if (isTyping) {
+            peerTypingTimersRef.current[sLower] = setTimeout(() => {
+              setPeerTypingMap(prev => ({
+                ...prev,
+                [sLower]: false
+              }));
+            }, 3500);
           }
         } else if (data.type === 'MESSAGE_DELETED') {
           setMessages(prev => prev.map(m => {
@@ -1288,6 +1356,8 @@ export default function DirectMessages({
       setInputMessage('');
       clearAttachment();
       setReplyingTo(null);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      sendTypingStatus(false);
 
       // Bundle text + media payload + quoted reply into end-to-end encrypted ratchet payload
       const payloadString = JSON.stringify({
@@ -1328,7 +1398,18 @@ export default function DirectMessages({
           delete updated[tempId];
           return updated;
         });
-        setMessages(prev => prev.map(m => m.id === tempId ? data.message : m));
+        setMessages(prev => prev.map(m => {
+          if (m.id === tempId) {
+            const wasSeen = m.seen || m.status === 'seen';
+            return {
+              ...data.message,
+              seen: wasSeen || data.message.seen,
+              status: wasSeen ? 'seen' : (data.message.status || 'delivered'),
+              seenAt: wasSeen ? (m.seenAt || new Date().toISOString()) : data.message.seenAt
+            };
+          }
+          return m;
+        }));
       }
     } catch (err) {
       console.error('Send DM Error:', err);
@@ -1806,7 +1887,7 @@ export default function DirectMessages({
                       </div>
                     )}
 
-                    {/* Middle Row: Decrypted Last Message Preview */}
+                    {/* Middle Row: Decrypted Last Message Preview OR Typing Indicator */}
                     <div style={{
                       fontSize: '0.82rem',
                       color: unreadCount > 0 ? '#ffffff' : (preview ? '#cbd5e1' : '#64748b'),
@@ -1818,7 +1899,16 @@ export default function DirectMessages({
                       alignItems: 'center',
                       gap: '4px'
                     }}>
-                      {preview ? (
+                      {peerTypingMap[peerLower] ? (
+                        <span style={{ color: '#ff9ea8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span>✍️ typing</span>
+                          <span className="typing-dots">
+                            <span className="dot dot-1" />
+                            <span className="dot dot-2" />
+                            <span className="dot dot-3" />
+                          </span>
+                        </span>
+                      ) : preview ? (
                         <>
                           <span style={{ color: preview.isMine ? '#ee7882' : (unreadCount > 0 ? '#fca5a5' : '#94a3b8'), fontWeight: (preview.isMine || unreadCount > 0) ? '600' : '400' }}>
                             {preview.isMine ? 'You: ' : ''}
@@ -1908,6 +1998,7 @@ export default function DirectMessages({
        selectedPeer)
     : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
+  const isPeerTyping = Boolean(selectedPeer?.username && peerTypingMap[selectedPeer.username.toLowerCase().trim()]);
 
   const visibleMessages = (searchQuery && searchQuery.trim())
     ? nonClearedMessages.filter(m => {
@@ -2021,21 +2112,44 @@ export default function DirectMessages({
                 )}
 
                 {/* Online Status / Last Seen - Fully Visible without cut-offs */}
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    color: isPeerActive ? '#ff9ea8' : '#a69ea2',
-                    fontWeight: isPeerActive ? 600 : 400,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
-                  title={formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
-                >
-                  <Circle size={6} color={isPeerActive ? '#ee7882' : '#94a3b8'} fill={isPeerActive ? '#ee7882' : '#94a3b8'} style={{ flexShrink: 0 }} />
-                  <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
-                </span>
+                {/* Typing Indicator or Online Status / Last Seen */}
+                {isPeerTyping ? (
+                  <span
+                    className="typing-indicator-header"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      color: '#ff9ea8',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span>typing</span>
+                    <span className="typing-dots">
+                      <span className="dot dot-1" />
+                      <span className="dot dot-2" />
+                      <span className="dot dot-3" />
+                    </span>
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      color: isPeerActive ? '#ff9ea8' : '#a69ea2',
+                      fontWeight: isPeerActive ? 600 : 400,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
+                    }}
+                    title={formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
+                  >
+                    <Circle size={6} color={isPeerActive ? '#ee7882' : '#94a3b8'} fill={isPeerActive ? '#ee7882' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                    <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
+                  </span>
+                )}
 
                 <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
 
@@ -2350,6 +2464,32 @@ export default function DirectMessages({
             );
           })
         )}
+        {/* Incoming typing bubble */}
+        {isPeerTyping && (
+          <div className="peer-typing-bubble-container" style={{ display: 'flex', alignItems: 'center', margin: '4px 0 10px 8px' }}>
+            <div className="peer-typing-bubble" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              background: 'rgba(238, 120, 130, 0.12)',
+              border: '1px solid rgba(238, 120, 130, 0.25)',
+              borderRadius: '20px 20px 20px 4px',
+              animation: 'fadeIn 0.2s ease',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)'
+            }}>
+              <span style={{ fontSize: '0.74rem', color: '#ff9ea8', fontWeight: 600 }}>
+                {activePeer?.displayName || activePeer?.username || 'Friend'} is typing
+              </span>
+              <span className="typing-dots">
+                <span className="dot dot-1" />
+                <span className="dot dot-2" />
+                <span className="dot dot-3" />
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={chatEndRef} />
       </div>
 
@@ -2545,7 +2685,7 @@ export default function DirectMessages({
               type="text"
               placeholder={attachedMedia ? 'Add a caption (optional)...' : `Message ${activePeer.displayName || activePeer.username}...`}
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={onMessageInputChange}
               disabled={sending}
               className="msg-bar-text-input"
             />

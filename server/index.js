@@ -424,9 +424,37 @@ app.post('/api/messages', (req, res) => {
     msg.status = 'delivered';
   }
 
+  // Check if recipient is actively looking at the sender's chat right now
+  let recipientIsOnChat = false;
+  const recipientSockets = connectedClients.get(recipient);
+  if (recipientSockets) {
+    const sLower = sender.toLowerCase().trim();
+    for (const s of recipientSockets) {
+      if (s.activeChatPeer === sLower) {
+        recipientIsOnChat = true;
+        break;
+      }
+    }
+  }
+
+  if (recipientIsOnChat) {
+    msg.seen = true;
+    msg.status = 'seen';
+    msg.seenAt = new Date().toISOString();
+    db.markMessagesSeen(recipient, sender);
+  }
+
   // Real-time delivery to all active devices of recipient & sender
   sendToUser(recipient, { type: 'DIRECT_MESSAGE', message: msg });
   sendToUser(sender, { type: 'DIRECT_MESSAGE', message: msg });
+
+  if (recipientIsOnChat) {
+    sendToUser(sender, {
+      type: 'MESSAGES_SEEN',
+      reader: recipient,
+      seenAt: msg.seenAt
+    });
+  }
 
   notifyInspector();
   res.json({ success: true, message: msg });
@@ -1067,6 +1095,18 @@ wss.on('connection', (ws, req) => {
             }
           }
         }
+      } else if (data.type === 'TYPING_STATUS') {
+        const { sender, recipient, isTyping } = data;
+        if (sender && recipient) {
+          sendToUser(recipient, {
+            type: 'TYPING_STATUS',
+            sender,
+            recipient,
+            isTyping: Boolean(isTyping)
+          });
+        }
+      } else if (data.type === 'ACTIVE_CHAT_PEER') {
+        ws.activeChatPeer = data.peer ? String(data.peer).toLowerCase().trim() : null;
       }
     } catch (e) {
       console.error('[WS] Message parse error', e);

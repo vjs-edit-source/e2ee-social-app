@@ -574,8 +574,12 @@ class ZeroKnowledgeStore {
   markMessagesSeen(reader, sender) {
     let updatedCount = 0;
     const now = new Date().toISOString();
+    const rLower = (reader || '').toLowerCase().trim();
+    const sLower = (sender || '').toLowerCase().trim();
     for (const msg of this.messages) {
-      if (msg.sender === sender && msg.recipient === reader && !msg.seen && !msg.isDeleted) {
+      const msgS = (msg.sender || '').toLowerCase().trim();
+      const msgR = (msg.recipient || '').toLowerCase().trim();
+      if (msgS === sLower && msgR === rLower && !msg.seen && !msg.isDeleted) {
         msg.seen = true;
         msg.status = 'seen';
         msg.seenAt = now;

@@ -8390,3 +8390,51 @@ input:checked + .toggle-slider:before {
   background: rgba(238, 120, 130, 0.3) !important;
 }
 
+/* Real-Time Typing Indicators */
+.typing-dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin-left: 2px !important;
+  vertical-align: middle !important;
+}
+
+.typing-dots .dot {
+  display: inline-block !important;
+  width: 4px !important;
+  height: 4px !important;
+  background-color: #ff9ea8 !important;
+  border-radius: 50% !important;
+  opacity: 0.4 !important;
+  animation: typingDotWave 1.4s infinite ease-in-out !important;
+}
+
+.typing-dots .dot-1 {
+  animation-delay: 0s !important;
+}
+
+.typing-dots .dot-2 {
+  animation-delay: 0.2s !important;
+}
+
+.typing-dots .dot-3 {
+  animation-delay: 0.4s !important;
+}
+
+@keyframes typingDotWave {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+    background-color: #ee7882;
+  }
+}
+
+.peer-typing-bubble {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 10px rgba(238, 120, 130, 0.15) !important;
+}
+
+
