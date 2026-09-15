@@ -431,37 +431,32 @@ export default function SettingsScreen({
         </div>
       </div>
 
-      {/* Segmented Tab Navigation */}
+      {/* Segmented 2x2 Tab Navigation */}
       <div style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '8px',
         background: 'rgba(255, 255, 255, 0.04)',
-        borderRadius: '9999px',
-        padding: '5px',
+        borderRadius: '30px',
+        padding: '8px',
         marginBottom: '20px',
-        gap: '6px',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
-        WebkitOverflowScrolling: 'touch'
+        border: '1px solid rgba(255, 255, 255, 0.08)'
       }}>
         <button
           type="button"
           onClick={() => setActiveTab('profile')}
           style={{
-            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 14px',
+            gap: '8px',
+            padding: '12px 14px',
             borderRadius: '9999px',
-            fontSize: '0.84rem',
+            fontSize: '0.86rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
-            whiteSpace: 'nowrap',
-            background: activeTab === 'profile' ? '#ee7882' : 'transparent',
+            background: activeTab === 'profile' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'profile' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'profile' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
@@ -475,45 +470,41 @@ export default function SettingsScreen({
           type="button"
           onClick={() => setActiveTab('security')}
           style={{
-            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 14px',
+            gap: '8px',
+            padding: '12px 14px',
             borderRadius: '9999px',
-            fontSize: '0.84rem',
+            fontSize: '0.86rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
-            whiteSpace: 'nowrap',
-            background: activeTab === 'security' ? '#ee7882' : 'transparent',
+            background: activeTab === 'security' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'security' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'security' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
           }}
         >
           <ShieldCheck size={16} />
-          <span>Security</span>
+          <span>Security & Keys</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('starred')}
           style={{
-            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 14px',
+            gap: '8px',
+            padding: '12px 14px',
             borderRadius: '9999px',
-            fontSize: '0.84rem',
+            fontSize: '0.86rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
-            whiteSpace: 'nowrap',
-            background: activeTab === 'starred' ? '#ee7882' : 'transparent',
+            background: activeTab === 'starred' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'starred' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'starred' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
@@ -527,19 +518,17 @@ export default function SettingsScreen({
           type="button"
           onClick={() => setActiveTab('preferences')}
           style={{
-            flex: '1 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 14px',
+            gap: '8px',
+            padding: '12px 14px',
             borderRadius: '9999px',
-            fontSize: '0.84rem',
+            fontSize: '0.86rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
-            whiteSpace: 'nowrap',
-            background: activeTab === 'preferences' ? '#ee7882' : 'transparent',
+            background: activeTab === 'preferences' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'preferences' ? '#ffffff' : '#94a3b8',
             boxShadow: activeTab === 'preferences' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
@@ -837,34 +826,13 @@ export default function SettingsScreen({
             padding: '24px',
             marginBottom: '20px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: '700', color: '#ee7882' }}>
-                <ShieldCheck size={20} />
-                <span>Cryptographic Safety Number</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyFingerprint}
-                style={{
-                  background: copiedFingerprint ? '#10b981' : '#ee7882',
-                  border: 'none',
-                  color: '#ffffff',
-                  padding: '8px 18px',
-                  borderRadius: '9999px',
-                  fontSize: '0.82rem',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {copiedFingerprint ? <CheckCheck size={15} /> : <Copy size={15} />}
-                <span>{copiedFingerprint ? 'Copied!' : 'Copy Code'}</span>
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.94rem', fontWeight: '700', color: '#ee7882', marginBottom: '8px' }}>
+              <ShieldCheck size={20} />
+              <span>Cryptographic Safety Number</span>
             </div>
+            <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              Compare this safety number with your contacts to confirm your end-to-end encryption is tamper-proof and unintercepted.
+            </p>
             <div style={{
               fontFamily: 'monospace',
               fontSize: '1.08rem',
@@ -874,13 +842,35 @@ export default function SettingsScreen({
               background: 'rgba(0, 0, 0, 0.55)',
               borderRadius: '24px',
               color: '#ffffff',
-              border: '1px solid rgba(238, 120, 130, 0.2)'
+              border: '1px solid rgba(238, 120, 130, 0.2)',
+              marginBottom: '14px'
             }}>
               {safetyFingerprint}
             </div>
-            <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
-              Compare this safety number with your contacts to confirm your end-to-end encryption is tamper-proof and unintercepted.
-            </p>
+            <button
+              type="button"
+              onClick={handleCopyFingerprint}
+              style={{
+                width: '100%',
+                background: copiedFingerprint ? '#10b981' : '#ee7882',
+                border: 'none',
+                color: '#ffffff',
+                padding: '12px',
+                borderRadius: '9999px',
+                fontSize: '0.86rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {copiedFingerprint ? <CheckCheck size={16} /> : <Copy size={16} />}
+              <span>{copiedFingerprint ? 'Copied Safety Code' : 'Copy Safety Code'}</span>
+            </button>
           </div>
 
           {/* Public Key Share */}
@@ -891,32 +881,8 @@ export default function SettingsScreen({
             padding: '24px',
             marginBottom: '20px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
-                Public Identity Key (SPKI)
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyKey}
-                style={{
-                  background: copiedKey ? '#10b981' : '#331925',
-                  border: '1.5px solid #ee7882',
-                  color: '#ffffff',
-                  padding: '8px 18px',
-                  borderRadius: '9999px',
-                  fontSize: '0.82rem',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {copiedKey ? <CheckCheck size={15} /> : <Copy size={15} />}
-                <span>{copiedKey ? 'Copied Key' : 'Copy Key'}</span>
-              </button>
+            <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#f8fafc', marginBottom: '8px' }}>
+              Public Identity Key (SPKI)
             </div>
             <div style={{
               fontFamily: 'monospace',
@@ -928,10 +894,35 @@ export default function SettingsScreen({
               borderRadius: '22px',
               border: '1px solid rgba(255, 255, 255, 0.06)',
               maxHeight: '75px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              marginBottom: '14px'
             }}>
               {currentUser?.spkiPublicKey || currentUser?.publicIdentityKey || 'Generating...'}
             </div>
+            <button
+              type="button"
+              onClick={handleCopyKey}
+              style={{
+                width: '100%',
+                background: copiedKey ? '#10b981' : '#331925',
+                border: '1.5px solid #ee7882',
+                color: '#ffffff',
+                padding: '12px',
+                borderRadius: '9999px',
+                fontSize: '0.86rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {copiedKey ? <CheckCheck size={16} /> : <Copy size={16} />}
+              <span>{copiedKey ? 'Copied Key to Clipboard' : 'Copy SPKI Public Key'}</span>
+            </button>
           </div>
 
           {/* 12-Word Master Secret Recovery Seed Card */}
@@ -1085,60 +1076,66 @@ export default function SettingsScreen({
               Require a 4-digit PIN or fingerprint authentication every time SadiSocial is opened or resumed.
             </p>
 
-            <form onSubmit={handleSetPin} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
               <input
                 type="password"
                 maxLength={4}
-                placeholder="Enter 4 digits..."
+                placeholder="Enter 4-digit PIN..."
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
                 style={{
-                  flex: 1,
+                  width: '100%',
+                  boxSizing: 'border-box',
                   background: 'rgba(255, 255, 255, 0.05)',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   borderRadius: '26px',
-                  padding: '12px 20px',
+                  padding: '14px 20px',
                   color: '#ffffff',
-                  fontSize: '0.9rem',
-                  letterSpacing: '3px',
+                  fontSize: '1rem',
+                  letterSpacing: '4px',
+                  textAlign: 'center',
                   outline: 'none'
                 }}
               />
-              <button
-                type="submit"
-                style={{
-                  background: '#ee7882',
-                  border: 'none',
-                  borderRadius: '9999px',
-                  padding: '12px 24px',
-                  color: '#ffffff',
-                  fontWeight: '700',
-                  fontSize: '0.86rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)'
-                }}
-              >
-                {hasPin ? 'Change PIN' : 'Set PIN'}
-              </button>
-              {hasPin && (
+              <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
                 <button
-                  type="button"
-                  onClick={handleRemovePin}
+                  type="submit"
                   style={{
-                    background: '#be123c',
+                    flex: 1,
+                    background: '#ee7882',
                     border: 'none',
                     borderRadius: '9999px',
                     padding: '12px 20px',
                     color: '#ffffff',
                     fontWeight: '700',
-                    fontSize: '0.86rem',
+                    fontSize: '0.88rem',
                     cursor: 'pointer',
-                    boxShadow: '0 2px 10px rgba(190, 18, 60, 0.3)'
+                    boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)'
                   }}
                 >
-                  Disable
+                  {hasPin ? 'Change PIN' : 'Set PIN'}
                 </button>
-              )}
+                {hasPin && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePin}
+                    style={{
+                      flex: 1,
+                      background: '#be123c',
+                      border: 'none',
+                      borderRadius: '9999px',
+                      padding: '12px 20px',
+                      color: '#ffffff',
+                      fontWeight: '700',
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 10px rgba(190, 18, 60, 0.3)'
+                    }}
+                  >
+                    Disable PIN
+                  </button>
+                )}
+              </div>
             </form>
 
             {pinMsg && (
@@ -1186,30 +1183,11 @@ export default function SettingsScreen({
           padding: '26px',
           backdropFilter: 'blur(10px)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '1rem' }}>
               <Star size={18} fill="#ee7882" color="#ee7882" />
               <span>Starred Messages ({starredList.length})</span>
             </div>
-            {starredList.length > 0 && (
-              <button
-                type="button"
-                onClick={handleClearStarred}
-                style={{
-                  background: '#be123c',
-                  border: 'none',
-                  color: '#ffffff',
-                  borderRadius: '9999px',
-                  padding: '8px 20px',
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(190, 18, 60, 0.35)'
-                }}
-              >
-                Clear All
-              </button>
-            )}
           </div>
 
           {starredList.length === 0 ? (
@@ -1219,28 +1197,55 @@ export default function SettingsScreen({
               <span style={{ fontSize: '0.78rem' }}>Tap the star icon on any message bubble to bookmark it here.</span>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {starredList.map((id, idx) => (
-                <div
-                  key={id}
-                  style={{
-                    padding: '14px 18px',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Star size={14} color="#ee7882" fill="#ee7882" />
-                    <span style={{ fontSize: '0.84rem', color: '#f8fafc' }}>Starred Encrypted Message #{idx + 1}</span>
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {starredList.map((id, idx) => (
+                  <div
+                    key={id}
+                    style={{
+                      padding: '14px 18px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Star size={14} color="#ee7882" fill="#ee7882" />
+                      <span style={{ fontSize: '0.84rem', color: '#f8fafc' }}>Starred Encrypted Message #{idx + 1}</span>
+                    </div>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>{id.slice(0, 10)}...</span>
                   </div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>{id.slice(0, 10)}...</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleClearStarred}
+                style={{
+                  marginTop: '16px',
+                  width: '100%',
+                  background: '#be123c',
+                  border: 'none',
+                  color: '#ffffff',
+                  borderRadius: '9999px',
+                  padding: '12px',
+                  fontSize: '0.86rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(190, 18, 60, 0.35)'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Clear All Starred Messages</span>
+              </button>
+            </>
           )}
         </div>
       )}
@@ -1496,44 +1501,44 @@ export default function SettingsScreen({
 
             <div style={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
               background: 'rgba(255, 255, 255, 0.025)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '22px',
-              padding: '14px 18px',
-              gap: '12px'
+              borderRadius: '24px',
+              padding: '18px 20px',
+              gap: '14px'
             }}>
               <div>
-                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#f8fafc' }}>
                   Cached Media Files
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
-                  Approx. 2.4 MB stored locally
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '3px' }}>
+                  Approx. 2.4 MB stored locally in browser memory
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleClearCache}
                 style={{
+                  width: '100%',
                   background: '#be123c',
                   border: 'none',
                   borderRadius: '9999px',
-                  padding: '10px 20px',
+                  padding: '12px 20px',
                   color: '#ffffff',
                   fontWeight: '700',
-                  fontSize: '0.82rem',
+                  fontSize: '0.86rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 10px rgba(190, 18, 60, 0.35)',
-                  whiteSpace: 'nowrap',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(190, 18, 60, 0.35)',
                   transition: 'all 0.2s ease'
                 }}
               >
-                <Trash2 size={15} />
-                <span>Clear Cache</span>
+                <Trash2 size={16} />
+                <span>Clear Media Cache</span>
               </button>
             </div>
 
@@ -1570,19 +1575,18 @@ export default function SettingsScreen({
             {/* Engine URL Card */}
             <div style={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 18px',
+              flexDirection: 'column',
+              padding: '18px 20px',
               background: 'rgba(255, 255, 255, 0.025)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '22px',
-              gap: '12px'
+              borderRadius: '24px',
+              gap: '14px'
             }}>
               <div>
-                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#f8fafc' }}>
                   Engine Server Connection
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px', wordBreak: 'break-all' }}>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px', wordBreak: 'break-all' }}>
                   {serverUrl || 'Default Cloud (sadisocial-engine.onrender.com)'}
                 </div>
               </div>
@@ -1590,20 +1594,25 @@ export default function SettingsScreen({
                 type="button"
                 onClick={onOpenEngineSettings}
                 style={{
+                  width: '100%',
                   background: '#ee7882',
                   border: 'none',
                   color: '#ffffff',
                   borderRadius: '9999px',
-                  padding: '10px 22px',
-                  fontSize: '0.84rem',
+                  padding: '12px 20px',
+                  fontSize: '0.86rem',
                   fontWeight: '700',
                   cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
                   boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)',
-                  whiteSpace: 'nowrap',
                   transition: 'all 0.2s ease'
                 }}
               >
-                Configure
+                <Server size={16} />
+                <span>Configure Engine Connection</span>
               </button>
             </div>
 
@@ -1611,19 +1620,18 @@ export default function SettingsScreen({
             <div style={{
               background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.6))',
               border: '1px solid rgba(238, 120, 130, 0.3)',
-              borderRadius: '24px',
-              padding: '18px 20px',
+              borderRadius: '26px',
+              padding: '20px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
               gap: '14px'
             }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.92rem', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.94rem', marginBottom: '6px' }}>
                   <Activity size={18} />
                   <span>Central Engine Inspector Dashboard</span>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.45' }}>
                   View real-time user connections, encrypted message routing traffic, groups, and network metrics.
                 </div>
               </div>
@@ -1632,18 +1640,20 @@ export default function SettingsScreen({
                 target="_blank"
                 rel="noreferrer"
                 style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
                   background: 'linear-gradient(135deg, #ee7882, #e05663)',
                   color: '#ffffff',
                   textDecoration: 'none',
                   borderRadius: '9999px',
-                  padding: '10px 20px',
-                  fontSize: '0.82rem',
+                  padding: '12px',
+                  fontSize: '0.86rem',
                   fontWeight: '700',
-                  whiteSpace: 'nowrap',
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 10px rgba(238, 120, 130, 0.35)'
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(238, 120, 130, 0.35)'
                 }}
               >
                 <span>Open Inspector UI ↗</span>
