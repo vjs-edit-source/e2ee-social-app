@@ -139,16 +139,16 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
       musicEngine.stop();
       setPreviewingTrackId(null);
     } else {
-      musicEngine.playTrack(track);
+      musicEngine.playTrack(track, serverUrl);
       setPreviewingTrackId(track.id);
     }
   };
 
-  // Select Track to attach to story
+  // Select Track to attach to story (starts playback so author hears the vibe!)
   const handleSelectTrack = (track) => {
     setSelectedMusic(track);
-    musicEngine.stop();
-    setPreviewingTrackId(null);
+    setPreviewingTrackId(track.id);
+    musicEngine.playTrack(track, serverUrl);
     setActiveSheet(null);
   };
 
@@ -384,16 +384,28 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
           {selectedMusic && (
             <div
               className="story-music-sticker"
-              onClick={() => setActiveSheet('music')}
-              title="Change or preview track"
+              onClick={() => {
+                if (previewingTrackId === selectedMusic.id && musicEngine.isPlaying()) {
+                  musicEngine.stop();
+                  setPreviewingTrackId(null);
+                } else {
+                  musicEngine.playTrack(selectedMusic, serverUrl);
+                  setPreviewingTrackId(selectedMusic.id);
+                }
+              }}
+              title="Tap to play or pause music"
             >
               <Music size={16} color="#ee7882" />
-              <div className="equalizer-wave">
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-              </div>
+              {previewingTrackId === selectedMusic.id ? (
+                <div className="equalizer-wave">
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                </div>
+              ) : (
+                <Play size={13} color="#ee7882" style={{ marginLeft: '2px' }} />
+              )}
               <div className="sticker-music-info">
                 <span className="sticker-music-title">{selectedMusic.title}</span>
                 <span className="sticker-music-artist">{selectedMusic.artist}</span>

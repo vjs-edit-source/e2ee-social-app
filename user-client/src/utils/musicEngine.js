@@ -1,5 +1,5 @@
 // ==============================================================================
-// MUSIC ENGINE: Web Audio Synthesizer & Custom Audio Player for Status Stories
+// MUSIC ENGINE: High-Fidelity Audio Soundtrack Player & Fallback Synthesizer
 // ==============================================================================
 
 export const PRESET_TRACKS = [
@@ -9,7 +9,8 @@ export const PRESET_TRACKS = [
     artist: 'Sadi Wave',
     genre: 'Synthwave',
     emoji: '🌃',
-    bpm: 110,
+    bpm: 116,
+    audioUrl: '/music/cyberpunk.wav',
     accentColor: '#ee7882'
   },
   {
@@ -19,6 +20,7 @@ export const PRESET_TRACKS = [
     genre: 'Lo-Fi Chill',
     emoji: '☕',
     bpm: 78,
+    audioUrl: '/music/lofi_sunset.wav',
     accentColor: '#f59e0b'
   },
   {
@@ -27,7 +29,8 @@ export const PRESET_TRACKS = [
     artist: 'Astral Echoes',
     genre: 'Ambient Space',
     emoji: '🌌',
-    bpm: 65,
+    bpm: 60,
+    audioUrl: '/music/cosmic_orbit.wav',
     accentColor: '#8b5cf6'
   },
   {
@@ -36,7 +39,8 @@ export const PRESET_TRACKS = [
     artist: 'Pulse Runner',
     genre: 'Electronic Hype',
     emoji: '⚡',
-    bpm: 126,
+    bpm: 128,
+    audioUrl: '/music/high_voltage.wav',
     accentColor: '#ec4899'
   },
   {
@@ -46,6 +50,7 @@ export const PRESET_TRACKS = [
     genre: 'Calm Chimes',
     emoji: '🌧️',
     bpm: 82,
+    audioUrl: '/music/tokyo_rain.wav',
     accentColor: '#06b6d4'
   },
   {
@@ -55,6 +60,7 @@ export const PRESET_TRACKS = [
     genre: '80s Retro',
     emoji: '🌇',
     bpm: 105,
+    audioUrl: '/music/neon_horizon.wav',
     accentColor: '#f43f5e'
   }
 ];
@@ -71,7 +77,7 @@ class MusicEngine {
     this.masterGain = null;
   }
 
-  _initContext() {
+  async _ensureContext() {
     if (!this.audioCtx) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (AudioContextClass) {
@@ -79,37 +85,35 @@ class MusicEngine {
       }
     }
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+      try {
+        await this.audioCtx.resume();
+      } catch (e) {}
     }
     if (this.audioCtx && !this.masterGain) {
       this.masterGain = this.audioCtx.createGain();
-      this.masterGain.gain.value = this.isMutedState ? 0 : 0.45;
+      this.masterGain.gain.setValueAtTime(this.isMutedState ? 0 : 0.8, this.audioCtx.currentTime);
       this.masterGain.connect(this.audioCtx.destination);
     }
+    return this.audioCtx;
   }
 
-  // Play a note with synth envelope
-  _playSynthNote(freq, type = 'sine', duration = 0.6, gainLevel = 0.2, filterFreq = 1200) {
+  // Play a synthesized note (reliable fallback)
+  _playSynthNote(freq, type = 'sawtooth', duration = 0.5, gainLevel = 0.35) {
     if (!this.audioCtx || this.isMutedState) return;
 
     try {
       const osc = this.audioCtx.createOscillator();
       const gainNode = this.audioCtx.createGain();
-      const filter = this.audioCtx.createBiquadFilter();
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(filterFreq, this.audioCtx.currentTime);
 
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
 
       const now = this.audioCtx.currentTime;
       gainNode.gain.setValueAtTime(0.001, now);
-      gainNode.gain.exponentialRampToValueAtTime(gainLevel, now + 0.04);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      gainNode.gain.linearRampToValueAtTime(gainLevel, now + 0.04);
+      gainNode.gain.linearRampToValueAtTime(0.001, now + duration);
 
-      osc.connect(filter);
-      filter.connect(gainNode);
+      osc.connect(gainNode);
       gainNode.connect(this.masterGain);
 
       osc.start(now);
@@ -120,15 +124,13 @@ class MusicEngine {
         const idx = this.activeNodes.indexOf(osc);
         if (idx > -1) this.activeNodes.splice(idx, 1);
       }, (duration + 0.1) * 1000);
-    } catch (e) {
-      // Audio node cleanup
-    }
+    } catch (e) {}
   }
 
-  // Melodic progressions for presets
-  _startSynthesizerLoop(trackId) {
+  // Melodic progressions fallback
+  async _startSynthesizerLoop(trackId) {
     this._stopSynthesis();
-    this._initContext();
+    await this._ensureContext();
 
     const noteFreqs = {
       C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, B3: 246.94,
@@ -137,75 +139,25 @@ class MusicEngine {
     };
 
     let step = 0;
+    const seq = [
+      { note: noteFreqs.A3, bass: noteFreqs.A3 / 2, type: 'sawtooth' },
+      { note: noteFreqs.C4, bass: null, type: 'sawtooth' },
+      { note: noteFreqs.E4, bass: noteFreqs.A3 / 2, type: 'sawtooth' },
+      { note: noteFreqs.G4, bass: null, type: 'sawtooth' },
+      { note: noteFreqs.F3, bass: noteFreqs.F3 / 2, type: 'sawtooth' },
+      { note: noteFreqs.A3, bass: null, type: 'sawtooth' },
+      { note: noteFreqs.C4, bass: noteFreqs.F3 / 2, type: 'sawtooth' },
+      { note: noteFreqs.E4, bass: null, type: 'sawtooth' }
+    ];
 
-    // Pattern definitions per track
-    const sequences = {
-      cyberpunk: [
-        { note: noteFreqs.A3, bass: noteFreqs.A3 / 2, type: 'sawtooth', f: 800 },
-        { note: noteFreqs.C4, bass: null, type: 'sawtooth', f: 1200 },
-        { note: noteFreqs.E4, bass: noteFreqs.A3 / 2, type: 'sawtooth', f: 900 },
-        { note: noteFreqs.G4, bass: null, type: 'sawtooth', f: 1500 },
-        { note: noteFreqs.F3, bass: noteFreqs.F3 / 2, type: 'sawtooth', f: 800 },
-        { note: noteFreqs.A3, bass: null, type: 'sawtooth', f: 1100 },
-        { note: noteFreqs.C4, bass: noteFreqs.F3 / 2, type: 'sawtooth', f: 950 },
-        { note: noteFreqs.E4, bass: null, type: 'sawtooth', f: 1400 }
-      ],
-      lofi_sunset: [
-        { note: noteFreqs.F4, bass: noteFreqs.F3, type: 'sine', f: 600 },
-        { note: noteFreqs.A4, bass: null, type: 'sine', f: 700 },
-        { note: noteFreqs.C5, bass: null, type: 'sine', f: 800 },
-        { note: noteFreqs.E5, bass: noteFreqs.F3, type: 'sine', f: 750 },
-        { note: noteFreqs.G4, bass: noteFreqs.E3, type: 'sine', f: 650 },
-        { note: noteFreqs.B4, bass: null, type: 'sine', f: 700 },
-        { note: noteFreqs.D5, bass: null, type: 'sine', f: 850 },
-        { note: noteFreqs.G5, bass: noteFreqs.E3, type: 'sine', f: 720 }
-      ],
-      cosmic_orbit: [
-        { note: noteFreqs.C4, bass: noteFreqs.C3, type: 'triangle', f: 500 },
-        { note: noteFreqs.G4, bass: null, type: 'triangle', f: 600 },
-        { note: noteFreqs.D5, bass: noteFreqs.C3, type: 'triangle', f: 700 },
-        { note: noteFreqs.E4, bass: noteFreqs.A3, type: 'triangle', f: 550 },
-        { note: noteFreqs.A4, bass: null, type: 'triangle', f: 650 },
-        { note: noteFreqs.C5, bass: noteFreqs.A3, type: 'triangle', f: 750 }
-      ],
-      high_voltage: [
-        { note: noteFreqs.D4, bass: noteFreqs.D3, type: 'square', f: 1400 },
-        { note: noteFreqs.F4, bass: null, type: 'sawtooth', f: 1800 },
-        { note: noteFreqs.A4, bass: noteFreqs.D3, type: 'square', f: 1500 },
-        { note: noteFreqs.D5, bass: null, type: 'sawtooth', f: 2000 },
-        { note: noteFreqs.C4, bass: noteFreqs.C3, type: 'square', f: 1300 },
-        { note: noteFreqs.E4, bass: null, type: 'sawtooth', f: 1700 },
-        { note: noteFreqs.G4, bass: noteFreqs.C3, type: 'square', f: 1400 },
-        { note: noteFreqs.C5, bass: null, type: 'sawtooth', f: 1900 }
-      ],
-      tokyo_rain: [
-        { note: noteFreqs.E4, bass: noteFreqs.E3, type: 'sine', f: 1000 },
-        { note: noteFreqs.G4, bass: null, type: 'triangle', f: 1200 },
-        { note: noteFreqs.A4, bass: noteFreqs.E3, type: 'sine', f: 1100 },
-        { note: noteFreqs.B4, bass: null, type: 'triangle', f: 1300 },
-        { note: noteFreqs.D5, bass: noteFreqs.E3, type: 'sine', f: 1400 },
-        { note: noteFreqs.E5, bass: null, type: 'triangle', f: 1500 }
-      ],
-      neon_horizon: [
-        { note: noteFreqs.A4, bass: noteFreqs.A3, type: 'sawtooth', f: 1100 },
-        { note: noteFreqs.C5, bass: null, type: 'triangle', f: 1300 },
-        { note: noteFreqs.E5, bass: noteFreqs.A3, type: 'sawtooth', f: 1400 },
-        { note: noteFreqs.G4, bass: noteFreqs.G3, type: 'sawtooth', f: 1000 },
-        { note: noteFreqs.B4, bass: null, type: 'triangle', f: 1250 },
-        { note: noteFreqs.D5, bass: noteFreqs.G3, type: 'sawtooth', f: 1350 }
-      ]
-    };
-
-    const seq = sequences[trackId] || sequences.cyberpunk;
-    const intervalMs = trackId === 'high_voltage' ? 240 : trackId === 'cosmic_orbit' ? 650 : 380;
-
+    const intervalMs = 350;
     this.synthInterval = setInterval(() => {
       if (!this.isPlayingState) return;
       const item = seq[step % seq.length];
       if (item) {
-        this._playSynthNote(item.note, item.type, intervalMs / 800, 0.15, item.f);
+        this._playSynthNote(item.note, item.type, 0.4, 0.35);
         if (item.bass) {
-          this._playSynthNote(item.bass, 'sine', (intervalMs * 1.5) / 1000, 0.22, 350);
+          this._playSynthNote(item.bass, 'sine', 0.6, 0.5);
         }
       }
       step++;
@@ -226,30 +178,54 @@ class MusicEngine {
     this.activeNodes = [];
   }
 
-  // Play track (preset or custom audio URL)
-  playTrack(track) {
+  // Resolve target audio URL
+  _resolveAudioUrl(rawUrl, serverUrl = '') {
+    if (!rawUrl) return null;
+    if (rawUrl.startsWith('data:') || rawUrl.startsWith('blob:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+    const cleanServer = serverUrl ? serverUrl.replace(/\/$/, '') : window.location.origin;
+    const cleanPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+    return `${cleanServer}${cleanPath}`;
+  }
+
+  // Play track (real audio file or custom upload, with fallback)
+  async playTrack(track, serverUrl = '') {
     if (!track) return;
     this.stop();
 
     this.currentTrack = track;
     this.isPlayingState = true;
 
-    // Check if custom audio file URL or base64
-    if (track.audioUrl) {
+    // Determine audio file URL
+    const targetUrl = this._resolveAudioUrl(track.audioUrl, serverUrl);
+
+    if (targetUrl) {
       try {
-        this.htmlAudio = new Audio(track.audioUrl);
-        this.htmlAudio.loop = true;
-        this.htmlAudio.volume = this.isMutedState ? 0 : 0.7;
-        this.htmlAudio.play().catch(err => {
-          console.warn('Audio play request prevented by autoplay policy:', err);
-        });
+        const audio = new Audio();
+        audio.src = targetUrl;
+        audio.loop = true;
+        audio.volume = this.isMutedState ? 0 : 0.85;
+
+        // Save reference
+        this.htmlAudio = audio;
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.warn('HTML5 audio play was prevented by browser autoplay restriction:', err);
+            // Fall back to Web Audio synthesis if HTML5 audio was prevented
+            this._startSynthesizerLoop(track.id);
+          });
+        }
+        return;
       } catch (e) {
-        console.error('Failed to play custom audio:', e);
+        console.warn('Native audio play error, falling back to Web Audio:', e);
       }
-    } else {
-      // Synthesized preset loop
-      this._startSynthesizerLoop(track.id);
     }
+
+    // Fallback synthesis
+    this._startSynthesizerLoop(track.id);
   }
 
   // Stop playback cleanly
@@ -261,6 +237,7 @@ class MusicEngine {
       try {
         this.htmlAudio.pause();
         this.htmlAudio.currentTime = 0;
+        this.htmlAudio.src = '';
       } catch (e) {}
       this.htmlAudio = null;
     }
@@ -272,12 +249,12 @@ class MusicEngine {
     this.isMutedState = !this.isMutedState;
     if (this.masterGain && this.audioCtx) {
       this.masterGain.gain.setValueAtTime(
-        this.isMutedState ? 0 : 0.45,
+        this.isMutedState ? 0 : 0.8,
         this.audioCtx.currentTime
       );
     }
     if (this.htmlAudio) {
-      this.htmlAudio.volume = this.isMutedState ? 0 : 0.7;
+      this.htmlAudio.volume = this.isMutedState ? 0 : 0.85;
     }
     return this.isMutedState;
   }
@@ -286,12 +263,12 @@ class MusicEngine {
     this.isMutedState = Boolean(muted);
     if (this.masterGain && this.audioCtx) {
       this.masterGain.gain.setValueAtTime(
-        this.isMutedState ? 0 : 0.45,
+        this.isMutedState ? 0 : 0.8,
         this.audioCtx.currentTime
       );
     }
     if (this.htmlAudio) {
-      this.htmlAudio.volume = this.isMutedState ? 0 : 0.7;
+      this.htmlAudio.volume = this.isMutedState ? 0 : 0.85;
     }
   }
 

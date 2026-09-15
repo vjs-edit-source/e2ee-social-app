@@ -63,7 +63,7 @@ export default function StatusViewerModal({
 
     // Play music if attached
     if (currentStatus.music) {
-      musicEngine.playTrack(currentStatus.music);
+      musicEngine.playTrack(currentStatus.music, serverUrl);
     } else {
       musicEngine.stop();
     }
@@ -492,7 +492,18 @@ export default function StatusViewerModal({
         >
           {/* Floating Music Sticker on Canvas if attached */}
           {currentStatus.music && (
-            <div className="story-music-sticker" style={{ marginBottom: '16px' }}>
+            <div
+              className="story-music-sticker"
+              style={{ marginBottom: '16px', cursor: 'pointer' }}
+              onClick={() => {
+                if (musicEngine.isPlaying()) {
+                  musicEngine.stop();
+                } else {
+                  musicEngine.playTrack(currentStatus.music, serverUrl);
+                }
+              }}
+              title="Tap to toggle music playback"
+            >
               <Music size={15} color="#ee7882" />
               <div className="equalizer-wave">
                 <span className="equalizer-bar" />

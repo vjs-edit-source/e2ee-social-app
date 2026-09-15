@@ -3524,27 +3524,34 @@ textarea:focus {
   color: #ffffff;
 }
 
-/* Custom Audio Upload Button */
+/* Custom Audio Upload Button with Solid Colors */
 .custom-audio-upload-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 12px;
-  background: rgba(22, 18, 28, 0.9);
-  border: 1.5px dashed rgba(238, 120, 130, 0.4);
-  border-radius: 20px;
-  color: #ff9ea8;
-  font-size: 0.84rem;
-  font-weight: 600;
+  padding: 14px 20px;
+  background: #ee7882;
+  border: none;
+  border-radius: 9999px;
+  color: #ffffff !important;
+  font-size: 0.9rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 4px 18px rgba(238, 120, 130, 0.45);
+  transition: all 0.2s ease;
+  width: 100%;
 }
 
 .custom-audio-upload-btn:hover {
-  background: rgba(238, 120, 130, 0.15);
-  border-color: #ee7882;
-  color: #ffffff;
+  background: #ff477e;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(238, 120, 130, 0.6);
+  color: #ffffff !important;
+}
+
+.custom-audio-upload-btn svg {
+  color: #ffffff !important;
 }
 
 /* Sticker Grid in Sheet */
