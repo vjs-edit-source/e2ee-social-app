@@ -297,15 +297,133 @@ export default function DirectMessages({
   const clearPeerChat = (uName) => {
     if (!uName) return;
     const nowIso = new Date().toISOString();
+    const uNameLower = uName.toLowerCase().trim();
+    const uNameUpper = uName.toUpperCase().trim();
+
     setClearedTimestamps(prev => {
-      const next = { ...prev, [uName]: nowIso };
+      const next = {
+        ...prev,
+        [uName]: nowIso,
+        [uNameLower]: nowIso,
+        [uNameUpper]: nowIso
+      };
       try {
         localStorage.setItem(`ciphersocial_cleared_dms_${currentUser?.username}`, JSON.stringify(next));
       } catch (e) {}
       return next;
     });
-    if (selectedPeer?.username === uName) {
+
+    setConversationPreviews(prev => {
+      const next = { ...prev };
+      delete next[uName];
+      delete next[uNameLower];
+      delete next[uNameUpper];
+      return next;
+    });
+
+    setPeerUnreadMap(prev => {
+      const next = { ...prev };
+      delete next[uName];
+      delete next[uNameLower];
+      delete next[uNameUpper];
+      return next;
+    });
+
+    if (selectedPeer && (
+      selectedPeer.username === uName ||
+      selectedPeer.username.toLowerCase().trim() === uNameLower
+    )) {
       setMessages([]);
+    }
+
+    try {
+      decryptionCache.clearDirectMessagesForPeer(uName);
+      decryptionCache.clearDirectMessagesForPeer(uNameLower);
+    } catch (e) {}
+
+    if (currentUser?.username) {
+      fetch(`${serverUrl}/api/messages/${encodeURIComponent(currentUser.username)}/${encodeURIComponent(uName)}`, {
+        method: 'DELETE'
+      }).catch(err => console.error('Failed to clear messages on server:', err));
+    }
+  };
+
+  const deletePeerConversation = async (uName) => {
+    if (!uName) return;
+    const uNameLower = uName.toLowerCase().trim();
+    const uNameUpper = uName.toUpperCase().trim();
+
+    // 1. Remove from savedContacts (all case variations)
+    setSavedContacts(prev => {
+      const next = new Set(prev);
+      next.delete(uName);
+      next.delete(uNameLower);
+      next.delete(uNameUpper);
+      for (const item of Array.from(next)) {
+        if (item.toLowerCase().trim() === uNameLower) next.delete(item);
+      }
+      try {
+        localStorage.setItem(`ciphersocial_contacts_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+
+    // 2. Remove from pinned, archived, locked, muted
+    setPinnedPeers(prev => {
+      const next = new Set(prev);
+      next.delete(uName);
+      next.delete(uNameLower);
+      try {
+        localStorage.setItem(`ciphersocial_pinned_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+    setArchivedPeers(prev => {
+      const next = new Set(prev);
+      next.delete(uName);
+      next.delete(uNameLower);
+      try {
+        localStorage.setItem(`ciphersocial_archived_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+    setLockedPeers(prev => {
+      const next = new Set(prev);
+      next.delete(uName);
+      next.delete(uNameLower);
+      try {
+        localStorage.setItem(`ciphersocial_locked_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+    setMutedPeers(prev => {
+      const next = new Set(prev);
+      next.delete(uName);
+      next.delete(uNameLower);
+      try {
+        localStorage.setItem(`ciphersocial_muted_dms_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+
+    // 3. Clear chat messages, previews & unread
+    clearPeerChat(uName);
+
+    // 4. Remove contact from server
+    if (currentUser?.username) {
+      try {
+        fetch(`${serverUrl}/api/contacts/${encodeURIComponent(currentUser.username)}/${encodeURIComponent(uName)}`, {
+          method: 'DELETE'
+        }).catch(e => {});
+      } catch (e) {}
+    }
+
+    // 5. If this peer is currently open, exit back to contact list
+    if (selectedPeer && (
+      selectedPeer.username === uName ||
+      selectedPeer.username.toLowerCase().trim() === uNameLower
+    )) {
+      setSelectedPeer(null);
     }
   };
 
@@ -894,6 +1012,20 @@ export default function DirectMessages({
             }
             return m;
           }));
+        } else if (data.type === 'CHAT_CLEARED') {
+          const pLower = (data.peer || '').toLowerCase().trim();
+          if (selectedPeer && (
+            selectedPeer.username === data.peer ||
+            selectedPeer.username.toLowerCase().trim() === pLower
+          )) {
+            setMessages([]);
+          }
+          setConversationPreviews(prev => {
+            const next = { ...prev };
+            delete next[data.peer];
+            delete next[pLower];
+            return next;
+          });
         }
       } catch (e) {
         console.error('WS Parse error in DM:', e);
@@ -1210,12 +1342,17 @@ export default function DirectMessages({
     const myNameLower = (currentUser?.username || '').toLowerCase().trim();
     const list = allUsers.filter(u => {
       const uLower = (u.username || '').toLowerCase().trim();
+      const uUpper = (u.username || '').toUpperCase().trim();
       if (u.username === currentUser?.username || uLower === myNameLower) return false;
-      const isSaved = savedContacts.has(u.username) || savedContacts.has(uLower);
-      const hasChatHistory = Boolean(conversationPreviews[u.username] || (peerUnreadMap[u.username] || 0) > 0);
+      const isSaved = savedContacts.has(u.username) || savedContacts.has(uLower) || savedContacts.has(uUpper);
+
+      const peerClearedAt = clearedTimestamps[u.username] || clearedTimestamps[uLower] || clearedTimestamps[uUpper];
+      const prev = conversationPreviews[u.username] || conversationPreviews[uLower] || conversationPreviews[uUpper];
+      const isPrevCleared = peerClearedAt && prev?.timestamp && new Date(prev.timestamp).getTime() <= new Date(peerClearedAt).getTime();
+      const hasChatHistory = Boolean(prev && !isPrevCleared) || ((peerUnreadMap[u.username] || peerUnreadMap[uLower] || 0) > 0);
       if (!isSaved && !hasChatHistory) return false;
 
-      const isArchived = archivedPeers.has(u.username) || archivedPeers.has(uLower);
+      const isArchived = archivedPeers.has(u.username) || archivedPeers.has(uLower) || archivedPeers.has(uUpper);
       if (showArchivedView) {
         return isArchived;
       } else {
@@ -1242,7 +1379,7 @@ export default function DirectMessages({
       const nameB = b.displayName || b.username;
       return nameA.localeCompare(nameB);
     });
-  }, [allUsers, currentUser.username, savedContacts, peerUnreadMap, conversationPreviews, archivedPeers, showArchivedView, pinnedPeers]);
+  }, [allUsers, currentUser.username, savedContacts, peerUnreadMap, conversationPreviews, archivedPeers, showArchivedView, pinnedPeers, clearedTimestamps]);
 
   const peerAccessMap = useMemo(() => {
     const map = {};
@@ -1302,7 +1439,13 @@ export default function DirectMessages({
   const canSend = !sending && !mediaUploading && (Boolean(inputMessage && inputMessage.trim()) || Boolean(attachedMedia && attachedMedia.mediaId));
 
   // Filter out cleared messages unconditionally at the top level to adhere to React Hook rules
-  const clearedAt = selectedPeer?.username ? clearedTimestamps[selectedPeer.username] : null;
+  const selectedPeerLower = (selectedPeer?.username || '').toLowerCase().trim();
+  const selectedPeerUpper = (selectedPeer?.username || '').toUpperCase().trim();
+  const clearedAt = selectedPeer?.username
+    ? (clearedTimestamps[selectedPeer.username] ||
+       clearedTimestamps[selectedPeerLower] ||
+       clearedTimestamps[selectedPeerUpper])
+    : null;
   const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
   const nonClearedMessages = useMemo(() => {
     if (!clearTime || !Array.isArray(messages)) return messages || [];
@@ -1328,6 +1471,7 @@ export default function DirectMessages({
         onToggleArchive={() => activeActionPeer && toggleArchivePeer(activeActionPeer.username)}
         onToggleMute={() => activeActionPeer && toggleMutePeer(activeActionPeer.username)}
         onClearChat={() => activeActionPeer && clearPeerChat(activeActionPeer.username)}
+        onDeleteConversation={() => activeActionPeer && deletePeerConversation(activeActionPeer.username)}
       />
 
       <ChatLockModal
@@ -1476,8 +1620,13 @@ export default function DirectMessages({
         ) : (
           <div className="dm-contacts-list">
             {filteredPeers.map(peer => {
-              const preview = conversationPreviews[peer.username];
-              const unreadCount = peerUnreadMap[peer.username] || 0;
+              const peerLower = (peer.username || '').toLowerCase().trim();
+              const peerUpper = (peer.username || '').toUpperCase().trim();
+              const rawPreview = conversationPreviews[peer.username] || conversationPreviews[peerLower] || conversationPreviews[peerUpper];
+              const peerClearedAt = clearedTimestamps[peer.username] || clearedTimestamps[peerLower] || clearedTimestamps[peerUpper];
+              const isPreviewCleared = peerClearedAt && rawPreview?.timestamp && new Date(rawPreview.timestamp).getTime() <= new Date(peerClearedAt).getTime();
+              const preview = isPreviewCleared ? null : rawPreview;
+              const unreadCount = peerUnreadMap[peer.username] || peerUnreadMap[peerLower] || 0;
               const isPeerActive = peer.isOnline || (peer.lastSeen && (Date.now() - new Date(peer.lastSeen).getTime()) < 120000);
               const lastSeenText = formatLastSeen(peer.lastSeen, peer.isOnline);
               const messageTime = preview?.timestamp ? formatMessageTime(preview.timestamp) : '';
@@ -1754,7 +1903,9 @@ export default function DirectMessages({
 
   // ── CONVERSATION SCREEN ───────────────────────────────────────
   const activePeer = selectedPeer
-    ? ((allUsers || []).find(u => u?.username && selectedPeer?.username && u.username.toLowerCase().trim() === selectedPeer.username.toLowerCase().trim()) || selectedPeer)
+    ? ((allUsers || []).find(u => u?.username === selectedPeer?.username) ||
+       (allUsers || []).find(u => u?.username && selectedPeer?.username && u.username.toLowerCase().trim() === selectedPeer.username.toLowerCase().trim()) ||
+       selectedPeer)
     : null;
   const isPeerActive = activePeer && (activePeer.isOnline || (activePeer.lastSeen && (Date.now() - new Date(activePeer.lastSeen).getTime()) < 120000));
 

@@ -41,6 +41,26 @@ class ClientDecryptionCache {
     return obj;
   }
 
+  clearDirectMessages(ids) {
+    if (!Array.isArray(ids)) return;
+    for (const id of ids) {
+      this.directMessages.delete(id);
+    }
+  }
+
+  clearDirectMessagesForPeer(peerUsername) {
+    if (!peerUsername) return;
+    const pLower = String(peerUsername).toLowerCase().trim();
+    for (const [id, meta] of Array.from(this.directMessages.entries())) {
+      if (
+        (meta.sender && meta.sender.toLowerCase().trim() === pLower) ||
+        (meta.recipient && meta.recipient.toLowerCase().trim() === pLower)
+      ) {
+        this.directMessages.delete(id);
+      }
+    }
+  }
+
   // ── GROUP MESSAGES ──────────────────────────────────────────
   getGroupMessage(id) {
     return this.groupMessages.get(id) || null;

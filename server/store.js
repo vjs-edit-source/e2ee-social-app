@@ -607,10 +607,46 @@ class ZeroKnowledgeStore {
   }
 
   getMessagesBetween(userA, userB) {
-    return this.messages.filter(
+    const exact = this.messages.filter(
       m => (m.sender === userA && m.recipient === userB) ||
            (m.sender === userB && m.recipient === userA)
     );
+    if (exact.length > 0) return exact;
+    const uALower = (userA || '').toLowerCase().trim();
+    const uBLower = (userB || '').toLowerCase().trim();
+    return this.messages.filter(m => {
+      const s = (m.sender || '').toLowerCase().trim();
+      const r = (m.recipient || '').toLowerCase().trim();
+      return (s === uALower && r === uBLower) || (s === uBLower && r === uALower);
+    });
+  }
+
+  clearMessagesBetween(userA, userB, requester) {
+    if (!userA || !userB) return 0;
+    const uA = String(userA).trim();
+    const uB = String(userB).trim();
+    const uALower = uA.toLowerCase();
+    const uBLower = uB.toLowerCase();
+    const deletedIds = [];
+    this.messages = this.messages.filter(msg => {
+      const s = (msg.sender || '').trim();
+      const r = (msg.recipient || '').trim();
+      const isBetween = (s === uA && r === uB) || (s === uB && r === uA) ||
+                        (s.toLowerCase() === uALower && r.toLowerCase() === uBLower) ||
+                        (s.toLowerCase() === uBLower && r.toLowerCase() === uALower);
+      if (isBetween) {
+        deletedIds.push(msg.id);
+        return false;
+      }
+      return true;
+    });
+    this.scheduleSave();
+    if (this.mongoDb && deletedIds.length > 0) {
+      this.mongoDb.collection('messages').deleteMany({ id: { $in: deletedIds } }).catch(err => {
+        console.error('Failed to delete messages from Mongo:', err);
+      });
+    }
+    return deletedIds.length;
   }
 
   getRecentConversations(username) {

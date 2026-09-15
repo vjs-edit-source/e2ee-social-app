@@ -2113,7 +2113,7 @@ textarea:focus {
   align-items: center !important;
   gap: 6px !important;
   font-size: 0.73rem !important;
-  color: var(--accent-success) !important;
+  color: #ff9ea8 !important;
   min-width: 0 !important;
   overflow: hidden !important;
   flex-wrap: nowrap !important;

@@ -9,6 +9,7 @@ import {
   Bell,
   BellOff,
   Trash2,
+  UserX,
   X
 } from 'lucide-react';
 
@@ -24,7 +25,8 @@ export default function ChatActionMenu({
   onToggleLock,
   onToggleArchive,
   onToggleMute,
-  onClearChat
+  onClearChat,
+  onDeleteConversation
 }) {
   if (!isOpen) return null;
 
@@ -290,16 +292,60 @@ export default function ChatActionMenu({
               width: '32px',
               height: '32px',
               borderRadius: '10px',
-              background: 'rgba(239, 68, 68, 0.12)',
+              background: 'rgba(238, 120, 130, 0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#f87171'
+              color: '#ee7882'
             }}>
               <Trash2 size={16} />
             </div>
             <span>Clear Chat History</span>
           </button>
+
+          {/* Delete Conversation */}
+          {onDeleteConversation && (
+            <button
+              type="button"
+              className="chat-action-menu-btn danger-item"
+              onClick={() => {
+                if (window.confirm(`Delete conversation with ${chatName || 'this contact'}? This will permanently delete message history and remove this chat from your list.`)) {
+                  onDeleteConversation?.();
+                  onClose();
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: '16px',
+                padding: '10px 14px',
+                color: '#f87171',
+                fontSize: '0.86rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '10px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#f87171'
+              }}>
+                <UserX size={16} />
+              </div>
+              <span>Delete Conversation</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

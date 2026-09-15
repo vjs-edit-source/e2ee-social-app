@@ -494,6 +494,16 @@ app.get('/api/messages/:userA/:userB', (req, res) => {
   res.json(db.getMessagesBetween(userA, userB));
 });
 
+// 6b. Clear All DM Messages Between Two Users
+app.delete('/api/messages/:userA/:userB', (req, res) => {
+  const { userA, userB } = req.params;
+  const count = db.clearMessagesBetween(userA, userB, userA);
+  sendToUser(userA, { type: 'CHAT_CLEARED', peer: userB });
+  sendToUser(userB, { type: 'CHAT_CLEARED', peer: userA });
+  notifyInspector();
+  res.json({ success: true, clearedCount: count });
+});
+
 
 // ── GROUPS & COMMUNITIES ────────────────────────────────────
 
