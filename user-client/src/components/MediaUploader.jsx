@@ -104,11 +104,12 @@ const MediaUploader = forwardRef(function MediaUploader(
     // Reset any previous media reference immediately
     onMediaEncrypted?.(null);
 
-    // Generate local mini preview for images only
-    if (file.type && file.type.startsWith('image/')) {
+    // Generate local preview for images and videos so author can view while editing
+    let localUrl = null;
+    if (file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
+      localUrl = URL.createObjectURL(file);
+      setPreviewUrl(localUrl);
     } else {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -153,7 +154,10 @@ const MediaUploader = forwardRef(function MediaUploader(
           iv,
           originalName: file.name,
           fileSize: file.size,
-          mediaKeyB64
+          mediaKeyB64,
+          localPreviewUrl: localUrl || previewUrl || URL.createObjectURL(file),
+          isImage: Boolean(file.type && file.type.startsWith('image/')),
+          isVideo: Boolean(file.type && file.type.startsWith('video/'))
         });
       } else {
         throw new Error(data.error || 'Server rejected media upload');
@@ -289,9 +293,13 @@ const MediaUploader = forwardRef(function MediaUploader(
         )
       ) : (
         <div className="file-preview-card master-attached-chip">
-          {/* Mini preview for images only */}
+          {/* Mini preview for images and videos */}
           {previewUrl ? (
-            <img src={previewUrl} alt="Attached thumbnail" className="mini-attached-thumbnail" />
+            selectedFile?.type?.startsWith('video/') ? (
+              <video src={previewUrl} className="mini-attached-thumbnail" muted playsInline />
+            ) : (
+              <img src={previewUrl} alt="Attached thumbnail" className="mini-attached-thumbnail" />
+            )
           ) : (
             <Lock size={14} color="#ee7882" />
           )}

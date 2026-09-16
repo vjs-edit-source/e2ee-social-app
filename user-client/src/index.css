@@ -3039,24 +3039,42 @@ textarea:focus {
   top: 0;
   left: 0;
   right: 0;
-  padding: env(safe-area-inset-top, 16px) 16px 12px 16px;
+  padding-top: 52px; /* Rock-solid clearance for Android 8 and older WebViews */
+  padding-top: max(52px, calc(env(safe-area-inset-top, 0px) + 20px));
+  padding-bottom: 12px;
+  padding-left: 12px;
+  padding-right: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   z-index: 60;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.45) 70%, rgba(0, 0, 0, 0) 100%);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .story-tool-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: calc(100% - 46px);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.story-tool-actions::-webkit-scrollbar {
+  display: none;
 }
 
 .story-tool-btn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: rgba(22, 18, 28, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -3067,6 +3085,7 @@ textarea:focus {
   cursor: pointer;
   transition: all 0.2s ease;
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .story-tool-btn:hover,
@@ -3074,25 +3093,28 @@ textarea:focus {
   background: rgba(238, 120, 130, 0.25);
   border-color: #ee7882;
   color: #ee7882;
-  transform: scale(1.06);
+  transform: scale(1.05);
   box-shadow: 0 0 12px rgba(238, 120, 130, 0.4);
 }
 
 .story-tool-pill {
-  height: 38px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   border-radius: 9999px;
-  background: rgba(22, 18, 28, 0.75);
-  border: 1px solid rgba(238, 120, 130, 0.4);
+  background: rgba(22, 18, 28, 0.85);
+  border: 1px solid #ee7882;
   color: #ffffff;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
+  gap: 6px;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+  flex-shrink: 0;
+  max-width: 140px;
   transition: all 0.2s ease;
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .story-tool-pill:hover,
@@ -3101,6 +3123,107 @@ textarea:focus {
   border-color: #ee7882;
   color: #ee7882;
   box-shadow: 0 0 14px rgba(238, 120, 130, 0.45);
+}
+
+.story-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Full-screen Photo / Video canvas visual layer (Visible while editing!) */
+.story-canvas-media-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.story-canvas-media-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.story-canvas-media-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.62) 100%),
+              linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.72) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Attached Media Pill on Story Canvas */
+.story-attached-media-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(22, 18, 28, 0.88);
+  border-radius: 9999px;
+  border: 1px solid rgba(238, 120, 130, 0.45);
+  color: #ffffff;
+  font-size: 0.8rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  max-width: 90%;
+  margin-top: 4px;
+  pointer-events: auto;
+}
+
+.story-attached-media-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  font-weight: 500;
+}
+
+.story-attached-media-remove {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.story-attached-media-remove:hover {
+  background: #ee7882;
+  color: #ffffff;
+}
+
+.story-media-uploading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(22, 18, 28, 0.9);
+  border: 1px solid #ee7882;
+  border-radius: 9999px;
+  color: #ff9ea8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
 }
 
 /* Center Interactive Area */
@@ -3358,25 +3481,27 @@ textarea:focus {
   gap: 8px;
   padding: 10px 24px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #ee7882 0%, #ff477e 100%);
+  background: #ee7882;
   color: #ffffff;
   font-weight: 700;
   font-size: 0.9rem;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(238, 120, 130, 0.45);
+  box-shadow: 0 4px 16px rgba(238, 120, 130, 0.4);
   transition: all 0.2s ease;
 }
 
 .story-post-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 25px rgba(238, 120, 130, 0.6);
+  background: #e2636e;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(238, 120, 130, 0.5);
 }
 
 .story-post-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
+  transform: none;
 }
 
 /* Sheets & Drawers (Music, Stickers, Gradients) */
@@ -3759,11 +3884,19 @@ textarea:focus {
 .status-progress-tray {
   position: absolute;
   top: 10px;
+  top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
   left: 12px;
   right: 12px;
   display: flex;
   gap: 4px;
   z-index: 20;
+}
+
+@media (max-width: 600px) {
+  .status-progress-tray {
+    top: 40px;
+    top: max(40px, calc(env(safe-area-inset-top, 0px) + 10px));
+  }
 }
 
 .progress-segment {
@@ -3784,12 +3917,20 @@ textarea:focus {
 .status-viewer-header {
   position: absolute;
   top: 20px;
+  top: max(20px, calc(env(safe-area-inset-top, 0px) + 16px));
   left: 14px;
   right: 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   z-index: 20;
+}
+
+@media (max-width: 600px) {
+  .status-viewer-header {
+    top: 52px;
+    top: max(52px, calc(env(safe-area-inset-top, 0px) + 20px));
+  }
 }
 
 .status-author-info {

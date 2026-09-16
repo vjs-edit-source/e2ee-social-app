@@ -19,7 +19,8 @@ import {
   Check,
   MapPin,
   Clock,
-  Highlighter
+  Highlighter,
+  Video
 } from 'lucide-react';
 import { encryptPost } from '../crypto/e2ee';
 import MediaUploader from './MediaUploader';
@@ -327,26 +328,31 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
           </button>
 
           {/* Music Button */}
-          <button
-            type="button"
-            className={`story-tool-pill ${selectedMusic ? 'active' : ''}`}
-            onClick={() => setActiveSheet(prev => (prev === 'music' ? null : 'music'))}
-            title="Attach Music / Song"
-          >
-            <Music size={16} />
-            {selectedMusic ? (
-              <>
-                <div className="equalizer-wave">
-                  <span className="equalizer-bar" />
-                  <span className="equalizer-bar" />
-                  <span className="equalizer-bar" />
-                </div>
-                <span>{selectedMusic.title}</span>
-              </>
-            ) : (
-              <span>Music</span>
-            )}
-          </button>
+          {selectedMusic ? (
+            <button
+              type="button"
+              className="story-tool-pill active"
+              onClick={() => setActiveSheet(prev => (prev === 'music' ? null : 'music'))}
+              title="Music Selected - tap to change"
+            >
+              <Music size={15} />
+              <div className="equalizer-wave">
+                <span className="equalizer-bar" />
+                <span className="equalizer-bar" />
+                <span className="equalizer-bar" />
+              </div>
+              <span className="story-pill-text">{selectedMusic.title}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`story-tool-btn ${activeSheet === 'music' ? 'active' : ''}`}
+              onClick={() => setActiveSheet(prev => (prev === 'music' ? null : 'music'))}
+              title="Attach Music / Song"
+            >
+              <Music size={18} />
+            </button>
+          )}
 
           {/* Stickers & Vibe */}
           <button
@@ -376,7 +382,30 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
         style={{ background: selectedGradient }}
         onClick={() => setActiveSheet(null)}
       >
-        <div className="story-canvas-scrim" />
+        {/* Full-screen media preview layer (Visible while editing!) */}
+        {mediaPayload?.localPreviewUrl ? (
+          <div className="story-canvas-media-layer">
+            {mediaPayload.isVideo || (mediaPayload.mimeType && mediaPayload.mimeType.startsWith('video/')) ? (
+              <video
+                src={mediaPayload.localPreviewUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="story-canvas-media-element"
+              />
+            ) : (
+              <img
+                src={mediaPayload.localPreviewUrl}
+                alt="Story Media"
+                className="story-canvas-media-element"
+              />
+            )}
+            <div className="story-canvas-media-vignette" />
+          </div>
+        ) : (
+          <div className="story-canvas-scrim" />
+        )}
 
         {/* Center Dynamic Story Content */}
         <div className="story-canvas-content" onClick={e => e.stopPropagation()}>
@@ -439,12 +468,20 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
             </div>
           )}
 
+          {/* Encrypting media indicator */}
+          {mediaUploading && (
+            <div className="story-media-uploading-indicator">
+              <Loader2 size={16} className="animate-spin" color="#ee7882" />
+              <span>Securing & Encrypting Media...</span>
+            </div>
+          )}
+
           {/* Interactive Text Input Area */}
           <textarea
             autoFocus
             rows={4}
             maxLength={280}
-            placeholder="Type your story... (24h end-to-end encrypted)"
+            placeholder={mediaPayload ? "Add a caption to your photo or video..." : "Type your story... (24h end-to-end encrypted)"}
             value={text}
             onChange={e => setText(e.target.value)}
             className={`story-textarea ${activeFont.className} highlight-${highlightStyle}`}
@@ -453,27 +490,26 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
 
           {/* Media Attachment Mini-Card if attached */}
           {mediaPayload && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 14px',
-                background: 'rgba(22, 18, 28, 0.85)',
-                borderRadius: '9999px',
-                border: '1px solid rgba(238, 120, 130, 0.4)',
-                color: '#ffffff',
-                fontSize: '0.8rem'
-              }}
-            >
-              <ImageIcon size={15} color="#ee7882" />
-              <span>Attached: {mediaPayload.originalName || 'Photo Attachment'}</span>
+            <div className="story-attached-media-pill">
+              {mediaPayload.isVideo || (mediaPayload.mimeType && mediaPayload.mimeType.startsWith('video/')) ? (
+                <Video size={14} color="#ee7882" />
+              ) : (
+                <ImageIcon size={14} color="#ee7882" />
+              )}
+              <span className="story-attached-media-name" title={mediaPayload.originalName}>
+                {mediaPayload.originalName || (mediaPayload.isVideo ? 'Attached Video' : 'Attached Photo')}
+              </span>
               <button
                 type="button"
-                style={{ background: 'transparent', border: 'none', color: '#ff9ea8', cursor: 'pointer' }}
-                onClick={() => setMediaPayload(null)}
+                className="story-attached-media-remove"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMediaPayload(null);
+                  mediaUploaderRef.current?.clearFile?.();
+                }}
+                title="Remove attached photo or video"
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             </div>
           )}
