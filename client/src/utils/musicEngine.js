@@ -192,6 +192,25 @@ class MusicEngine {
   // Play track (real audio file or custom upload, with fallback)
   async playTrack(track, serverUrl = '') {
     if (!track) return;
+
+    // Check if the same track is already playing
+    const isSameTrack = this.currentTrack && (
+      (track.id && this.currentTrack.id === track.id) ||
+      (track.audioUrl && this.currentTrack.audioUrl === track.audioUrl) ||
+      (track.title && this.currentTrack.title === track.title)
+    );
+
+    if (isSameTrack && this.isPlayingState) {
+      // Already playing this exact track: preserve seamless playback
+      if (this.htmlAudio) {
+        this.htmlAudio.volume = this.isMutedState ? 0 : 0.85;
+        if (this.htmlAudio.paused) {
+          this.htmlAudio.play().catch(() => {});
+        }
+      }
+      return;
+    }
+
     this.stop();
 
     this.currentTrack = track;
@@ -213,9 +232,12 @@ class MusicEngine {
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(err => {
+            if (err.name === 'AbortError') return;
             console.warn('HTML5 audio play was prevented by browser autoplay restriction:', err);
             // Fall back to Web Audio synthesis if HTML5 audio was prevented
-            this._startSynthesizerLoop(track.id);
+            if (this.isPlayingState && this.currentTrack?.id === track.id && !this.htmlAudio) {
+              this._startSynthesizerLoop(track.id);
+            }
           });
         }
         return;

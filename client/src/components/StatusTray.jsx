@@ -40,6 +40,8 @@ export default function StatusTray({ currentUser, allUsers = [], serverUrl, wsCl
           data.type === 'STATUS_COMMENT'
         ) {
           loadStatuses();
+        } else if (data.type === 'STATUS_VIEWED') {
+          setStatuses(prev => prev.map(s => (s.id === data.statusId ? { ...s, views: data.views } : s)));
         }
       } catch (e) {}
     };
@@ -78,12 +80,21 @@ export default function StatusTray({ currentUser, allUsers = [], serverUrl, wsCl
           onClick={() => (myStatus ? handleStatusClick(myStatus) : setShowPublisher(true))}
         >
           <div className={`status-avatar-ring ${myStatus ? 'has-status' : 'no-status'}`}>
-            <div
-              className="status-avatar"
-              style={{ backgroundColor: currentUser?.avatarColor || '#3b82f6' }}
-            >
-              {currentUser?.username?.[0]?.toUpperCase() || 'U'}
-            </div>
+            {currentUser?.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.username}
+                className="status-avatar"
+                style={{ objectFit: 'cover', width: '48px', height: '48px', borderRadius: '50%' }}
+              />
+            ) : (
+              <div
+                className="status-avatar"
+                style={{ backgroundColor: currentUser?.avatarColor || '#3b82f6' }}
+              >
+                {currentUser?.username?.[0]?.toUpperCase() || 'U'}
+              </div>
+            )}
             {!myStatus && (
               <div className="status-plus-badge" title="Add status">
                 <Plus size={12} color="#ffffff" />
@@ -107,11 +118,20 @@ export default function StatusTray({ currentUser, allUsers = [], serverUrl, wsCl
               onClick={() => handleStatusClick(status)}
             >
               <div className="status-avatar-ring has-status">
-                <div className="status-avatar" style={{ backgroundColor: avatarColor }}>
-                  {status.author[0].toUpperCase()}
-                </div>
+                {authorUser?.avatarUrl ? (
+                  <img
+                    src={authorUser.avatarUrl}
+                    alt={status.author}
+                    className="status-avatar"
+                    style={{ objectFit: 'cover', width: '48px', height: '48px', borderRadius: '50%' }}
+                  />
+                ) : (
+                  <div className="status-avatar" style={{ backgroundColor: avatarColor }}>
+                    {status.author[0].toUpperCase()}
+                  </div>
+                )}
               </div>
-              <span className="status-author-label">{status.author}</span>
+              <span className="status-author-label">{authorUser?.displayName || status.author}</span>
             </div>
           );
         })}

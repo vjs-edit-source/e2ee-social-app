@@ -45,38 +45,58 @@ export default function StatusViewerModal({
   const [isMuted, setIsMuted] = useState(() => musicEngine.isMuted());
   const [floatingReaction, setFloatingReaction] = useState(null);
 
+  // Track which statuses have been marked as viewed to prevent repeat /view requests
+  const recordedViewsRef = useRef(new Set());
+  const activePlayingMusicRef = useRef(null);
+
   const currentStatus = statuses[currentIndex];
 
   // Stop audio on unmount or close
   useEffect(() => {
     return () => {
       musicEngine.stop();
+      activePlayingMusicRef.current = null;
     };
   }, []);
 
-  // Sync music playback and record view on story change
+  // Sync music playback only when the current status or track changes
   useEffect(() => {
     if (!currentStatus) {
       musicEngine.stop();
+      activePlayingMusicRef.current = null;
       return;
     }
 
-    // Play music if attached
-    if (currentStatus.music) {
-      musicEngine.playTrack(currentStatus.music, serverUrl);
+    const track = currentStatus.music;
+    const trackKey = track ? (track.id || track.audioUrl || track.title) : null;
+
+    if (track && trackKey) {
+      if (activePlayingMusicRef.current !== trackKey || !musicEngine.isPlaying()) {
+        activePlayingMusicRef.current = trackKey;
+        musicEngine.playTrack(track, serverUrl);
+      }
     } else {
+      activePlayingMusicRef.current = null;
       musicEngine.stop();
     }
+  }, [currentStatus?.id, currentStatus?.music?.id, serverUrl]);
 
-    // Record view receipt
-    if (currentUser?.username) {
-      fetch(`${serverUrl}/api/status/${currentStatus.id}/view`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username })
-      }).catch(() => {});
+  // Record view receipt ONCE per status ID to prevent broadcast loops
+  useEffect(() => {
+    if (!currentStatus?.id || !currentUser?.username) return;
+
+    if (recordedViewsRef.current.has(currentStatus.id)) {
+      return; // Already recorded in this viewer session
     }
-  }, [currentIndex, currentStatus, currentUser, serverUrl]);
+
+    recordedViewsRef.current.add(currentStatus.id);
+
+    fetch(`${serverUrl}/api/status/${currentStatus.id}/view`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser.username })
+    }).catch(() => {});
+  }, [currentStatus?.id, currentUser?.username, serverUrl]);
 
   // Sync likes state
   useEffect(() => {
@@ -85,7 +105,7 @@ export default function StatusViewerModal({
       ...prev,
       [currentStatus.id]: currentStatus.likes || []
     }));
-  }, [currentStatus]);
+  }, [currentStatus?.id, currentStatus?.likes]);
 
   // Decrypt current status body and media
   useEffect(() => {
@@ -176,7 +196,7 @@ export default function StatusViewerModal({
 
     decryptCurrent();
     return () => { isMounted = false; };
-  }, [currentStatus, currentUser, serverUrl]);
+  }, [currentStatus?.id, currentUser, serverUrl]);
 
   // Decrypt comments when comment drawer is open
   useEffect(() => {

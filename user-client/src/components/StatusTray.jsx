@@ -40,6 +40,8 @@ export default function StatusTray({ currentUser, allUsers = [], serverUrl, wsCl
           data.type === 'STATUS_COMMENT'
         ) {
           loadStatuses();
+        } else if (data.type === 'STATUS_VIEWED') {
+          setStatuses(prev => prev.map(s => (s.id === data.statusId ? { ...s, views: data.views } : s)));
         }
       } catch (e) {}
     };

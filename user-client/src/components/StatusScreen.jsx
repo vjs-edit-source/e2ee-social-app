@@ -61,10 +61,12 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           data.type === 'NEW_STATUS' ||
           data.type === 'STATUS_LIKED' ||
           data.type === 'STATUS_COMMENT' ||
-          data.type === 'STATUS_DELETED' ||
-          data.type === 'STATUS_VIEWED'
+          data.type === 'STATUS_DELETED'
         ) {
           loadStatuses();
+        } else if (data.type === 'STATUS_VIEWED') {
+          // Update views in-place without triggering a full re-fetch
+          setStatuses(prev => prev.map(s => (s.id === data.statusId ? { ...s, views: data.views } : s)));
         }
       } catch (e) {}
     };
