@@ -16,6 +16,7 @@ import {
   LogOut,
   Palette,
   Eye,
+  EyeOff,
   Sliders,
   RefreshCw,
   Trash2,
@@ -29,7 +30,9 @@ import {
   HardDrive,
   Clock,
   Radio,
-  Zap
+  Zap,
+  Unlock,
+  X
 } from 'lucide-react';
 import { backupKeyVaultToServer, ensureUserMnemonic } from '../crypto/vault';
 import MnemonicVaultModal from './MnemonicVaultModal';
@@ -57,70 +60,104 @@ function ToggleSwitch({ checked, onChange, label, sublabel, icon: Icon }) {
   return (
     <div style={{
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '14px 18px',
+      flexDirection: 'column',
+      padding: '16px 18px',
       background: 'rgba(255, 255, 255, 0.025)',
       borderRadius: '22px',
       border: '1px solid rgba(255, 255, 255, 0.06)',
       transition: 'all 0.2s ease',
-      gap: '12px'
+      gap: '12px',
+      width: '100%',
+      boxSizing: 'border-box'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* Top 100% width text area */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', width: '100%' }}>
         {Icon && (
           <div style={{
             width: '38px',
             height: '38px',
-            borderRadius: '9999px',
+            borderRadius: '12px',
             background: checked ? 'rgba(238, 120, 130, 0.18)' : 'rgba(255, 255, 255, 0.05)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: checked ? '#ee7882' : '#94a3b8',
             transition: 'all 0.2s ease',
-            flexShrink: 0
+            flexShrink: 0,
+            marginTop: '2px'
           }}>
             <Icon size={18} />
           </div>
         )}
-        <div>
-          <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>{label}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc' }}>{label}</div>
           {sublabel && (
-            <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px', lineHeight: '1.35' }}>
+            <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '3px', lineHeight: '1.4' }}>
               {sublabel}
             </div>
           )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        style={{
-          width: '50px',
-          height: '28px',
-          borderRadius: '9999px',
-          background: checked ? 'linear-gradient(135deg, #ee7882, #e05663)' : 'rgba(255, 255, 255, 0.16)',
-          border: 'none',
-          cursor: 'pointer',
-          position: 'relative',
-          padding: '3px',
-          display: 'flex',
-          alignItems: 'center',
-          flexShrink: 0,
-          boxShadow: checked ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
-          transition: 'all 0.25s ease'
-        }}
-      >
-        <div style={{
-          width: '22px',
-          height: '22px',
-          borderRadius: '50%',
-          background: '#ffffff',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-          transform: checked ? 'translateX(22px)' : 'translateX(0px)',
-          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-        }} />
-      </button>
+
+      {/* Full width bottom row with status & toggle control placed at bottom */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: '10px',
+        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+        width: '100%'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: checked ? '#ee7882' : '#64748b',
+            display: 'inline-block',
+            boxShadow: checked ? '0 0 8px #ee7882' : 'none'
+          }} />
+          <span style={{
+            fontSize: '0.76rem',
+            fontWeight: '700',
+            color: checked ? '#ee7882' : '#64748b',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            {checked ? 'Active' : 'Disabled'}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          style={{
+            width: '54px',
+            height: '30px',
+            borderRadius: '9999px',
+            background: checked ? '#ee7882' : 'rgba(255, 255, 255, 0.16)',
+            border: 'none',
+            cursor: 'pointer',
+            position: 'relative',
+            padding: '3px',
+            display: 'flex',
+            alignItems: 'center',
+            flexShrink: 0,
+            boxShadow: checked ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
+            transition: 'all 0.25s ease'
+          }}
+        >
+          <div style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            background: '#ffffff',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+            transform: checked ? 'translateX(24px)' : 'translateX(0px)',
+            transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+          }} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -136,6 +173,109 @@ export default function SettingsScreen({
   onLogout = null
 }) {
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'starred' | 'preferences'
+  
+  // Security & Keys authentication gate state
+  const [isSecurityUnlocked, setIsSecurityUnlocked] = useState(false);
+  const [showSecurityPasswordModal, setShowSecurityPasswordModal] = useState(false);
+  const [securityPasswordInput, setSecurityPasswordInput] = useState('');
+  const [securityConfirmInput, setSecurityConfirmInput] = useState('');
+  const [securityPasswordError, setSecurityPasswordError] = useState('');
+  const [showSecurityPasswordText, setShowSecurityPasswordText] = useState(false);
+
+  const getStoredSecurityPassword = () => {
+    try {
+      return localStorage.getItem(`ciphersocial_sec_pwd_${currentUser?.username}`) || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const isFirstTimeSecuritySetup = () => {
+    const hasStoredPwd = Boolean(getStoredSecurityPassword());
+    const hasPinHash = Boolean(localStorage.getItem('ciphersocial_pin_hash'));
+    return !hasStoredPwd && !hasPinHash;
+  };
+
+  const handleSecurityTabClick = () => {
+    if (isSecurityUnlocked) {
+      setActiveTab('security');
+    } else {
+      setSecurityPasswordInput('');
+      setSecurityConfirmInput('');
+      setSecurityPasswordError('');
+      setShowSecurityPasswordModal(true);
+    }
+  };
+
+  const handleUnlockSecurity = (e) => {
+    if (e) e.preventDefault();
+    setSecurityPasswordError('');
+    const input = securityPasswordInput.trim();
+    if (!input) {
+      setSecurityPasswordError('Please enter your password or PIN.');
+      return;
+    }
+
+    const storedPwd = getStoredSecurityPassword();
+    const savedPinHash = localStorage.getItem('ciphersocial_pin_hash');
+
+    // First time setup:
+    if (!storedPwd && !savedPinHash) {
+      if (input.length < 4) {
+        setSecurityPasswordError('Security password or PIN must be at least 4 characters.');
+        return;
+      }
+      if (securityConfirmInput && securityConfirmInput.trim() !== input) {
+        setSecurityPasswordError('Passwords do not match. Please re-enter.');
+        return;
+      }
+      try {
+        localStorage.setItem(`ciphersocial_sec_pwd_${currentUser?.username}`, input);
+      } catch (err) {}
+      setIsSecurityUnlocked(true);
+      setShowSecurityPasswordModal(false);
+      setActiveTab('security');
+      return;
+    }
+
+    // Verify against stored password
+    let isMatch = false;
+    if (storedPwd && input === storedPwd) {
+      isMatch = true;
+    }
+
+    // Check against 4-digit PIN hash
+    if (!isMatch && savedPinHash) {
+      let hash = 0;
+      for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) - hash) + input.charCodeAt(i);
+        hash |= 0;
+      }
+      if (String(hash) === savedPinHash) {
+        isMatch = true;
+      }
+    }
+
+    // Check against user session password if available
+    if (!isMatch && currentUser?.password && input === currentUser.password) {
+      isMatch = true;
+    }
+
+    if (isMatch) {
+      setIsSecurityUnlocked(true);
+      setShowSecurityPasswordModal(false);
+      setActiveTab('security');
+    } else {
+      setSecurityPasswordError('Incorrect password or PIN. Please try again.');
+    }
+  };
+
+  const handleLockSecurity = () => {
+    setIsSecurityUnlocked(false);
+    if (activeTab === 'security') {
+      setActiveTab('profile');
+    }
+  };
   
   // PIN lock state
   const [pinInput, setPinInput] = useState('');
@@ -390,56 +530,81 @@ export default function SettingsScreen({
 
   return (
     <div style={{
-      maxWidth: '680px',
+      maxWidth: '100%',
       margin: '0 auto',
-      padding: '20px 16px 140px 16px',
+      padding: '6px 8px 140px 8px',
       width: '100%',
       boxSizing: 'border-box'
     }}>
-      {/* Top Header Card */}
+      {/* Top Header Card - Compact Full-Screen Design */}
       <div style={{
         background: 'rgba(255, 255, 255, 0.03)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: '36px',
-        padding: '24px',
-        marginBottom: '18px',
+        borderRadius: '20px',
+        padding: '8px 14px',
+        marginBottom: '8px',
         backdropFilter: 'blur(10px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '14px'
+        gap: '10px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '20px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '10px',
             background: 'rgba(238, 120, 130, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ee7882'
+            color: '#ee7882',
+            flexShrink: 0
           }}>
-            <Sliders size={24} />
+            <Sliders size={18} />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#f8fafc', fontWeight: '700' }}>Settings & Profile</h2>
-            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
-              Manage your photo, privacy, security keys & device preferences
+            <h2 style={{ margin: 0, fontSize: '0.96rem', color: '#f8fafc', fontWeight: '700', lineHeight: 1.2 }}>Settings & Profile</h2>
+            <p style={{ margin: '1px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+              Privacy, security keys & device preferences
             </p>
           </div>
         </div>
+
+        {isSecurityUnlocked && (
+          <button
+            type="button"
+            onClick={handleLockSecurity}
+            title="Lock Security & Keys Tab"
+            style={{
+              background: 'rgba(238, 120, 130, 0.15)',
+              border: '1px solid rgba(238, 120, 130, 0.3)',
+              borderRadius: '9999px',
+              padding: '4px 10px',
+              color: '#ee7882',
+              fontSize: '0.72rem',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            <Lock size={12} />
+            <span>Lock Keys</span>
+          </button>
+        )}
       </div>
 
-      {/* Segmented 2x2 Tab Navigation */}
+      {/* Segmented 2x2 Tab Navigation - Compact & Fine Tuned */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '8px',
+        gap: '6px',
         background: 'rgba(255, 255, 255, 0.04)',
-        borderRadius: '30px',
-        padding: '8px',
-        marginBottom: '20px',
+        borderRadius: '20px',
+        padding: '5px',
+        marginBottom: '10px',
         border: '1px solid rgba(255, 255, 255, 0.08)'
       }}>
         <button
@@ -449,44 +614,44 @@ export default function SettingsScreen({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            padding: '12px 14px',
+            gap: '6px',
+            padding: '7px 10px',
             borderRadius: '9999px',
-            fontSize: '0.86rem',
+            fontSize: '0.78rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
             background: activeTab === 'profile' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'profile' ? '#ffffff' : '#94a3b8',
-            boxShadow: activeTab === 'profile' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
+            boxShadow: activeTab === 'profile' ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
           }}
         >
-          <User size={16} />
+          <User size={14} />
           <span>Profile</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab('security')}
+          onClick={handleSecurityTabClick}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            padding: '12px 14px',
+            gap: '6px',
+            padding: '7px 10px',
             borderRadius: '9999px',
-            fontSize: '0.86rem',
+            fontSize: '0.78rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
             background: activeTab === 'security' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'security' ? '#ffffff' : '#94a3b8',
-            boxShadow: activeTab === 'security' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
+            boxShadow: activeTab === 'security' ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
           }}
         >
-          <ShieldCheck size={16} />
+          {isSecurityUnlocked ? <ShieldCheck size={14} /> : <Lock size={14} />}
           <span>Security & Keys</span>
         </button>
 
@@ -497,20 +662,20 @@ export default function SettingsScreen({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            padding: '12px 14px',
+            gap: '6px',
+            padding: '7px 10px',
             borderRadius: '9999px',
-            fontSize: '0.86rem',
+            fontSize: '0.78rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
             background: activeTab === 'starred' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'starred' ? '#ffffff' : '#94a3b8',
-            boxShadow: activeTab === 'starred' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
+            boxShadow: activeTab === 'starred' ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
           }}
         >
-          <Star size={16} />
+          <Star size={14} />
           <span>Starred</span>
         </button>
 
@@ -521,23 +686,224 @@ export default function SettingsScreen({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            padding: '12px 14px',
+            gap: '6px',
+            padding: '7px 10px',
             borderRadius: '9999px',
-            fontSize: '0.86rem',
+            fontSize: '0.78rem',
             fontWeight: '700',
             cursor: 'pointer',
             border: 'none',
             background: activeTab === 'preferences' ? '#ee7882' : 'rgba(255, 255, 255, 0.04)',
             color: activeTab === 'preferences' ? '#ffffff' : '#94a3b8',
-            boxShadow: activeTab === 'preferences' ? '0 4px 14px rgba(238, 120, 130, 0.4)' : 'none',
+            boxShadow: activeTab === 'preferences' ? '0 2px 10px rgba(238, 120, 130, 0.4)' : 'none',
             transition: 'all 0.2s ease'
           }}
         >
-          <Palette size={16} />
+          <Palette size={14} />
           <span>Preferences</span>
         </button>
       </div>
+
+      {/* Security Password Challenge Modal */}
+      {showSecurityPasswordModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(5, 8, 15, 0.85)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#121722',
+            border: '1px solid rgba(238, 120, 130, 0.3)',
+            borderRadius: '28px',
+            padding: '26px 22px',
+            maxWidth: '420px',
+            width: '100%',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '14px',
+                  background: 'rgba(238, 120, 130, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ee7882',
+                  flexShrink: 0
+                }}>
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.02rem', color: '#f8fafc', fontWeight: '700' }}>
+                    {isFirstTimeSecuritySetup() ? 'Set Security Password' : 'Password Required'}
+                  </h3>
+                  <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+                    {isFirstTimeSecuritySetup() ? 'Protect your cryptographic keys' : 'Authenticate to view Security & Keys'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSecurityPasswordModal(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94a3b8',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: '1.45' }}>
+              {isFirstTimeSecuritySetup()
+                ? 'Create a security password or PIN to protect your private cryptographic keys, SPKI keys, recovery seed, and PIN configuration.'
+                : 'Enter your security password or 4-digit PIN to access cryptographic keys, safety numbers, and recovery seed phrase.'}
+            </p>
+
+            <form onSubmit={handleUnlockSecurity} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: '20px',
+                padding: '12px 16px',
+                gap: '10px'
+              }}>
+                <Lock size={16} color="#ee7882" />
+                <input
+                  type={showSecurityPasswordText ? 'text' : 'password'}
+                  autoFocus
+                  placeholder={isFirstTimeSecuritySetup() ? 'Create security password or PIN...' : 'Enter password or PIN...'}
+                  value={securityPasswordInput}
+                  onChange={(e) => setSecurityPasswordInput(e.target.value)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '0.92rem',
+                    width: '100%',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityPasswordText(!showSecurityPasswordText)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  {showSecurityPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {isFirstTimeSecuritySetup() && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '20px',
+                  padding: '12px 16px',
+                  gap: '10px'
+                }}>
+                  <ShieldCheck size={16} color="#ee7882" />
+                  <input
+                    type={showSecurityPasswordText ? 'text' : 'password'}
+                    placeholder="Confirm security password..."
+                    value={securityConfirmInput}
+                    onChange={(e) => setSecurityConfirmInput(e.target.value)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontSize: '0.92rem',
+                      width: '100%',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              )}
+
+              {securityPasswordError && (
+                <div style={{
+                  fontSize: '0.78rem',
+                  color: '#f87171',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  padding: '8px 12px',
+                  borderRadius: '12px'
+                }}>
+                  {securityPasswordError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityPasswordModal(false)}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    borderRadius: '9999px',
+                    padding: '12px',
+                    color: '#cbd5e1',
+                    fontWeight: '700',
+                    fontSize: '0.86rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 2,
+                    background: '#ee7882',
+                    border: 'none',
+                    borderRadius: '9999px',
+                    padding: '12px',
+                    color: '#ffffff',
+                    fontWeight: '700',
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 14px rgba(238, 120, 130, 0.4)'
+                  }}
+                >
+                  <Unlock size={16} />
+                  <span>{isFirstTimeSecuritySetup() ? 'Set & Unlock' : 'Unlock Security'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: PROFILE & PHOTO */}
       {activeTab === 'profile' && (
@@ -793,7 +1159,7 @@ export default function SettingsScreen({
               fontWeight: '700',
               borderRadius: '9999px',
               border: 'none',
-              background: 'linear-gradient(135deg, #ee7882, #e05663)',
+              background: '#ee7882',
               color: '#ffffff',
               cursor: savingProfile ? 'not-allowed' : 'pointer',
               boxShadow: '0 4px 18px rgba(238, 120, 130, 0.4)',
@@ -811,13 +1177,106 @@ export default function SettingsScreen({
 
       {/* TAB 2: SECURITY & CRYPTOGRAPHIC KEYS */}
       {activeTab === 'security' && (
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '36px',
-          padding: '28px',
-          backdropFilter: 'blur(10px)'
-        }}>
+        !isSecurityUnlocked ? (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '26px',
+            padding: '40px 20px',
+            textAlign: 'center',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '14px'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: 'rgba(238, 120, 130, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ee7882'
+            }}>
+              <Lock size={26} />
+            </div>
+            <div style={{ fontSize: '1.05rem', fontWeight: '700', color: '#f8fafc' }}>
+              Security & Keys is Locked
+            </div>
+            <p style={{ margin: '0', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '360px', lineHeight: '1.4' }}>
+              Please enter your password or PIN to access private cryptographic keys, seed recovery, and PIN controls.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowSecurityPasswordModal(true)}
+              style={{
+                marginTop: '10px',
+                background: '#ee7882',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '9999px',
+                padding: '12px 28px',
+                fontSize: '0.88rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(238, 120, 130, 0.4)'
+              }}
+            >
+              <Lock size={16} />
+              <span>Enter Password to Unlock</span>
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '26px',
+            padding: '20px 16px',
+            backdropFilter: 'blur(10px)'
+          }}>
+            {/* Top Unlocked Security Status Bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              background: 'rgba(238, 120, 130, 0.1)',
+              border: '1px solid rgba(238, 120, 130, 0.25)',
+              borderRadius: '16px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck size={16} color="#ee7882" />
+                <span style={{ fontSize: '0.78rem', color: '#f8fafc', fontWeight: '700' }}>
+                  Authenticated Session (Keys Unlocked)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleLockSecurity}
+                style={{
+                  background: '#be123c',
+                  border: 'none',
+                  borderRadius: '9999px',
+                  padding: '5px 12px',
+                  color: '#ffffff',
+                  fontSize: '0.74rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Lock size={12} />
+                <span>Lock Now</span>
+              </button>
+            </div>
           {/* E2EE Safety Number */}
           <div style={{
             background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.8))',
@@ -888,7 +1347,7 @@ export default function SettingsScreen({
               fontFamily: 'monospace',
               fontSize: '0.72rem',
               wordBreak: 'break-all',
-              color: '#cbd5e1',
+              color: '#5F3140',
               background: 'rgba(0,0,0,0.4)',
               padding: '14px',
               borderRadius: '22px',
@@ -951,7 +1410,7 @@ export default function SettingsScreen({
               type="button"
               onClick={() => setShowMnemonicModal(true)}
               style={{
-                background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                background: '#ee7882',
                 border: 'none',
                 borderRadius: '9999px',
                 padding: '14px',
@@ -1031,7 +1490,7 @@ export default function SettingsScreen({
               type="submit"
               disabled={backingUp || !backupPassphrase.trim()}
               style={{
-                background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                background: '#ee7882',
                 border: 'none',
                 borderRadius: '9999px',
                 color: '#ffffff',
@@ -1172,7 +1631,7 @@ export default function SettingsScreen({
             )}
           </div>
         </div>
-      )}
+      ))}
 
       {/* TAB 3: STARRED MESSAGES VAULT */}
       {activeTab === 'starred' && (
@@ -1255,16 +1714,16 @@ export default function SettingsScreen({
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '36px',
-          padding: '24px',
+          borderRadius: '24px',
+          padding: '16px 12px',
           backdropFilter: 'blur(10px)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px'
+          gap: '12px'
         }}>
           {/* Header Title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: 'bold', fontSize: '1.02rem' }}>
-            <Sliders size={22} color="#ee7882" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.96rem', padding: '0 4px' }}>
+            <Sliders size={20} color="#ee7882" />
             <span>Preferences & Experience</span>
           </div>
 
@@ -1272,17 +1731,17 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(238, 120, 130, 0.04)',
             border: '1px solid rgba(238, 120, 130, 0.2)',
-            borderRadius: '28px',
-            padding: '22px',
+            borderRadius: '22px',
+            padding: '16px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px'
+            gap: '12px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
-              <ShieldCheck size={20} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: '700', fontSize: '0.9rem' }}>
+              <ShieldCheck size={18} color="#ee7882" />
               <span>Privacy & Messaging Controls</span>
             </div>
-            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+            <p style={{ margin: '0', fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
               Fine-tune end-to-end encryption visibility, real-time indicators, and ephemeral timer presets.
             </p>
 
@@ -1316,20 +1775,20 @@ export default function SettingsScreen({
             <div style={{
               background: 'rgba(255, 255, 255, 0.025)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '22px',
-              padding: '14px 18px',
-              marginTop: '4px'
+              borderRadius: '20px',
+              padding: '14px 16px',
+              marginTop: '2px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                <Clock size={18} color="#ee7882" />
-                <span style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Clock size={16} color="#ee7882" />
+                <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#f8fafc' }}>
                   Default Disappearing Messages
                 </span>
               </div>
-              <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.35' }}>
+              <p style={{ margin: '0 0 10px', fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.35' }}>
                 Automatically schedule new chats to wipe messages after a chosen countdown.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                 {[
                   { label: 'Off', val: 'off' },
                   { label: '24 Hours', val: '24h' },
@@ -1342,7 +1801,7 @@ export default function SettingsScreen({
                     onClick={() => handleSelectDisappearing(item.val)}
                     style={{
                       background: disappearingDefault === item.val
-                        ? 'linear-gradient(135deg, #ee7882, #e05663)'
+                        ? '#ee7882'
                         : 'rgba(255, 255, 255, 0.05)',
                       border: disappearingDefault === item.val
                         ? '1px solid #ee7882'
@@ -1369,17 +1828,17 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '28px',
-            padding: '22px',
+            borderRadius: '22px',
+            padding: '16px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px'
+            gap: '12px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
-              <Music size={20} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: '700', fontSize: '0.9rem' }}>
+              <Music size={18} color="#ee7882" />
               <span>Sound, Music & Stories</span>
             </div>
-            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+            <p style={{ margin: '0', fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
               Configure story background music, in-app acoustics, and haptic physical touches.
             </p>
 
@@ -1414,21 +1873,21 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '28px',
-            padding: '22px',
+            borderRadius: '22px',
+            padding: '16px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px'
+            gap: '12px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
-              <Palette size={20} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: '700', fontSize: '0.9rem' }}>
+              <Palette size={18} color="#ee7882" />
               <span>Appearance & Accent Theme</span>
             </div>
-            <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+            <p style={{ margin: '0', fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
               Pick your signature luxury accent tint for active buttons, badges, and glow rings.
             </p>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '6px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '4px 0' }}>
               {[
                 { color: '#ee7882', name: 'Rose Coral' },
                 { color: '#ff477e', name: 'Neon Pink' },
@@ -1444,13 +1903,13 @@ export default function SettingsScreen({
                   onClick={() => handleSelectAccent(accent.color)}
                   title={accent.name}
                   style={{
-                    width: '38px',
-                    height: '38px',
+                    width: '36px',
+                    height: '36px',
                     borderRadius: '50%',
                     background: accent.color,
                     border: themeAccent === accent.color ? '3px solid #ffffff' : '2px solid rgba(255, 255, 255, 0.2)',
                     cursor: 'pointer',
-                    boxShadow: themeAccent === accent.color ? `0 0 16px ${accent.color}` : 'none',
+                    boxShadow: themeAccent === accent.color ? `0 0 14px ${accent.color}` : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1459,7 +1918,7 @@ export default function SettingsScreen({
                   }}
                 >
                   {themeAccent === accent.color && (
-                    <Check size={18} color="#ffffff" strokeWidth={3} />
+                    <Check size={16} color="#ffffff" strokeWidth={3} />
                   )}
                 </button>
               ))}
@@ -1468,14 +1927,14 @@ export default function SettingsScreen({
             <div style={{
               background: 'rgba(255, 255, 255, 0.02)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '20px',
-              padding: '10px 16px',
+              borderRadius: '16px',
+              padding: '10px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between'
             }}>
-              <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Visual Display Mode</span>
-              <span style={{ fontSize: '0.78rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '4px 12px', borderRadius: '9999px', fontWeight: '700' }}>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Visual Display Mode</span>
+              <span style={{ fontSize: '0.76rem', background: 'rgba(238, 120, 130, 0.15)', color: '#ee7882', padding: '3px 10px', borderRadius: '9999px', fontWeight: '700' }}>
                 Deep OLED Dark
               </span>
             </div>
@@ -1485,17 +1944,17 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '28px',
-            padding: '22px',
+            borderRadius: '22px',
+            padding: '16px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px'
+            gap: '12px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
-              <HardDrive size={20} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: '700', fontSize: '0.9rem' }}>
+              <HardDrive size={18} color="#ee7882" />
               <span>Media & Local Cache Management</span>
             </div>
-            <p style={{ margin: '0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+            <p style={{ margin: '0', fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
               Status sound snippets, voice notes, and media thumbnails are cached in local browser memory.
             </p>
 
@@ -1504,15 +1963,15 @@ export default function SettingsScreen({
               flexDirection: 'column',
               background: 'rgba(255, 255, 255, 0.025)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '24px',
-              padding: '18px 20px',
-              gap: '14px'
+              borderRadius: '20px',
+              padding: '14px 16px',
+              gap: '12px'
             }}>
               <div>
-                <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#f8fafc' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
                   Cached Media Files
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '3px' }}>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
                   Approx. 2.4 MB stored locally in browser memory
                 </div>
               </div>
@@ -1524,10 +1983,10 @@ export default function SettingsScreen({
                   background: '#be123c',
                   border: 'none',
                   borderRadius: '9999px',
-                  padding: '12px 20px',
+                  padding: '11px 18px',
                   color: '#ffffff',
                   fontWeight: '700',
-                  fontSize: '0.86rem',
+                  fontSize: '0.84rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -1546,9 +2005,9 @@ export default function SettingsScreen({
               <div style={{
                 background: 'rgba(238, 120, 130, 0.15)',
                 color: '#ee7882',
-                borderRadius: '16px',
-                padding: '10px 16px',
-                fontSize: '0.82rem',
+                borderRadius: '14px',
+                padding: '8px 14px',
+                fontSize: '0.8rem',
                 fontWeight: '700',
                 textAlign: 'center'
               }}>
@@ -1561,14 +2020,14 @@ export default function SettingsScreen({
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '28px',
-            padding: '22px',
+            borderRadius: '22px',
+            padding: '16px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px'
+            gap: '12px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ee7882', fontWeight: '700', fontSize: '0.92rem' }}>
-              <Server size={20} color="#ee7882" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: '700', fontSize: '0.9rem' }}>
+              <Server size={18} color="#ee7882" />
               <span>Backend Engine & Infrastructure</span>
             </div>
 
@@ -1576,17 +2035,17 @@ export default function SettingsScreen({
             <div style={{
               display: 'flex',
               flexDirection: 'column',
-              padding: '18px 20px',
+              padding: '14px 16px',
               background: 'rgba(255, 255, 255, 0.025)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '24px',
-              gap: '14px'
+              borderRadius: '20px',
+              gap: '12px'
             }}>
               <div>
-                <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#f8fafc' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
                   Engine Server Connection
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px', wordBreak: 'break-all' }}>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '3px', wordBreak: 'break-all' }}>
                   {serverUrl || 'Default Cloud (sadisocial-engine.onrender.com)'}
                 </div>
               </div>
@@ -1599,8 +2058,8 @@ export default function SettingsScreen({
                   border: 'none',
                   color: '#ffffff',
                   borderRadius: '9999px',
-                  padding: '12px 20px',
-                  fontSize: '0.86rem',
+                  padding: '11px 18px',
+                  fontSize: '0.84rem',
                   fontWeight: '700',
                   cursor: 'pointer',
                   display: 'flex',
@@ -1620,18 +2079,18 @@ export default function SettingsScreen({
             <div style={{
               background: 'linear-gradient(135deg, rgba(238, 120, 130, 0.08), rgba(28, 16, 22, 0.6))',
               border: '1px solid rgba(238, 120, 130, 0.3)',
-              borderRadius: '26px',
-              padding: '20px',
+              borderRadius: '22px',
+              padding: '16px 14px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '14px'
+              gap: '12px'
             }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.94rem', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ee7882', fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '4px' }}>
                   <Activity size={18} />
                   <span>Central Engine Inspector Dashboard</span>
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.45' }}>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.4' }}>
                   View real-time user connections, encrypted message routing traffic, groups, and network metrics.
                 </div>
               </div>
@@ -1642,12 +2101,12 @@ export default function SettingsScreen({
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
-                  background: 'linear-gradient(135deg, #ee7882, #e05663)',
+                  background: '#ee7882',
                   color: '#ffffff',
                   textDecoration: 'none',
                   borderRadius: '9999px',
-                  padding: '12px',
-                  fontSize: '0.86rem',
+                  padding: '11px',
+                  fontSize: '0.84rem',
                   fontWeight: '700',
                   display: 'flex',
                   alignItems: 'center',

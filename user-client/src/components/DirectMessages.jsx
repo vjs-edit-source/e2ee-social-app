@@ -1901,7 +1901,7 @@ export default function DirectMessages({
                     }}>
                       {peerTypingMap[peerLower] ? (
                         <span style={{ color: '#ff9ea8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <span>✍️ typing</span>
+                          <span>typing</span>
                           <span className="typing-dots">
                             <span className="dot dot-1" />
                             <span className="dot dot-2" />
@@ -1919,7 +1919,7 @@ export default function DirectMessages({
                         </>
                       ) : (
                         <span style={{ color: '#64748b', fontStyle: 'italic' }}>
-                          {peer.bio ? peer.bio : '✨ Start encrypted chat'}
+                          {peer.bio ? peer.bio : 'Start encrypted chat'}
                         </span>
                       )}
                     </div>
