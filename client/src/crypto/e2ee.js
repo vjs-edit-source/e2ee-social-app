@@ -297,7 +297,7 @@ export async function decryptMediaBuffer(keyOrBlob, blobOrKey, ivB64, mimeType =
 
     const blob = new Blob([decryptedBuffer], { type: mimeType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    return { objectUrl: url, url, toString: () => url };
+    return url;
   } catch (err) {
     console.error("Media decryption error:", err);
     return null;

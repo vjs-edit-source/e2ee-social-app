@@ -14,10 +14,12 @@ import {
   Volume2,
   VolumeX,
   Trash2,
-  Eye
+  Eye,
+  Download
 } from 'lucide-react';
 import { decryptPost, encryptPost, decryptMediaBuffer } from '../crypto/e2ee';
 import { decryptionCache } from '../utils/decryptionCache';
+import { resolveMediaUrl } from '../utils/fileUtils';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import { musicEngine } from '../utils/musicEngine';
 
@@ -169,12 +171,13 @@ export default function StatusViewerModal({
             const mediaRes = await fetch(`${serverUrl}/api/media/${currentStatus.mediaId}`);
             if (mediaRes.ok && isMounted) {
               const mediaObj = await mediaRes.json();
-              const objectUrl = await decryptMediaBuffer(
+              const decRes = await decryptMediaBuffer(
                 decrypted.mediaKey,
                 mediaObj.ciphertextBlob,
                 mediaObj.iv,
                 mediaObj.mimeType
               );
+              const objectUrl = resolveMediaUrl(decRes);
 
               if (objectUrl && isMounted) {
                 const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
@@ -416,6 +419,10 @@ export default function StatusViewerModal({
   const statusDecrypted = decryptedStatuses[currentStatus.id];
   const mediaDecrypted = currentStatus.mediaId ? decryptedMediaMap[currentStatus.mediaId] : null;
 
+  const resolvedMediaUrl = resolveMediaUrl(mediaDecrypted?.objectUrl);
+  const isImage = Boolean(mediaDecrypted?.mimeType?.startsWith('image/'));
+  const isVideo = Boolean(mediaDecrypted?.mimeType?.startsWith('video/'));
+
   const timeAgo = (dateStr) => {
     const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
     if (diff < 60) return `${diff}s ago`;
@@ -465,7 +472,7 @@ export default function StatusViewerModal({
             </div>
           </div>
 
-          {/* Header Action Tools: Mute, Views, Delete, Close */}
+          {/* Header Action Tools: Mute, Download, Views, Delete, Close */}
           <div className="viewer-tool-btns">
             {/* Mute button when story has music */}
             {currentStatus.music && (
@@ -477,6 +484,20 @@ export default function StatusViewerModal({
               >
                 {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
+            )}
+
+            {/* Download/Save button when story has media */}
+            {resolvedMediaUrl && (
+              <a
+                href={resolvedMediaUrl}
+                download={isImage ? `status_photo_${currentStatus.id}.jpg` : isVideo ? `status_video_${currentStatus.id}.mp4` : `status_media_${currentStatus.id}`}
+                className="viewer-mute-btn"
+                title="Save photo / media to device"
+                onClick={e => e.stopPropagation()}
+                style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Download size={15} />
+              </a>
             )}
 
             {/* View count for author */}
@@ -508,79 +529,112 @@ export default function StatusViewerModal({
         {/* Status Content Body */}
         <div
           className="status-content-body"
-          style={{ background: currentStatus.backgroundGradient || '#190a0f' }}
+          style={{ background: currentStatus.backgroundGradient || '#190a0f', position: 'relative', overflow: 'hidden' }}
         >
-          {/* Floating Music Sticker on Canvas if attached */}
-          {currentStatus.music && (
-            <div
-              className="story-music-sticker"
-              style={{ marginBottom: '16px', cursor: 'pointer' }}
-              onClick={() => {
-                if (musicEngine.isPlaying()) {
-                  musicEngine.stop();
-                } else {
-                  musicEngine.playTrack(currentStatus.music, serverUrl);
-                }
-              }}
-              title="Tap to toggle music playback"
-            >
-              <Music size={15} color="#ee7882" />
-              <div className="equalizer-wave">
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-                <span className="equalizer-bar" />
-              </div>
-              <div className="sticker-music-info">
-                <span className="sticker-music-title">{currentStatus.music.title}</span>
-                <span className="sticker-music-artist">{currentStatus.music.artist}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Active Mood / Location Stickers */}
-          {currentStatus.stickers && currentStatus.stickers.length > 0 && (
-            <div className="story-active-stickers" style={{ marginBottom: '16px' }}>
-              {currentStatus.stickers.map((st, i) => (
-                <div key={i} className="story-sticker-item">
-                  <span>{st.text}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Media View (if any) */}
-          {currentStatus.mediaId && (
-            <div className="status-media-wrapper">
-              {mediaDecrypted ? (
-                <EncryptedAttachmentViewer
-                  objectUrl={mediaDecrypted.objectUrl}
-                  mimeType={mediaDecrypted.mimeType}
-                  mediaId={currentStatus.mediaId}
+          {/* Immersive Full-Screen Photo / Video Story Layer */}
+          {resolvedMediaUrl && (isImage || isVideo) && (
+            <div className="story-canvas-media-layer" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+              {isVideo ? (
+                <video
+                  key={resolvedMediaUrl}
+                  src={resolvedMediaUrl}
+                  autoPlay
+                  loop
+                  muted={Boolean(currentStatus.music)}
+                  playsInline
+                  controls={false}
+                  preload="auto"
+                  className="story-canvas-media-element"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
               ) : (
-                <div className="status-decrypting-badge">
-                  <Loader2 size={16} className="animate-spin" color="#ee7882" />
-                  <span>Decrypting secure attachment...</span>
-                </div>
+                <img
+                  key={resolvedMediaUrl}
+                  src={resolvedMediaUrl}
+                  alt="Status Photo"
+                  className="story-canvas-media-element"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
               )}
+              <div className="story-canvas-media-vignette" />
             </div>
           )}
 
-          {/* Status Text Content with custom font style & alignment */}
-          {statusDecrypted?.text ? (
-            <div
-              className={`status-text-display font-${currentStatus.fontStyle || 'modern'} highlight-${currentStatus.textHighlight || 'none'}`}
-              style={{ textAlign: currentStatus.textAlignment || 'center', maxWidth: '90%' }}
-            >
-              <p>{statusDecrypted.text}</p>
+          {/* Decrypting secure media indicator */}
+          {currentStatus.mediaId && !resolvedMediaUrl && (
+            <div className="status-decrypting-badge" style={{ zIndex: 10, position: 'relative' }}>
+              <Loader2 size={20} className="animate-spin" color="#ee7882" />
+              <span>Decrypting secure photo / media...</span>
             </div>
-          ) : !currentStatus.mediaId && !statusDecrypted ? (
-            <div className="status-loading-text">
-              <Loader2 size={16} className="animate-spin" color="#ee7882" />
-              <span>Decrypting status...</span>
+          )}
+
+          {/* Non-image, non-video generic attachment viewer (PDF, audio, docs) */}
+          {resolvedMediaUrl && !isImage && !isVideo && (
+            <div className="status-media-wrapper" style={{ zIndex: 10, position: 'relative' }}>
+              <EncryptedAttachmentViewer
+                objectUrl={resolvedMediaUrl}
+                mimeType={mediaDecrypted.mimeType}
+                mediaId={currentStatus.mediaId}
+              />
             </div>
-          ) : null}
+          )}
+
+          {/* Floating Canvas Elements (Music, Stickers, Text Caption) */}
+          <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', pointerEvents: 'auto' }}>
+            {/* Floating Music Sticker on Canvas if attached */}
+            {currentStatus.music && (
+              <div
+                className="story-music-sticker"
+                style={{ marginBottom: '16px', cursor: 'pointer' }}
+                onClick={() => {
+                  if (musicEngine.isPlaying()) {
+                    musicEngine.stop();
+                  } else {
+                    musicEngine.playTrack(currentStatus.music, serverUrl);
+                  }
+                }}
+                title="Tap to toggle music playback"
+              >
+                <Music size={15} color="#ee7882" />
+                <div className="equalizer-wave">
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                  <span className="equalizer-bar" />
+                </div>
+                <div className="sticker-music-info">
+                  <span className="sticker-music-title">{currentStatus.music.title}</span>
+                  <span className="sticker-music-artist">{currentStatus.music.artist}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Active Mood / Location Stickers */}
+            {currentStatus.stickers && currentStatus.stickers.length > 0 && (
+              <div className="story-active-stickers" style={{ marginBottom: '16px' }}>
+                {currentStatus.stickers.map((st, i) => (
+                  <div key={i} className="story-sticker-item">
+                    <span>{st.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Status Text Content with custom font style & alignment */}
+            {statusDecrypted?.text ? (
+              <div
+                className={`status-text-display font-${currentStatus.fontStyle || 'modern'} highlight-${currentStatus.textHighlight || 'none'}`}
+                style={{ textAlign: currentStatus.textAlignment || 'center', maxWidth: '90%' }}
+              >
+                <p>{statusDecrypted.text}</p>
+              </div>
+            ) : !currentStatus.mediaId && !statusDecrypted ? (
+              <div className="status-loading-text">
+                <Loader2 size={16} className="animate-spin" color="#ee7882" />
+                <span>Decrypting status...</span>
+              </div>
+            ) : null}
+          </div>
 
           {/* Floating Emoji Reaction Burst */}
           {floatingReaction && (

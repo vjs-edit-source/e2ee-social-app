@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
 import { decryptionCache } from '../utils/decryptionCache';
+import { resolveMediaUrl } from '../utils/fileUtils';
 import StatusPublisherModal from './StatusPublisherModal';
 import StatusViewerModal from './StatusViewerModal';
 
@@ -135,12 +136,13 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
               const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
               if (mediaRes.ok) {
                 const mediaObj = await mediaRes.json();
-                const objectUrl = await decryptMediaBuffer(
+                const decRes = await decryptMediaBuffer(
                   mediaKey,
                   mediaObj.ciphertextBlob,
                   mediaObj.iv,
                   mediaObj.mimeType
                 );
+                const objectUrl = resolveMediaUrl(decRes);
 
                 if (objectUrl && isMounted) {
                   const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
@@ -353,10 +355,10 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                       </div>
                     )}
 
-                    {mediaDecrypted ? (
+                    {mediaDecrypted && resolveMediaUrl(mediaDecrypted.objectUrl) ? (
                       mediaDecrypted.mimeType?.startsWith('video/') ? (
                         <video
-                          src={mediaDecrypted.objectUrl}
+                          src={resolveMediaUrl(mediaDecrypted.objectUrl)}
                           muted
                           playsInline
                           autoPlay
@@ -373,11 +375,8 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                         />
                       ) : (
                         <img
-                          src={mediaDecrypted.objectUrl}
+                          src={resolveMediaUrl(mediaDecrypted.objectUrl)}
                           alt="Status thumbnail"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
                           style={{
                             width: '100%',
                             height: '100%',

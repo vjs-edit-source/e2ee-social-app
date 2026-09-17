@@ -39,7 +39,7 @@ import {
   MoreVertical,
   KeyRound
 } from 'lucide-react';
-import { formatTruncatedFileName } from '../utils/fileUtils';
+import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import {
   importPublicKey,
   deriveSharedAESKey,
@@ -902,8 +902,8 @@ export default function DirectMessages({
                   if (mediaData.ciphertextBlob) {
                     const keyToUse = meta.mediaKeyB64 || sharedKey;
                     const mediaIv = mediaData.iv || m.iv;
-                    const finalMime = meta.mimeType || mediaData.mimeType || 'application/octet-stream';
-                    const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+                    const decRes = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+                    const objectUrl = resolveMediaUrl(decRes);
 
                     if (objectUrl && isMounted) {
                       const mediaEntry = {

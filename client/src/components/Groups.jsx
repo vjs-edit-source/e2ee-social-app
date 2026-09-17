@@ -49,7 +49,7 @@ import {
   BellOff,
   KeyRound
 } from 'lucide-react';
-import { formatTruncatedFileName } from '../utils/fileUtils';
+import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import {
   encryptPost,
   decryptPost,
@@ -859,12 +859,13 @@ export default function Groups({
               const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
               if (mediaRes.ok && isMounted) {
                 const mediaObj = await mediaRes.json();
-                const objectUrl = await decryptMediaBuffer(
+                const decRes = await decryptMediaBuffer(
                   msgMeta.mediaKey,
                   mediaObj.ciphertextBlob,
                   mediaObj.iv,
                   mediaObj.mimeType
                 );
+                const objectUrl = resolveMediaUrl(decRes);
 
                 if (objectUrl && isMounted) {
                   const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };

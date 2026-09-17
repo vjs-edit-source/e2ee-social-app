@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Truncate long file names with '.......' preserving the file extension.
  * Example:
  * "super_long_photo_of_mountains_sunset.png" -> "super_long_ph.......png"
@@ -19,4 +19,20 @@ export function formatTruncatedFileName(fileName, maxBaseLen = 14) {
     return `${baseName.slice(0, maxBaseLen)}.......${ext}`;
   }
   return fileName;
+}
+
+/**
+  * Safely extract a pure string blob/media URL from any raw value,
+  * whether it was already a string or wrapped in an object { objectUrl, url }.
+  */
+export function resolveMediaUrl(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw.objectUrl === 'string') return raw.objectUrl;
+  if (typeof raw.url === 'string') return raw.url;
+  if (typeof raw.toString === 'function') {
+    const s = raw.toString();
+    if (s && s !== '[object Object]') return s;
+  }
+  return '';
 }

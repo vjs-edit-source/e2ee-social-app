@@ -37,6 +37,10 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isZoomedActual, setIsZoomedActual] = useState(false);
 
+  const actualUrl = typeof objectUrl === 'string'
+    ? objectUrl
+    : (objectUrl?.objectUrl || objectUrl?.url || (typeof objectUrl?.toString === 'function' && objectUrl.toString() !== '[object Object]' ? objectUrl.toString() : ''));
+
   const fileName = originalName || `file_${mediaId.slice(0, 6)}`;
   const lowerName = fileName.toLowerCase();
   const lowerMime = (mimeType || '').toLowerCase();
@@ -59,13 +63,13 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   }, [isLightboxOpen]);
 
   useEffect(() => {
-    if (!objectUrl) return;
+    if (!actualUrl) return;
 
     // Only plaintext source code / JSON / markdown files attempt text preview
     const knownCodeRegex = /\.(py|js|jsx|ts|tsx|json|html|css|md|txt|cpp|c|h|hpp|java|cs|php|rb|go|rs|sql|sh|env|xml|yaml|yml|log|bat|ps1|ini|conf|toml|lua)$/i;
 
     if (knownCodeRegex.test(lowerName) || (lowerMime.startsWith('text/') && !lowerMime.includes('csv') && !lowerMime.includes('html'))) {
-      fetch(objectUrl)
+      fetch(actualUrl)
         .then(res => res.text())
         .then(text => {
           setTextContent(text);
@@ -73,12 +77,13 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
         })
         .catch(() => {});
     }
-  }, [objectUrl, lowerName, lowerMime]);
+  }, [actualUrl, lowerName, lowerMime]);
 
   const handleDownload = (e) => {
     if (e) e.stopPropagation();
+    if (!actualUrl) return;
     const a = document.createElement('a');
-    a.href = objectUrl;
+    a.href = actualUrl;
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
@@ -145,7 +150,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           >
             {isStandardImage ? (
               <img
-                src={objectUrl}
+                src={actualUrl}
                 alt={fileName}
                 className={`lightbox-image ${isZoomedActual ? 'actual-size' : 'fit-screen'}`}
                 onClick={(e) => {
@@ -158,7 +163,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
               <video
                 controls
                 autoPlay
-                src={objectUrl}
+                src={actualUrl}
                 className="lightbox-video"
                 onClick={e => e.stopPropagation()}
               />
@@ -175,7 +180,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
     return (
       <>
         <div className="post-media-container" onClick={() => setIsLightboxOpen(true)}>
-          <img src={objectUrl} alt={formatLabel} className="post-media-img clickable-media" loading="lazy" />
+          <img src={actualUrl} alt={formatLabel} className="post-media-img clickable-media" loading="lazy" />
           <button
             type="button"
             className="media-expand-hint-btn"
@@ -250,7 +255,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
     return (
       <>
         <div className="post-media-container" style={{ position: 'relative' }}>
-          <video controls src={objectUrl} className="post-media-img" preload="metadata" />
+          <video controls src={actualUrl} className="post-media-img" preload="metadata" />
           <button
             type="button"
             className="media-expand-hint-btn"
@@ -286,7 +291,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
             </div>
           </div>
         </div>
-        <audio controls src={objectUrl} style={{ width: '100%', marginTop: '10px' }} />
+        <audio controls src={actualUrl} style={{ width: '100%', marginTop: '10px' }} />
       </div>
     );
   }

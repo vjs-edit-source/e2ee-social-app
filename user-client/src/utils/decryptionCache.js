@@ -109,7 +109,12 @@ class ClientDecryptionCache {
   }
 
   setMedia(mediaId, entry) {
-    if (mediaId && entry) this.media.set(mediaId, entry);
+    if (mediaId && entry) {
+      if (entry.objectUrl && typeof entry.objectUrl !== 'string') {
+        entry.objectUrl = entry.objectUrl.objectUrl || entry.objectUrl.url || (typeof entry.objectUrl.toString === 'function' && entry.objectUrl.toString() !== '[object Object]' ? entry.objectUrl.toString() : '');
+      }
+      this.media.set(mediaId, entry);
+    }
   }
 
   hasMedia(mediaId) {
