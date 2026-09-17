@@ -25,6 +25,7 @@ import {
 import { encryptPost } from '../crypto/e2ee';
 import MediaUploader from './MediaUploader';
 import { musicEngine, PRESET_TRACKS } from '../utils/musicEngine';
+import { soundEffects } from '../utils/soundEffects';
 
 const GRADIENTS = [
   { name: 'Cyber Rose', value: 'linear-gradient(135deg, #1f0d14 0%, #4a1525 50%, #881337 100%)' },
@@ -76,12 +77,28 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
   const audioUploadInputRef = useRef(null);
   const mediaUploaderRef = useRef(null);
 
-  // Clean up any music preview when unmounting or closing
+  // Clean up any music preview & media preview URL when unmounting or closing
   useEffect(() => {
     return () => {
       musicEngine.stop();
+      if (mediaPayload?.localPreviewUrl) {
+        try {
+          URL.revokeObjectURL(mediaPayload.localPreviewUrl);
+        } catch (e) {}
+      }
     };
-  }, []);
+  }, [mediaPayload?.localPreviewUrl]);
+
+  // Remove attached media cleanly
+  const handleRemoveMedia = () => {
+    if (mediaPayload?.localPreviewUrl) {
+      try {
+        URL.revokeObjectURL(mediaPayload.localPreviewUrl);
+      } catch (e) {}
+    }
+    setMediaPayload(null);
+    mediaUploaderRef.current?.clearFile?.();
+  };
 
   // Format current live time for Clock sticker
   const getCurrentTimeFormatted = () => {
@@ -101,6 +118,11 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
       }
     }
     musicEngine.stop();
+    if (mediaPayload?.localPreviewUrl) {
+      try {
+        URL.revokeObjectURL(mediaPayload.localPreviewUrl);
+      } catch (e) {}
+    }
     onClose();
   };
 
@@ -250,6 +272,7 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
       if (!res.ok) throw new Error('Failed to publish status');
       const data = await res.json();
 
+      soundEffects.playMessageSent();
       if (onStatusPublished) onStatusPublished(data.status);
       onClose();
     } catch (err) {
@@ -387,15 +410,22 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
           <div className="story-canvas-media-layer">
             {mediaPayload.isVideo || (mediaPayload.mimeType && mediaPayload.mimeType.startsWith('video/')) ? (
               <video
+                key={mediaPayload.localPreviewUrl}
                 src={mediaPayload.localPreviewUrl}
                 autoPlay
                 loop
                 muted
                 playsInline
+                controls={false}
+                preload="auto"
                 className="story-canvas-media-element"
+                onLoadedMetadata={(e) => {
+                  e.target.play().catch(() => {});
+                }}
               />
             ) : (
               <img
+                key={mediaPayload.localPreviewUrl}
                 src={mediaPayload.localPreviewUrl}
                 alt="Story Media"
                 className="story-canvas-media-element"
@@ -504,8 +534,7 @@ export default function StatusPublisherModal({ currentUser, allUsers, serverUrl,
                 className="story-attached-media-remove"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMediaPayload(null);
-                  mediaUploaderRef.current?.clearFile?.();
+                  handleRemoveMedia();
                 }}
                 title="Remove attached photo or video"
               >

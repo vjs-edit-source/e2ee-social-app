@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Users,
   Globe,
@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Send,
   Paperclip,
+  FileText,
   X,
   Loader2,
   UserPlus,
@@ -30,8 +31,25 @@ import {
   Sliders,
   Copy,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Mic,
+  CornerUpLeft,
+  Star,
+  Smile,
+  ChevronDown,
+  Circle,
+  Phone,
+  Clock,
+  Trash2,
+  PinOff,
+  Archive,
+  ArchiveRestore,
+  Bell,
+  BellOff,
+  KeyRound
 } from 'lucide-react';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 import {
   encryptPost,
   decryptPost,
@@ -39,32 +57,221 @@ import {
   decryptMediaBuffer
 } from '../crypto/e2ee';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
+import VoiceWaveformPlayer from './VoiceWaveformPlayer';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
+import MessageActionPopup from './MessageActionPopup';
+import ChatLockModal from './ChatLockModal';
+import ChatActionMenu from './ChatActionMenu';
+import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
+import { localSearchIndex } from '../search/searchIndex';
+import { decryptionCache } from '../utils/decryptionCache';
+import { soundEffects } from '../utils/soundEffects';
 
-export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient, onGroupChatStateChange }) {
+export default function Groups({
+  currentUser,
+  allUsers = [],
+  serverUrl,
+  wsClient,
+  unreadGroupMap = {},
+  onClearGroupUnread,
+  onGroupChatStateChange
+}) {
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'groups' | 'communities'
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState(false);
-  const [drawerTab, setDrawerTab] = useState('members'); // 'members' | 'settings' | 'media'
+  const [drawerTab, setDrawerTab] = useState('members'); // 'members' | 'settings' | 'media' | 'requests'
+
+  // ── PIN, ARCHIVE, LOCK, MUTE & CLEAR GROUP STATES ─────────
+  const [pinnedGroups, setPinnedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_pinned_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [archivedGroups, setArchivedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_archived_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [lockedGroups, setLockedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_locked_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [mutedGroups, setMutedGroups] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`ciphersocial_muted_groups_${currentUser?.username}`) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  const [clearedGroupTimestamps, setClearedGroupTimestamps] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_cleared_groups_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [showArchivedView, setShowArchivedView] = useState(false);
+  const [unlockingGroup, setUnlockingGroup] = useState(null);
+  const [actionMenuGroup, setActionMenuGroup] = useState(null);
+
+  const togglePinGroup = (gid) => {
+    if (!gid) return;
+    setPinnedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_pinned_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleArchiveGroup = (gid) => {
+    if (!gid) return;
+    setArchivedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_archived_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleLockGroup = (gid) => {
+    if (!gid) return;
+    setLockedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_locked_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const toggleMuteGroup = (gid) => {
+    if (!gid) return;
+    setMutedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      try {
+        localStorage.setItem(`ciphersocial_muted_groups_${currentUser?.username}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const clearGroupChatHistory = (gid) => {
+    if (!gid) return;
+    const nowIso = new Date().toISOString();
+    setClearedGroupTimestamps(prev => {
+      const next = { ...prev, [gid]: nowIso };
+      try {
+        localStorage.setItem(`ciphersocial_cleared_groups_${currentUser?.username}`, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    if (selectedGroup?.id === gid) {
+      setMessages([]);
+    }
+  };
+
+  const handleSelectGroupWithLock = (g) => {
+    if (!g) return;
+    if (lockedGroups.has(g.id)) {
+      setUnlockingGroup(g);
+    } else {
+      setSelectedGroup(g);
+    }
+  };
+
+  // ── MODAL RENDERERS FOR GROUP PIN LOCK & CHAT ACTIONS ─────
+  const renderChatActionAndLockModals = () => (
+    <>
+      <ChatActionMenu
+        isOpen={!!actionMenuGroup}
+        onClose={() => setActionMenuGroup(null)}
+        chatName={actionMenuGroup?.name}
+        isPinned={actionMenuGroup ? pinnedGroups.has(actionMenuGroup.id) : false}
+        isLocked={actionMenuGroup ? lockedGroups.has(actionMenuGroup.id) : false}
+        isArchived={actionMenuGroup ? archivedGroups.has(actionMenuGroup.id) : false}
+        isMuted={actionMenuGroup ? mutedGroups.has(actionMenuGroup.id) : false}
+        onTogglePin={() => actionMenuGroup && togglePinGroup(actionMenuGroup.id)}
+        onToggleLock={() => actionMenuGroup && toggleLockGroup(actionMenuGroup.id)}
+        onToggleArchive={() => actionMenuGroup && toggleArchiveGroup(actionMenuGroup.id)}
+        onToggleMute={() => actionMenuGroup && toggleMuteGroup(actionMenuGroup.id)}
+        onClearChat={() => actionMenuGroup && clearGroupChatHistory(actionMenuGroup.id)}
+      />
+
+      <ChatLockModal
+        isOpen={!!unlockingGroup}
+        onClose={() => setUnlockingGroup(null)}
+        onUnlock={() => {
+          if (unlockingGroup) {
+            setSelectedGroup(unlockingGroup);
+            if (onClearGroupUnread) onClearGroupUnread(unlockingGroup.id);
+            triggerMarkGroupSeen(unlockingGroup.id);
+          }
+          setUnlockingGroup(null);
+        }}
+        title={unlockingGroup?.name || 'Locked Group'}
+      />
+    </>
+  );
+
+  // Community Entry & Join Request States
+  const [joinModalGroup, setJoinModalGroup] = useState(null);
+  const [joinNote, setJoinNote] = useState('');
+  const [submittingJoin, setSubmittingJoin] = useState(false);
+  const [pendingModalGroup, setPendingModalGroup] = useState(null);
+  const [showProfileModalUser, setShowProfileModalUser] = useState(null);
 
   // Create Form State
   const [groupName, setGroupName] = useState('');
   const [groupDesc, setGroupDesc] = useState('');
   const [isCommunity, setIsCommunity] = useState(false);
+  const [groupAvatarUrl, setGroupAvatarUrl] = useState(null);
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [creating, setCreating] = useState(false);
 
   // Group Messages & Decryption Cache
   const [messages, setMessages] = useState([]);
-  const [decryptedMsgMap, setDecryptedMsgMap] = useState({});
-  const [decryptedMediaMap, setDecryptedMediaMap] = useState({});
+  const [decryptedMsgMap, setDecryptedMsgMap] = useState(() => decryptionCache.getAllGroupMessages());
+  const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [inputMessage, setInputMessage] = useState('');
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [groupReactionsMap, setGroupReactionsMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`ciphersocial_group_reactions_${currentUser?.username}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
 
@@ -88,6 +295,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const [editingInfo, setEditingInfo] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState(null);
 
   // Copied Link Toast
   const [copiedLink, setCopiedLink] = useState(false);
@@ -96,16 +304,170 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const [, setTimerTick] = useState(0);
 
   const chatEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const prevMsgCountRef = useRef(0);
   const messageRefs = useRef({});
   const decryptedMsgCache = useRef({});
   const decryptedMediaCache = useRef({});
+  const groupFileInputRef = useRef(null);
+  const editGroupFileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
+
+  // 3-Option Attachment Menu: Camera, Photos, Files
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachMenuRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const photosInputRef = useRef(null);
+  const filesInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+        setShowAttachMenu(false);
+      }
+    };
+    if (showAttachMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showAttachMenu]);
+
+  // Message Action Popup state & touch/long-press tracking
+  const [activePopupMsg, setActivePopupMsg] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleTouchStart = (msg, msgMeta, isMine, e) => {
+    const el = e.currentTarget;
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+    }
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(35);
+      const rect = el.getBoundingClientRect();
+      setActivePopupMsg({
+        msg,
+        msgMeta,
+        isMine,
+        anchorRect: {
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          height: rect.height
+        }
+      });
+    }, 450);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      const t = e.touches[0];
+      const dx = Math.abs(t.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(t.clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
+  const handleContextMenu = (msg, msgMeta, isMine, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActivePopupMsg({
+      msg,
+      msgMeta,
+      isMine,
+      anchorRect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height
+      }
+    });
+  };
+
+  const handleScrollFeed = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+    isAtBottomRef.current = isNearBottom;
+    setShowScrollBottom(!isNearBottom);
+  };
+
+  // Photo compression helper for Groups
+  const handleGroupPhotoSelect = (e, isEditing = false) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPEG, PNG, WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 240;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (isEditing) {
+          setEditAvatarUrl(dataUrl);
+        } else {
+          setGroupAvatarUrl(dataUrl);
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Notify parent component of chat state (to hide floating bottom nav when inside a group chat)
   useEffect(() => {
     if (onGroupChatStateChange) {
-      onGroupChatStateChange(!!selectedGroup);
+      onGroupChatStateChange(selectedGroup ? selectedGroup.id : null);
     }
-  }, [selectedGroup, onGroupChatStateChange]);
+    if (selectedGroup && onClearGroupUnread) {
+      onClearGroupUnread(selectedGroup.id);
+    }
+  }, [selectedGroup, onGroupChatStateChange, onClearGroupUnread]);
 
   // Live timer tick every second for countdowns
   useEffect(() => {
@@ -134,6 +496,20 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     loadGroups();
   }, [currentUser]);
 
+  // Trigger mark group messages seen on server
+  const triggerMarkGroupSeen = async (groupId) => {
+    if (!groupId || !currentUser?.username) return;
+    try {
+      await fetch(`${serverUrl}/api/groups/${groupId}/mark-seen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reader: currentUser.username })
+      });
+    } catch (err) {
+      // silently ignore
+    }
+  };
+
   // Load group messages when a group is selected
   const loadGroupMessages = async () => {
     if (!selectedGroup) return;
@@ -150,7 +526,18 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
   useEffect(() => {
     loadGroupMessages();
-  }, [selectedGroup]);
+    if (!selectedGroup) return;
+
+    // Immediately mark group messages as seen
+    triggerMarkGroupSeen(selectedGroup.id);
+
+    // Fast 2.5s live polling sync fallback
+    const syncInterval = setInterval(() => {
+      loadGroupMessages();
+    }, 2500);
+
+    return () => clearInterval(syncInterval);
+  }, [selectedGroup?.id, serverUrl]);
 
   // Real-time WebSocket event handling
   useEffect(() => {
@@ -159,16 +546,61 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     const handleMessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'GROUP_UPDATED') {
+        if (data.type === 'GROUP_UPDATED' || data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED') {
           loadGroups();
           if (selectedGroup && data.group?.id === selectedGroup.id) {
             setSelectedGroup(data.group);
+          }
+        } else if (data.type === 'GROUP_REMOVED') {
+          loadGroups();
+          if (selectedGroup && data.groupId === selectedGroup.id) {
+            setSelectedGroup(null);
           }
         } else if (data.type === 'GROUP_MESSAGE' && data.groupId === selectedGroup?.id) {
           setMessages(prev => {
             if (prev.some(m => m.id === data.message.id)) return prev;
             return [...prev, data.message];
           });
+          if (data.message.sender !== currentUser?.username) {
+            triggerMarkGroupSeen(selectedGroup.id);
+          }
+        } else if (data.type === 'GROUP_MESSAGES_SEEN' && data.groupId === selectedGroup?.id) {
+          setMessages(prev => {
+            const updatedMap = new Map();
+            for (const item of (data.updatedMessages || [])) {
+              updatedMap.set(item.messageId, item.seenBy);
+            }
+            return prev.map(m => {
+              if (updatedMap.has(m.id)) {
+                return { ...m, seenBy: updatedMap.get(m.id) };
+              }
+              return m;
+            });
+          });
+        } else if (data.type === 'GROUP_MESSAGE_DELETED' && data.groupId === selectedGroup?.id) {
+          setMessages(prev => prev.map(m => {
+            if (m.id === data.messageId) {
+              return {
+                ...m,
+                isDeleted: true,
+                ciphertext: '',
+                iv: '',
+                keyEnvelopes: {},
+                mediaId: null,
+                deletedBy: data.deletedBy
+              };
+            }
+            return m;
+          }));
+        } else if (data.type === 'COMMUNITY_JOIN_REQUEST') {
+          loadGroups();
+        } else if (data.type === 'COMMUNITY_JOIN_APPROVED') {
+          loadGroups();
+          if (selectedGroup && data.groupId === selectedGroup.id) {
+            loadGroupMessages();
+          }
+        } else if (data.type === 'COMMUNITY_JOIN_REJECTED') {
+          loadGroups();
         }
       } catch (e) {}
     };
@@ -177,12 +609,138 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     return () => wsClient.removeEventListener('message', handleMessage);
   }, [wsClient, selectedGroup]);
 
-  // Auto scroll
+  // Handle group message deletion
+  const handleDeleteMessage = async (msgToDelete) => {
+    if (!msgToDelete || !msgToDelete.id || !selectedGroup) return;
+    try {
+      setMessages(prev => prev.map(m => m.id === msgToDelete.id ? { ...m, isDeleted: true, ciphertext: '', iv: '', keyEnvelopes: {}, mediaId: null } : m));
+      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages/${msgToDelete.id}?requester=${encodeURIComponent(currentUser.username)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Delete group message error:', data.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete group message:', err);
+    }
+  };
+
+  // ── COMMUNITY ENTRY & JOIN REQUEST ACTIONS ──────────────────
+  const handleSendJoinRequest = async (e) => {
+    e?.preventDefault();
+    if (!joinModalGroup || !currentUser?.username) return;
+    setSubmittingJoin(true);
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${joinModalGroup.id}/join-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requester: currentUser.username,
+          note: joinNote
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        setJoinModalGroup(null);
+        setJoinNote('');
+      } else {
+        alert(data.error || 'Failed to submit entry request');
+      }
+    } catch (err) {
+      console.error('Join request error:', err);
+      alert('Network error while sending join request');
+    } finally {
+      setSubmittingJoin(false);
+    }
+  };
+
+  const handleCancelJoinRequest = async (groupId) => {
+    if (!groupId || !currentUser?.username) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${groupId}/join-requests`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requester: currentUser.username })
+      });
+      if (res.ok) {
+        await loadGroups();
+        setPendingModalGroup(null);
+      }
+    } catch (err) {
+      console.error('Cancel join request error:', err);
+    }
+  };
+
+  const handleApproveJoinRequest = async (requestId, targetGroupId = selectedGroup?.id) => {
+    if (!targetGroupId || !currentUser?.username || !requestId) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${targetGroupId}/join-requests/${requestId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUsername: currentUser.username })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        if (selectedGroup && selectedGroup.id === targetGroupId) {
+          await loadGroupMessages();
+        }
+        if (showProfileModalUser?.request?.id === requestId) {
+          setShowProfileModalUser(null);
+        }
+      } else {
+        alert(data.error || 'Failed to confirm entry request');
+      }
+    } catch (err) {
+      console.error('Approve join request error:', err);
+    }
+  };
+
+  const handleRejectJoinRequest = async (requestId, targetGroupId = selectedGroup?.id) => {
+    if (!targetGroupId || !currentUser?.username || !requestId) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${targetGroupId}/join-requests/${requestId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUsername: currentUser.username })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadGroups();
+        if (showProfileModalUser?.request?.id === requestId) {
+          setShowProfileModalUser(null);
+        }
+      } else {
+        alert(data.error || 'Failed to decline request');
+      }
+    } catch (err) {
+      console.error('Reject join request error:', err);
+    }
+  };
+
+  // Reset scroll position on opening a group/community
   useEffect(() => {
-    if (!showSearchBar) {
+    isAtBottomRef.current = true;
+    setShowScrollBottom(false);
+    prevMsgCountRef.current = 0;
+    if (selectedGroup) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+    }
+  }, [selectedGroup?.id]);
+
+  // Auto-scroll on new messages ONLY if user is already near the bottom
+  useEffect(() => {
+    const isNewMessage = messages.length > prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+
+    if (isAtBottomRef.current && isNewMessage && !showSearchBar) {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, decryptedMsgMap, showSearchBar]);
+  }, [messages, showSearchBar]);
 
   // Decrypt group messages
   useEffect(() => {
@@ -195,8 +753,26 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       let hasUpdates = false;
 
       for (const m of messages) {
-        let msgMeta = decryptedMsgCache.current[m.id];
-        if (!msgMeta) {
+        let msgMeta = decryptionCache.getGroupMessage(m.id) || decryptedMsgCache.current[m.id];
+        if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message') {
+          if (m.isSystem || m.isWelcome) {
+            msgMeta = {
+              text: m.text || '',
+              mediaKey: null,
+              mediaId: null,
+              isVoice: false,
+              voiceDuration: 0,
+              replyTo: null,
+              isSystem: true,
+              isWelcome: !!m.isWelcome
+            };
+            decryptedMsgCache.current[m.id] = msgMeta;
+            decryptionCache.setGroupMessage(m.id, msgMeta);
+            newDecrypted[m.id] = msgMeta;
+            hasUpdates = true;
+            continue;
+          }
+
           try {
             const dec = await decryptPost(
               currentUser.username,
@@ -206,53 +782,111 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               currentUser.keyPair.privateKey
             );
 
+            let text = dec.text || '';
+            let isVoice = dec.isVoice || false;
+            let voiceDuration = dec.voiceDuration || 0;
+            let replyTo = dec.replyTo || null;
+
+            try {
+              const parsed = JSON.parse(dec.rawText || dec.text);
+              if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.isVoice !== undefined || parsed.replyTo !== undefined)) {
+                if (parsed.text !== undefined) text = parsed.text || '';
+                if (parsed.isVoice !== undefined) isVoice = !!parsed.isVoice;
+                if (parsed.voiceDuration !== undefined) voiceDuration = parsed.voiceDuration || 0;
+                if (parsed.replyTo !== undefined) replyTo = parsed.replyTo || null;
+              }
+            } catch (e) {}
+
             msgMeta = {
-              text: dec.text,
+              text,
               mediaKey: dec.mediaKey,
-              mediaId: m.mediaId
+              mediaId: m.mediaId,
+              isVoice,
+              voiceDuration,
+              replyTo
             };
+
+            localSearchIndex.indexGroupMessage(
+              m.id,
+              selectedGroup.id,
+              selectedGroup.name,
+              m.sender,
+              text || (isVoice ? '🎤 Voice note' : ''),
+              m.timestamp
+            );
           } catch (e) {
             msgMeta = {
               text: '🔒 Encrypted Group Message',
               mediaKey: null,
-              mediaId: null
+              mediaId: null,
+              isVoice: false,
+              voiceDuration: 0,
+              replyTo: null
             };
           }
 
           decryptedMsgCache.current[m.id] = msgMeta;
+          decryptionCache.setGroupMessage(m.id, msgMeta);
           newDecrypted[m.id] = msgMeta;
           hasUpdates = true;
+        } else {
+          if (!decryptedMsgCache.current[m.id]) {
+            decryptedMsgCache.current[m.id] = msgMeta;
+          }
+          if (!decryptedMsgMap[m.id]) {
+            newDecrypted[m.id] = msgMeta;
+            hasUpdates = true;
+          }
         }
 
-        // Decrypt attached media
-        if (m.mediaId && msgMeta?.mediaKey && !decryptedMediaCache.current[m.mediaId]) {
-          try {
-            const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
-            if (mediaRes.ok) {
-              const mediaObj = await mediaRes.json();
-              const objectUrl = await decryptMediaBuffer(
-                msgMeta.mediaKey,
-                mediaObj.ciphertextBlob,
-                mediaObj.iv,
-                mediaObj.mimeType
-              );
-
-              if (objectUrl) {
-                decryptedMediaCache.current[m.mediaId] = { objectUrl, mimeType: mediaObj.mimeType };
-                setDecryptedMediaMap(prev => ({
-                  ...prev,
-                  [m.mediaId]: { objectUrl, mimeType: mediaObj.mimeType }
-                }));
-              }
+        // Decrypt attached media (checking global session cache first)
+        if (m.mediaId) {
+          const cachedMedia = decryptionCache.getMedia(m.mediaId);
+          if (cachedMedia) {
+            if (!decryptedMediaCache.current[m.mediaId]) {
+              decryptedMediaCache.current[m.mediaId] = cachedMedia;
             }
-          } catch (e) {
-            console.warn('Group media decryption error:', e);
+            if (!decryptedMediaMap[m.mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [m.mediaId]: cachedMedia }));
+            }
+          } else if (
+            msgMeta?.mediaKey &&
+            !decryptedMediaCache.current[m.mediaId] &&
+            !decryptionCache.isMediaPending(m.mediaId)
+          ) {
+            decryptionCache.setMediaPending(m.mediaId);
+            try {
+              const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
+              if (mediaRes.ok && isMounted) {
+                const mediaObj = await mediaRes.json();
+                const objectUrl = await decryptMediaBuffer(
+                  msgMeta.mediaKey,
+                  mediaObj.ciphertextBlob,
+                  mediaObj.iv,
+                  mediaObj.mimeType
+                );
+
+                if (objectUrl && isMounted) {
+                  const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
+                  decryptedMediaCache.current[m.mediaId] = mediaEntry;
+                  decryptionCache.setMedia(m.mediaId, mediaEntry);
+                  setDecryptedMediaMap(prev => ({
+                    ...prev,
+                    [m.mediaId]: mediaEntry
+                  }));
+                }
+              }
+            } catch (e) {
+              console.warn('Group media decryption error:', e);
+            } finally {
+              decryptionCache.clearMediaPending(m.mediaId);
+            }
           }
         }
       }
 
       if (isMounted && hasUpdates) {
-        setDecryptedMsgMap(prev => ({ ...prev, ...newDecrypted }));
+        setDecryptedMsgMap(prev => ({ ...prev, ...decryptedMsgCache.current, ...newDecrypted }));
       }
     }
 
@@ -336,6 +970,128 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   const canCreatePolls = isModerator || groupPerms.createPolls !== false;
   const canEditInfo = isAdmin || groupPerms.editInfo === true;
 
+  // Toggle group emoji reaction
+  const toggleGroupReaction = (msgId, emoji) => {
+    setGroupReactionsMap(prev => {
+      const msgReactions = { ...(prev[msgId] || {}) };
+      msgReactions[emoji] = (msgReactions[emoji] || 0) + 1;
+      const updated = { ...prev, [msgId]: msgReactions };
+      try {
+        localStorage.setItem(`ciphersocial_group_reactions_${currentUser?.username}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Send Group Voice Note
+  const handleSendVoiceNote = async (audioBlob, duration) => {
+    if (!selectedGroup || !currentUser?.keyPair || !canSendMessage) return;
+    setSending(true);
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const { encryptedBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(arrayBuffer);
+      const formData = new FormData();
+      formData.append('file', new Blob([encryptedBuffer], { type: 'application/octet-stream' }));
+      formData.append('iv', iv);
+      formData.append('originalName', `group_voice_${Date.now()}.webm`);
+      formData.append('mimeType', audioBlob.type || 'audio/webm');
+      formData.append('fileSize', arrayBuffer.byteLength);
+
+      const uploadRes = await fetch(`${serverUrl}/api/media/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success) throw new Error('Failed to upload voice note');
+
+      let userList = allUsers;
+      try {
+        const uRes = await fetch(`${serverUrl}/api/users`);
+        if (uRes.ok) userList = await uRes.json();
+      } catch (e) {}
+
+      const memberNames = (selectedGroup.members && selectedGroup.members.length > 0)
+        ? selectedGroup.members
+        : [currentUser.username];
+
+      const recipientPublicKeys = userList
+        .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
+        .map(u => ({
+          username: u.username,
+          spkiPublicKey: u.publicIdentityKey
+        }));
+
+      // Ensure sender is always in recipient list with valid public key so sender can decrypt their own voice notes
+      const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username === currentUser.username);
+      if (senderIndex >= 0) {
+        if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
+      } else if (myPublicKey) {
+        recipientPublicKeys.push({
+          username: currentUser.username,
+          spkiPublicKey: myPublicKey
+        });
+      }
+
+      const payloadString = JSON.stringify({
+        text: '',
+        isVoice: true,
+        voiceDuration: duration,
+        replyTo: replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null
+      });
+
+      const { ciphertext, iv: msgIv, keyEnvelopes } = await encryptPost(
+        payloadString,
+        recipientPublicKeys,
+        uploadData.media.mediaKeyB64 || mediaKeyB64
+      );
+
+      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: currentUser.username,
+          ciphertext,
+          iv: msgIv,
+          keyEnvelopes,
+          mediaId: uploadData.media.id
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to send voice note');
+      const data = await res.json();
+
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+      const voiceEntry = {
+        text: '',
+        mediaKey: uploadData.media.mediaKeyB64 || mediaKeyB64,
+        mediaId: uploadData.media.id,
+        isVoice: true,
+        voiceDuration: duration,
+        replyTo: sentReplyTo
+      };
+      decryptedMsgCache.current[data.message.id] = voiceEntry;
+      decryptionCache.setGroupMessage(data.message.id, voiceEntry);
+      setDecryptedMsgMap(prev => ({
+        ...prev,
+        [data.message.id]: voiceEntry
+      }));
+
+      setMessages(prev => {
+        if (prev.some(m => m.id === data.message.id)) return prev;
+        return [...prev, data.message];
+      });
+      soundEffects.playMessageSent();
+      setIsRecordingVoice(false);
+      setReplyingTo(null);
+    } catch (err) {
+      console.error('Failed to send group voice note:', err);
+      alert('Failed to send voice note.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Send Group Message
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -344,19 +1100,74 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
     setSending(true);
     try {
-      const memberNames = selectedGroup.isCommunity
-        ? allUsers.map(u => u.username)
-        : (selectedGroup.members || [currentUser.username]);
+      let userList = allUsers;
+      try {
+        const uRes = await fetch(`${serverUrl}/api/users`);
+        if (uRes.ok) {
+          userList = await uRes.json();
+        }
+      } catch (e) {}
 
-      const recipientPublicKeys = allUsers
-        .filter(u => memberNames.includes(u.username))
+      const memberNames = (selectedGroup.members && selectedGroup.members.length > 0)
+        ? selectedGroup.members
+        : [currentUser.username];
+
+      const recipientPublicKeys = userList
+        .filter(u => memberNames.some(m => m.toLowerCase() === u.username.toLowerCase()))
         .map(u => ({
           username: u.username,
           spkiPublicKey: u.publicIdentityKey
         }));
 
+      // Ensure sender is always in recipient list with valid public key so sender can decrypt their own messages
+      const myPublicKey = currentUser.spkiPublicKey || currentUser.publicIdentityKey;
+      const senderIndex = recipientPublicKeys.findIndex(r => r.username === currentUser.username);
+      if (senderIndex >= 0) {
+        if (myPublicKey) recipientPublicKeys[senderIndex].spkiPublicKey = myPublicKey;
+      } else if (myPublicKey) {
+        recipientPublicKeys.push({
+          username: currentUser.username,
+          spkiPublicKey: myPublicKey
+        });
+      }
+
+      const sentReplyTo = replyingTo ? { id: replyingTo.id, sender: replyingTo.sender, text: replyingTo.text } : null;
+
+      // Optimistic pending message for instant UI feedback (🕒 Clock icon)
+      const tempId = `gtemp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const optimisticMsg = {
+        id: tempId,
+        groupId: selectedGroup.id,
+        sender: currentUser.username,
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        isDeleted: false
+      };
+      decryptedMsgCache.current[tempId] = {
+        text: inputMessage.trim(),
+        mediaKey: attachedMedia?.mediaKeyB64 || null,
+        mediaId: attachedMedia?.mediaId || null,
+        isVoice: false,
+        voiceDuration: 0,
+        replyTo: sentReplyTo
+      };
+      setDecryptedMsgMap(prev => ({
+        ...prev,
+        [tempId]: decryptedMsgCache.current[tempId]
+      }));
+      setMessages(prev => [...prev, optimisticMsg]);
+      soundEffects.playMessageSent();
+      setInputMessage('');
+      clearAttachment();
+      setReplyingTo(null);
+
+      const payloadString = JSON.stringify({
+        text: optimisticMsg ? decryptedMsgCache.current[tempId]?.text : inputMessage.trim(),
+        replyTo: sentReplyTo
+      });
+
       const { ciphertext, iv, keyEnvelopes } = await encryptPost(
-        inputMessage.trim(),
+        payloadString,
         recipientPublicKeys,
         attachedMedia?.mediaKeyB64 || null
       );
@@ -376,15 +1187,23 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       if (!res.ok) throw new Error('Failed to send message');
       const data = await res.json();
 
-      setMessages(prev => {
-        if (prev.some(m => m.id === data.message.id)) return prev;
-        return [...prev, data.message];
+      const confirmedMeta = decryptedMsgCache.current[tempId];
+      decryptedMsgCache.current[data.message.id] = confirmedMeta;
+      decryptionCache.setGroupMessage(data.message.id, confirmedMeta);
+      delete decryptedMsgCache.current[tempId];
+      setDecryptedMsgMap(prev => {
+        const copy = {
+          ...prev,
+          [data.message.id]: confirmedMeta
+        };
+        delete copy[tempId];
+        return copy;
       });
-      setInputMessage('');
-      clearAttachment();
+
+      setMessages(prev => prev.map(m => m.id === tempId ? data.message : m));
     } catch (err) {
       console.error('Failed to send group message:', err);
-      alert('Failed to send message.');
+      setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m));
     } finally {
       setSending(false);
     }
@@ -406,7 +1225,8 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           isCommunity,
           creator: currentUser.username,
           members: selectedMembers,
-          avatarColor: isCommunity ? '#3b82f6' : '#e06c75'
+          avatarColor: isCommunity ? '#3b82f6' : '#e06c75',
+          avatarUrl: groupAvatarUrl
         })
       });
 
@@ -418,6 +1238,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
       setShowCreateModal(false);
       setGroupName('');
       setGroupDesc('');
+      setGroupAvatarUrl(null);
       setSelectedMembers([]);
     } catch (err) {
       console.error('Failed to create group:', err);
@@ -463,7 +1284,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     }
   };
 
-  // Update Group Info (Name & Description)
+  // Update Group Info (Name, Description & Photo)
   const handleSaveGroupInfo = async (e) => {
     e.preventDefault();
     if (!selectedGroup || !canEditInfo || !editName.trim()) return;
@@ -473,7 +1294,8 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editName.trim(),
-          description: editDesc.trim()
+          description: editDesc.trim(),
+          avatarUrl: editAvatarUrl
         })
       });
       if (res.ok) {
@@ -648,20 +1470,42 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
     return `${Math.floor(totalSecs / 3600)}h left`;
   };
 
-  // Filter groups in list
-  const filteredGroups = groups.filter(g => {
-    const matchesFilter = activeFilter === 'all' || (activeFilter === 'groups' ? !g.isCommunity : g.isCommunity);
-    const matchesSearch = !listSearchQuery.trim() ||
-      g.name.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
-      (g.description && g.description.toLowerCase().includes(listSearchQuery.toLowerCase()));
-    return matchesFilter && matchesSearch;
-  });
+  // Filter and sort groups with Pin priority and Archive view
+  const filteredGroups = useMemo(() => {
+    return groups.filter(g => {
+      const isArchived = archivedGroups.has(g.id);
+      if (showArchivedView) {
+        if (!isArchived) return false;
+      } else {
+        if (isArchived) return false;
+      }
+      const matchesFilter = activeFilter === 'all' || (activeFilter === 'groups' ? !g.isCommunity : g.isCommunity);
+      const matchesSearch = !listSearchQuery.trim() ||
+        g.name.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+        (g.description && g.description.toLowerCase().includes(listSearchQuery.toLowerCase()));
+      return matchesFilter && matchesSearch;
+    }).sort((a, b) => {
+      const aPinned = pinnedGroups.has(a.id);
+      const bPinned = pinnedGroups.has(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
 
-  // Filter and deduplicate messages in chat search
+      const timeA = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.createdAt || 0).getTime();
+      const timeB = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [groups, archivedGroups, showArchivedView, activeFilter, listSearchQuery, pinnedGroups]);
+
+  // Filter and deduplicate messages in chat search (excluding messages before cleared timestamp)
+  const clearedAt = selectedGroup ? clearedGroupTimestamps[selectedGroup.id] : null;
+  const clearTime = clearedAt ? new Date(clearedAt).getTime() : 0;
   const uniqueMessages = [];
   const seenMsgIds = new Set();
   for (const m of messages) {
     if (m && m.id && !seenMsgIds.has(m.id)) {
+      if (clearTime && new Date(m.timestamp).getTime() <= clearTime) {
+        continue;
+      }
       seenMsgIds.add(m.id);
       uniqueMessages.push(m);
     }
@@ -683,43 +1527,347 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
   // Shared media list in group
   const sharedMediaMessages = messages.filter(m => m.mediaId && decryptedMediaMap[m.mediaId]);
 
-  // Drawer roster filtered
-  const drawerMemberList = (selectedGroup?.isCommunity ? allUsers.map(u => u.username) : selectedGroup?.members || []).filter(m =>
+  // Drawer roster filtered (using confirmed members only)
+  const drawerMemberList = (selectedGroup?.members || []).filter(m =>
     !drawerMemberSearch.trim() || m.toLowerCase().includes(drawerMemberSearch.toLowerCase())
   );
 
+  // ── REUSABLE MODALS: ENTER COMMUNITY, PENDING STATUS, USER PROFILE ──
+  const renderJoinModal = () => {
+    if (!joinModalGroup) return null;
+    return (
+      <div className="modal-overlay" onClick={() => !submittingJoin && setJoinModalGroup(null)}>
+        <div className="create-group-modal enter-community-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <Globe size={18} color="#ee7882" />
+              <h3>Enter Community</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => !submittingJoin && setJoinModalGroup(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <form onSubmit={handleSendJoinRequest} className="create-group-form">
+            <div className="community-join-preview">
+              {joinModalGroup.avatarUrl ? (
+                <img src={joinModalGroup.avatarUrl} alt={joinModalGroup.name} className="join-preview-avatar" />
+              ) : (
+                <div className="join-preview-avatar" style={{ backgroundColor: joinModalGroup.avatarColor || '#e06c75' }}>
+                  <Globe size={24} />
+                </div>
+              )}
+              <div className="join-preview-info">
+                <h4>{joinModalGroup.name}</h4>
+                <span className="join-founder-tag">Founded by @{joinModalGroup.creator}</span>
+                {joinModalGroup.description && (
+                  <p className="join-preview-desc">{joinModalGroup.description}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="join-notice-box">
+              <Info size={16} color="#ee7882" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <span>
+                To keep this space authentic, entry requires admin confirmation.
+                An inbox confirmation request with your profile will be sent to the community admin.
+              </span>
+            </div>
+
+            <div className="form-group">
+              <label>Introduce yourself or add details (Description for Admin)</label>
+              <textarea
+                className="join-note-textarea"
+                rows={3}
+                placeholder="e.g. Hi! I'm passionate about cryptography and decentralized networks. I'd love to participate in discussions here."
+                value={joinNote}
+                onChange={e => setJoinNote(e.target.value)}
+                disabled={submittingJoin}
+                maxLength={400}
+              />
+              <span className="char-count">{joinNote.length}/400</span>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setJoinModalGroup(null)}
+                disabled={submittingJoin}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-btn submit-join-btn"
+                disabled={submittingJoin}
+              >
+                {submittingJoin ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+                <span>Send Request to Admin</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPendingModal = () => {
+    if (!pendingModalGroup) return null;
+    const myReq = (pendingModalGroup.joinRequests || []).find(
+      r => r.requester === currentUser?.username && r.status === 'pending'
+    );
+
+    return (
+      <div className="modal-overlay" onClick={() => setPendingModalGroup(null)}>
+        <div className="create-group-modal request-pending-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <Clock size={18} color="#fbbf24" />
+              <h3>Entry Request Pending</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => setPendingModalGroup(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="pending-modal-body">
+            <div className="pending-status-badge">
+              <Clock size={20} color="#fbbf24" />
+              <div>
+                <strong>Awaiting Admin Confirmation</strong>
+                <p>Your request to enter <strong>{pendingModalGroup.name}</strong> has been submitted to @{pendingModalGroup.creator}.</p>
+              </div>
+            </div>
+
+            {myReq?.note && (
+              <div className="pending-submitted-note">
+                <label>Your submitted introduction note:</label>
+                <blockquote>"{myReq.note}"</blockquote>
+              </div>
+            )}
+
+            <p className="pending-hint-text">
+              Once confirmed, an automated welcome message will be delivered to your direct messages and you will have full access to chat.
+            </p>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="cancel-btn danger-text"
+                onClick={() => handleCancelJoinRequest(pendingModalGroup.id)}
+              >
+                Cancel Request
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => setPendingModalGroup(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProfileModal = () => {
+    if (!showProfileModalUser) return null;
+    const { user, request } = showProfileModalUser;
+    const targetGroupId = request?.groupId || selectedGroup?.id;
+    const targetGroup = groups.find(g => g.id === targetGroupId) || selectedGroup;
+    const isTargetAdmin = targetGroup && (targetGroup.creator === currentUser?.username || targetGroup.roles?.[currentUser?.username] === 'admin');
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowProfileModalUser(null)}>
+        <div className="create-group-modal user-profile-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div className="modal-title-row">
+              <ShieldCheck size={18} color="#ee7882" />
+              <h3>User Profile Inspection</h3>
+            </div>
+            <button className="modal-close-btn" onClick={() => setShowProfileModalUser(null)}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="profile-modal-body">
+            <div className="profile-hero">
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.username}
+                  className="profile-modal-avatar"
+                  style={{ border: `2.5px solid ${user.avatarColor || '#e06c75'}` }}
+                />
+              ) : (
+                <div
+                  className="profile-modal-avatar placeholder"
+                  style={{ backgroundColor: user?.avatarColor || '#e06c75' }}
+                >
+                  {(user?.username || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div className="profile-hero-names">
+                <h4>{user?.displayName || user?.username}</h4>
+                <span className="profile-username-tag">@{user?.username}</span>
+                <div className="profile-activity-row">
+                  {user?.isOnline ? (
+                    <span className="online-indicator active">
+                      <Circle size={8} fill="#10b981" color="#10b981" /> Active now
+                    </span>
+                  ) : (
+                    <span className="online-indicator offline">
+                      <Circle size={8} fill="#64748b" color="#64748b" /> Offline
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="profile-info-card">
+              <div className="info-card-label">Bio / About:</div>
+              <p className="info-card-value">
+                {user?.bio || 'No public bio set by user.'}
+              </p>
+            </div>
+
+            <div className="profile-info-card">
+              <div className="info-card-label">Cryptographic Fingerprint:</div>
+              <code className="info-card-key">
+                {user?.publicIdentityKey
+                  ? `${user.publicIdentityKey.slice(0, 30)}...${user.publicIdentityKey.slice(-14)}`
+                  : 'End-to-End Cryptographic Identity Active'}
+              </code>
+            </div>
+
+            {request?.note && (
+              <div className="profile-info-card request-note-highlight">
+                <div className="info-card-label">Community Entry Note:</div>
+                <p className="request-note-quote-box">"{request.note}"</p>
+              </div>
+            )}
+
+            {request?.status === 'pending' && isTargetAdmin && (
+              <div className="profile-admin-actions">
+                <button
+                  type="button"
+                  className="btn-approve-profile"
+                  onClick={() => handleApproveJoinRequest(request.id, targetGroupId)}
+                >
+                  <Check size={16} />
+                  <span>Confirm &amp; Welcome</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-reject-profile"
+                  onClick={() => handleRejectJoinRequest(request.id, targetGroupId)}
+                >
+                  <X size={16} />
+                  <span>Decline Request</span>
+                </button>
+              </div>
+            )}
+
+            <div className="modal-footer" style={{ borderTop: 'none', paddingTop: '8px' }}>
+              <button
+                type="button"
+                className="primary-btn"
+                style={{ width: '100%' }}
+                onClick={() => setShowProfileModalUser(null)}
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── ACTIVE GROUP CONVERSATION VIEW ───────────────────────────
   if (selectedGroup) {
+    const isMember = (selectedGroup.members || []).includes(currentUser?.username);
+    const hasPendingJoin = (selectedGroup.joinRequests || []).some(
+      r => r.requester === currentUser?.username && r.status === 'pending'
+    );
+    const pendingRequests = (selectedGroup.joinRequests || []).filter(r => r.status === 'pending');
+    const groupMemberNames = selectedGroup.members && selectedGroup.members.length > 0
+      ? selectedGroup.members
+      : [selectedGroup.creator];
+
+    const activeGroupMembers = groupMemberNames.filter(mName => {
+      const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+      return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
+    });
+
+    const activeGroupCount = activeGroupMembers.length;
+
     return (
       <div className="group-chat-fullscreen">
         {/* Sleek Horizontal Top Chat Header */}
         <div className="group-chat-header">
-          <div className="header-left">
+          <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
             <button className="chat-back-btn" onClick={() => setSelectedGroup(null)} title="Back to Groups">
               <ArrowLeft size={18} />
             </button>
 
-            <div
-              className="avatar-circle group-avatar-header"
-              style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75' }}
-              onClick={() => setShowMembersDrawer(true)}
-            >
-              {selectedGroup.isCommunity ? <Globe size={18} /> : selectedGroup.name[0].toUpperCase()}
-            </div>
+            {selectedGroup.avatarUrl ? (
+              <img
+                src={selectedGroup.avatarUrl}
+                alt={selectedGroup.name}
+                className="avatar-circle group-avatar-header"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  cursor: 'pointer',
+                  border: `2px solid ${selectedGroup.avatarColor || '#e06c75'}`,
+                  flexShrink: 0
+                }}
+                onClick={() => setShowMembersDrawer(true)}
+              />
+            ) : (
+              <div
+                className="avatar-circle group-avatar-header"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: selectedGroup.avatarColor || '#e06c75',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  fontSize: '1rem'
+                }}
+                onClick={() => setShowMembersDrawer(true)}
+              >
+                {selectedGroup.isCommunity ? <Globe size={18} /> : selectedGroup.name[0].toUpperCase()}
+              </div>
+            )}
 
-            <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings">
-              <div className="group-name-row">
-                <span className="group-title">{selectedGroup.name}</span>
-                {selectedGroup.isCommunity && <span className="group-tag community">Public</span>}
-                {isCreator && <span className="group-tag creator"><Crown size={10} /> Owner</span>}
-                {!isCreator && isAdmin && <span className="group-tag admin"><Shield size={10} /> Admin</span>}
+            <div className="header-info" onClick={() => setShowMembersDrawer(true)} title="View group details & admin settings" style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer' }}>
+              <div className="group-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                <span className="group-title" title={selectedGroup.name} style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
+                  {selectedGroup.name}
+                </span>
+                {selectedGroup.isCommunity && <span className="group-tag community" style={{ borderRadius: '9999px', flexShrink: 0 }}>Public</span>}
+                {isCreator && <span className="group-tag creator" style={{ borderRadius: '9999px', flexShrink: 0 }}><Crown size={10} /> Owner</span>}
+                {!isCreator && isAdmin && <span className="group-tag admin" style={{ borderRadius: '9999px', flexShrink: 0 }}><Shield size={10} /> Admin</span>}
                 {groupPerms.sendMessages === false && (
-                  <span className="group-tag announcement" title="Broadcast channel">
+                  <span className="group-tag announcement" title="Broadcast channel" style={{ borderRadius: '9999px', flexShrink: 0 }}>
                     <Megaphone size={10} /> Broadcast
                   </span>
                 )}
                 {selectedGroup.settings?.disappearingTimer > 0 && (
-                  <span className="group-tag timer" title="Disappearing messages active">
+                  <span className="group-tag timer" title="Disappearing messages active" style={{ borderRadius: '9999px', flexShrink: 0 }}>
                     <Flame size={10} color="#fbbf24" />
                     {selectedGroup.settings.disappearingTimer >= 3600
                       ? `${selectedGroup.settings.disappearingTimer / 3600}h`
@@ -727,19 +1875,47 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   </span>
                 )}
               </div>
-              <span className="group-meta-subtitle">
-                {selectedGroup.isCommunity
-                  ? 'Public Community • Created by @' + selectedGroup.creator
-                  : `${selectedGroup.members?.length || 1} members • Created by @${selectedGroup.creator}`}
-              </span>
+              <div className="group-meta-subtitle" style={{ minWidth: 0, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeGroupCount > 0 ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#ff9ea8', fontWeight: 600, fontSize: '0.73rem', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    <Circle size={6} color="#ee7882" fill="#ee7882" style={{ flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {activeGroupCount} active now
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, flexShrink: 0 }}>•</span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {selectedGroup.isCommunity ? `Public Community • ${groupMemberNames.length} members` : `${groupMemberNames.length} members`}
+                    </span>
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.73rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100%', minWidth: 0 }} title={groupMemberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
+                    <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
+                    <span>{groupMemberNames.map(m => m === currentUser.username ? 'You' : (allUsers.find(u => u.username === m)?.displayName || m)).slice(0, 5).join(', ')}{groupMemberNames.length > 5 ? ` +${groupMemberNames.length - 5} more` : ''}</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}
               onClick={() => { setShowSearchBar(s => !s); setSearchQuery(''); setShowHeaderMenu(false); }}
               title="Search messages"
+              style={{
+                background: showSearchBar ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                border: `1px solid ${showSearchBar ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
+                borderRadius: '50%',
+                width: '38px',
+                height: '38px',
+                color: showSearchBar ? '#ee7882' : '#cbd5e1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: showSearchBar ? '0 0 10px rgba(238, 120, 130, 0.3)' : 'none'
+              }}
             >
               <Search size={17} />
             </button>
@@ -750,6 +1926,19 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                 className={`header-icon-btn ${showHeaderMenu ? 'active' : ''}`}
                 onClick={() => setShowHeaderMenu(s => !s)}
                 title="Group actions"
+                style={{
+                  background: showHeaderMenu ? 'rgba(238, 120, 130, 0.25)' : 'rgba(255, 255, 255, 0.06)',
+                  border: `1px solid ${showHeaderMenu ? '#ee7882' : 'rgba(238, 120, 130, 0.2)'}`,
+                  borderRadius: '50%',
+                  width: '38px',
+                  height: '38px',
+                  color: showHeaderMenu ? '#ee7882' : '#cbd5e1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
               >
                 <MoreVertical size={18} />
               </button>
@@ -760,6 +1949,20 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   <div className="group-header-dropdown-menu">
                     <button
                       className="header-menu-item"
+                      onClick={() => {
+                        setActionMenuGroup(selectedGroup);
+                        setShowHeaderMenu(false);
+                      }}
+                    >
+                      <Shield size={16} color="#ee7882" />
+                      <div className="menu-item-text">
+                        <strong>Chat Options &amp; Security</strong>
+                        <span>Pin, Lock, Archive, Mute, or Clear</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="header-menu-item"
                       onClick={() => { setDrawerTab('members'); setShowMembersDrawer(true); setShowHeaderMenu(false); }}
                     >
                       <Info size={16} color="#ee7882" />
@@ -768,6 +1971,19 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                         <span>View members and roles</span>
                       </div>
                     </button>
+
+                    {isAdmin && (
+                      <button
+                        className="header-menu-item"
+                        onClick={() => { setDrawerTab('requests'); setShowMembersDrawer(true); setShowHeaderMenu(false); }}
+                      >
+                        <UserPlus size={16} color="#ee7882" />
+                        <div className="menu-item-text">
+                          <strong>Entry Requests {pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}</strong>
+                          <span>Review pending community entry requests</span>
+                        </div>
+                      </button>
+                    )}
 
                     <button
                       className="header-menu-item"
@@ -785,7 +2001,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                         className="header-menu-item"
                         onClick={() => { setMemberSearchQuery(''); setShowAddMemberModal(true); setShowHeaderMenu(false); }}
                       >
-                        <UserPlus size={16} color="#10b981" />
+                        <UserPlus size={16} color="#ee7882" />
                         <div className="menu-item-text">
                           <strong>Add Members</strong>
                           <span>Invite contacts to group</span>
@@ -877,7 +2093,11 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
         )}
 
         {/* Message Feed / Bubbles */}
-        <div className="group-messages-feed">
+        <div
+          className="group-messages-feed"
+          ref={messagesContainerRef}
+          onScroll={handleScrollFeed}
+        >
           {/* Active Polls in Group */}
           {selectedGroup.polls && selectedGroup.polls.length > 0 && (
             <div className="group-polls-section">
@@ -943,7 +2163,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               )}
             </div>
           ) : (
-            visibleMessages.map(msg => {
+            visibleMessages.map((msg, index) => {
               const isMine = msg.sender === currentUser.username;
               const msgMeta = decryptedMsgMap[msg.id] || { text: 'Decrypting...', mediaKey: null };
               const mediaDecrypted = msg.mediaId ? decryptedMediaMap[msg.mediaId] : null;
@@ -951,83 +2171,339 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               const authorColor = authorUser?.avatarColor || '#8b5cf6';
               const remainingTimeStr = formatRemainingTime(msg.expiresAt);
               const isPinned = selectedGroup.pinnedMessageId === msg.id;
+              const msgReactions = groupReactionsMap[msg.id] || {};
+
+              // Date separator check
+              const currentMsgDateKey = getDateKey(msg.timestamp);
+              const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
+              const prevMsgDateKey = prevMsg ? getDateKey(prevMsg.timestamp) : null;
+              const showDateSeparator = !prevMsgDateKey || currentMsgDateKey !== prevMsgDateKey;
+
+              // Only display sender name/avatar on the first message in a sequence (like Telegram/WhatsApp)
+              const isFirstInSequence = !prevMsg || prevMsg.sender !== msg.sender || showDateSeparator;
 
               return (
-                <div
-                  key={msg.id}
-                  ref={el => (messageRefs.current[msg.id] = el)}
-                  className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
-                >
-                  <div className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''}`}>
-                    {!isMine && (
-                      <div className="group-msg-author" style={{ color: authorColor }}>
-                        <span>{msg.sender}</span>
-                        {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
-                        {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
-                        {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
-                      </div>
-                    )}
+                <React.Fragment key={msg.id}>
+                  {showDateSeparator && (
+                    <div className="chat-date-separator">
+                      <span className="chat-date-pill">
+                        {formatDateSeparator(msg.timestamp)}
+                      </span>
+                    </div>
+                  )}
 
-                    {/* Text */}
-                    {msgMeta.text && (
-                      <div className="msg-text">{msgMeta.text}</div>
-                    )}
+                  {msg.isWelcome || msg.isSystem ? (
+                    (() => {
+                      const requesterRaw = (msg.requester || (msg.text?.match(/Welcome @?([^\s!]+)/i)?.[1]) || '').replace(/^@/, '');
+                      const reqUser = allUsers.find(u => u.username?.toLowerCase() === requesterRaw.toLowerCase());
+                      const reqDisplayName = reqUser?.displayName || requesterRaw;
 
-                    {/* Media Attachment */}
-                    {msg.mediaId && (
-                      <div className="dm-media-attachment-container">
-                        {mediaDecrypted ? (
-                          <EncryptedAttachmentViewer
-                            objectUrl={mediaDecrypted.objectUrl}
-                            mimeType={mediaDecrypted.mimeType}
-                            mediaId={msg.mediaId}
-                          />
-                        ) : (
-                          <div className="dm-media-decrypting">
-                            <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                            <span>Decrypting attachment...</span>
+                      const isNewUser = Boolean(
+                        requesterRaw &&
+                        currentUser?.username?.toLowerCase() === requesterRaw.toLowerCase()
+                      );
+
+                      const adminRaw = (msg.admin || (msg.text?.match(/confirmed by @?([^\s.!]+)/i)?.[1]) || 'Admin').replace(/^@/, '');
+                      const adminUser = allUsers.find(u => u.username?.toLowerCase() === adminRaw.toLowerCase());
+                      const adminDisplayName = adminUser?.displayName || adminRaw;
+
+                      // For all other community members: display only a minimal, discreet notice
+                      if (msg.isWelcome && !isNewUser) {
+                        return (
+                          <div
+                            ref={el => (messageRefs.current[msg.id] = el)}
+                            className="chat-system-message-row minimal animate-fade-in"
+                          >
+                            <div
+                              className="msg-system-minimal-pill"
+                              title={`Entry confirmed by ${adminDisplayName}`}
+                            >
+                              <span className="minimal-joined-icon">👋</span>
+                              <span className="minimal-joined-text">
+                                <strong className="minimal-joined-username">{reqDisplayName}</strong> joined the community
+                              </span>
+                              <span className="minimal-joined-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    )}
+                        );
+                      }
 
-                    <div className="msg-meta">
-                      <div className="msg-meta-left">
-                        <ShieldCheck size={10} color="#10b981" />
-                        <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
+                      // General non-welcome system messages
+                      if (msg.isSystem && !msg.isWelcome) {
+                        return (
+                          <div
+                            ref={el => (messageRefs.current[msg.id] = el)}
+                            className="chat-system-message-row minimal animate-fade-in"
+                          >
+                            <div className="msg-system-minimal-pill">
+                              <span className="minimal-joined-text">{msg.text || msgMeta?.text}</span>
+                              <span className="minimal-joined-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                      {msg.expiresAt && (
-                        <span className="msg-timer-badge">
-                          <Flame size={10} color="#fbbf24" />
-                          <span>{remainingTimeStr}</span>
-                        </span>
+                      // Full celebratory welcome banner: shown ONLY for the new user who joined
+                      const welcomeText = `🎉 Welcome ${reqDisplayName} to ${selectedGroup.name}! Entry request confirmed by ${adminDisplayName}.`;
+
+                      return (
+                        <div
+                          ref={el => (messageRefs.current[msg.id] = el)}
+                          className="chat-system-message-row animate-fade-in"
+                        >
+                          <div className="msg-welcome-banner">
+                            <span className="welcome-banner-sparkle">🎉</span>
+                            <div className="welcome-banner-text-wrap">
+                              <div className="welcome-banner-text">{welcomeText}</div>
+                              <span className="welcome-banner-time">{formatMessageTime(msg.timestamp)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div
+                      ref={el => (messageRefs.current[msg.id] = el)}
+                      className={`message-bubble-row ${isMine ? 'mine' : 'peer'}`}
+                    >
+                    <div
+                      className={`message-bubble group-message-bubble ${isPinned ? 'is-pinned-bubble' : ''} ${msg.isDeleted ? 'deleted' : ''}`}
+                      style={{ position: 'relative' }}
+                      onContextMenu={(e) => !msg.isDeleted && handleContextMenu(msg, msgMeta, isMine, e)}
+                      onTouchStart={(e) => !msg.isDeleted && handleTouchStart(msg, msgMeta, isMine, e)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      onTouchCancel={handleTouchEnd}
+                    >
+                      {msg.isDeleted ? (
+                        <div className="msg-deleted-notice">
+                          <Trash2 size={13} className="msg-deleted-icon" />
+                          <span>This message was deleted</span>
+                        </div>
+                      ) : (
+                        <>
+                          {isMine ? (
+                            <div className="group-msg-author mine">
+                              <span>{currentUser.displayName || currentUser.username} (You)</span>
+                            </div>
+                          ) : (
+                            <div className="group-msg-author" style={{ color: authorColor }}>
+                              {authorUser?.avatarUrl ? (
+                                <img
+                                  src={authorUser.avatarUrl}
+                                  alt={msg.sender}
+                                  style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: `1px solid ${authorColor}`
+                                  }}
+                                />
+                              ) : null}
+                              <span style={{ fontWeight: 600 }}>{authorUser?.displayName || msg.sender}</span>
+                              {msg.sender === selectedGroup.creator && <span className="role-tag-mini creator">Owner</span>}
+                              {msg.sender !== selectedGroup.creator && selectedGroup.roles?.[msg.sender] === 'admin' && <span className="role-tag-mini admin">Admin</span>}
+                              {selectedGroup.roles?.[msg.sender] === 'moderator' && <span className="role-tag-mini mod">Mod</span>}
+                            </div>
+                          )}
+
+                          {/* Quoted Reply Context (Clickable with Jump-to-Message & Flash) */}
+                          {msgMeta.replyTo && (
+                            <div
+                              className="msg-quoted-reply"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (msgMeta.replyTo?.id && messageRefs.current[msgMeta.replyTo.id]) {
+                                  messageRefs.current[msgMeta.replyTo.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  const targetEl = messageRefs.current[msgMeta.replyTo.id];
+                                  targetEl.classList.add('highlight-flash');
+                                  setTimeout(() => targetEl.classList.remove('highlight-flash'), 1200);
+                                }
+                              }}
+                              title="Click to jump to replied message"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <CornerUpLeft size={11} color="#ee7882" />
+                                <span style={{ fontWeight: '700', color: '#ee7882' }}>
+                                  {msgMeta.replyTo.sender === currentUser.username ? 'You' : (allUsers.find(u => u.username === msgMeta.replyTo.sender)?.displayName || msgMeta.replyTo.sender)}
+                                </span>
+                              </div>
+                              <span className="reply-preview-snippet" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
+                                {msgMeta.replyTo.text || 'Attachment'}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Text */}
+                          {msgMeta.text && (
+                            <div className="msg-text">{msgMeta.text}</div>
+                          )}
+
+                          {/* Voice Note Player (if voice message) */}
+                          {msgMeta.isVoice && (
+                            <div style={{ margin: '4px 0' }}>
+                              {mediaDecrypted ? (
+                                <VoiceWaveformPlayer
+                                  src={mediaDecrypted.objectUrl}
+                                  duration={msgMeta.voiceDuration}
+                                  isMine={isMine}
+                                />
+                              ) : (
+                                <div className="dm-media-decrypting">
+                                  <Loader2 size={14} className="animate-spin" color="#ee7882" />
+                                  <span>Decrypting voice note...</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Media Attachment (if not voice) */}
+                          {msg.mediaId && !msgMeta.isVoice && (
+                            <div className="dm-media-attachment-container">
+                              {mediaDecrypted ? (
+                                <EncryptedAttachmentViewer
+                                  objectUrl={mediaDecrypted.objectUrl}
+                                  mimeType={mediaDecrypted.mimeType}
+                                  mediaId={msg.mediaId}
+                                />
+                              ) : (
+                                <div className="dm-media-decrypting">
+                                  <Loader2 size={14} className="animate-spin" color="#f59e0b" />
+                                  <span>Decrypting attachment...</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
 
-                      {isModerator && (
-                        <button
-                          className={`pin-msg-btn ${isPinned ? 'pinned' : ''}`}
-                          onClick={() => handleTogglePin(msg.id)}
-                          title={isPinned ? 'Unpin message' : 'Pin message'}
-                        >
-                          <Pin size={11} />
-                        </button>
+                      {/* Minimal Message Footer: Time + Disappearing Timer + Pinned indicator + Status Indicator Ticks */}
+                      <div className="msg-meta-minimal">
+                        <span className="msg-bubble-time">{formatMessageTime(msg.timestamp)}</span>
+                        {msg.expiresAt && !msg.isDeleted && (
+                          <span className="msg-timer-badge" style={{ marginLeft: '4px' }}>
+                            <Flame size={10} color="#fbbf24" />
+                            <span>{remainingTimeStr}</span>
+                          </span>
+                        )}
+                        {isPinned && !msg.isDeleted && (
+                          <Pin size={10} color="#ee7882" style={{ marginLeft: '4px' }} title="Pinned Message" />
+                        )}
+                        {isMine && !msg.isDeleted && (
+                          <span className="msg-status-indicator" style={{ marginLeft: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                            {msg.status === 'sending' || msg.pending ? (
+                              <Clock size={12} strokeWidth={2.4} className="msg-tick tick-pending" title="Sending... (Not sent)" />
+                            ) : msg.status === 'failed' ? (
+                              <AlertCircle size={12} strokeWidth={2.4} className="msg-tick tick-failed" title="Not sent (Failed)" />
+                            ) : msg.seenBy && msg.seenBy.length > 0 ? (
+                              <span
+                                className="msg-group-seen-indicator"
+                                title={`Seen by ${msg.seenBy.length} member${msg.seenBy.length > 1 ? 's' : ''}: ${msg.seenBy.map(s => (allUsers?.find(u => u.username === s.username)?.displayName || s.username)).join(', ')}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <CheckCheck size={13} strokeWidth={2.4} className="msg-tick tick-seen" />
+                                <span className="msg-seen-count">{msg.seenBy.length}</span>
+                              </span>
+                            ) : (
+                              <Check size={13} strokeWidth={2.4} className="msg-tick tick-sent" title="Sent to space" />
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Reaction Badges Container */}
+                      {!msg.isDeleted && Object.keys(msgReactions).length > 0 && (
+                        <div className="msg-reaction-badges">
+                          {Object.entries(msgReactions).map(([emoji, count]) => (
+                            <span
+                              key={emoji}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleGroupReaction(msg.id, emoji);
+                              }}
+                              className="msg-reaction-badge-pill"
+                            >
+                              {emoji} {count > 1 && <span className="reaction-count">{count}</span>}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
+                )}
+              </React.Fragment>
               );
             })
           )}
           <div ref={chatEndRef} />
         </div>
 
+        {/* Floating Scroll-to-Bottom Quick Button */}
+        {showScrollBottom && (
+          <button
+            type="button"
+            className="scroll-to-bottom-btn"
+            onClick={() => {
+              isAtBottomRef.current = true;
+              setShowScrollBottom(false);
+              chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            title="Scroll to bottom"
+            style={{
+              position: 'absolute',
+              bottom: '84px',
+              right: '24px',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1px solid rgba(238, 120, 130, 0.5)',
+              color: '#ee7882',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.6), 0 0 14px rgba(238, 120, 130, 0.25)',
+              borderRadius: '50%',
+              width: '42px',
+              height: '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 50,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <ChevronDown size={22} />
+          </button>
+        )}
+
+        {/* Reply Context Preview Banner */}
+        {replyingTo && (
+          <div className="chat-reply-preview-bar">
+            <div className="reply-preview-left">
+              <CornerUpLeft size={16} color="#ee7882" className="reply-preview-icon" />
+              <div className="reply-preview-content">
+                <span className="reply-preview-author">
+                  Replying to {replyingTo.sender === currentUser.username ? 'yourself' : (allUsers.find(u => u.username === replyingTo.sender)?.displayName || replyingTo.sender)}
+                </span>
+                <span className="reply-preview-snippet">
+                  {typeof replyingTo.text === 'string' ? replyingTo.text : 'Attachment'}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="reply-preview-close"
+              onClick={() => setReplyingTo(null)}
+              title="Cancel reply"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Attachment Preview Box */}
         {attachedMedia && (
           <div className="dm-attached-preview-card">
             <Lock size={14} color="#10b981" />
             <div className="dm-attach-info">
-              <span className="file-format-tag">{attachedMedia.originalName}</span>
+              <span className="file-format-tag" title={attachedMedia.originalName}>{formatTruncatedFileName(attachedMedia.originalName, 14)}</span>
               <span className="file-size">({(attachedMedia.fileSize / 1024).toFixed(1)} KB)</span>
             </div>
             <button className="remove-file-btn" onClick={clearAttachment} type="button">
@@ -1038,31 +2514,166 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
         {/* ── SLEEK FLOATING MESSAGE BAR ── */}
         <div className="group-chat-bottom-bar">
-          {canSendMessage ? (
-            <form onSubmit={handleSendMessage} className="group-chat-input-capsule">
-              <label className="msg-bar-attach-btn" title="Attach encrypted media or file">
-                <Paperclip size={18} />
-                <input type="file" accept="*" onChange={handleFileSelect} onClick={e => (e.target.value = null)} hidden />
-              </label>
+          {selectedGroup.isCommunity && !isMember && !isAdmin ? (
+            <div className="community-guest-join-bar">
+              <div className="guest-join-info">
+                <div className="guest-pill-icon">
+                  <Globe size={17} />
+                </div>
+                <div className="guest-text-col">
+                  <span className="guest-primary-text">Guest Mode</span>
+                  <span className="guest-secondary-text">Enter to send messages</span>
+                </div>
+              </div>
+              {hasPendingJoin ? (
+                <button
+                  type="button"
+                  className="guest-pending-btn"
+                  onClick={() => setPendingModalGroup(selectedGroup)}
+                >
+                  <Clock size={15} />
+                  <span>Request Pending</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="guest-enter-btn"
+                  onClick={() => {
+                    setJoinModalGroup(selectedGroup);
+                    setJoinNote('');
+                  }}
+                >
+                  <UserPlus size={15} />
+                  <span>Enter Community</span>
+                </button>
+              )}
+            </div>
+          ) : canSendMessage ? (
+            isRecordingVoice ? (
+              <div style={{ width: '100%' }}>
+                <VoiceNoteRecorder
+                  onSend={handleSendVoiceNote}
+                  onCancel={() => setIsRecordingVoice(false)}
+                />
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessage} className="group-chat-input-capsule">
+                <div className="msg-bar-attach-container" ref={attachMenuRef}>
+                  <button
+                    type="button"
+                    className={`msg-bar-attach-btn ${showAttachMenu ? 'active' : ''}`}
+                    onClick={() => setShowAttachMenu(prev => !prev)}
+                    title="Attach Camera, Photos, or Files"
+                  >
+                    <Paperclip size={18} />
+                  </button>
 
-              <input
-                type="text"
-                placeholder={`Message ${selectedGroup.name}...`}
-                value={inputMessage}
-                onChange={e => setInputMessage(e.target.value)}
-                disabled={sending}
-                className="msg-bar-text-input"
-              />
+                  {showAttachMenu && (
+                    <div className="attach-options-popup animate-pop-in">
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          cameraInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon camera">
+                          <Camera size={16} />
+                        </div>
+                        <span className="attach-option-label">Camera</span>
+                      </button>
 
-              <button
-                type="submit"
-                className="msg-bar-send-btn"
-                disabled={(!inputMessage.trim() && !attachedMedia) || sending || mediaUploading}
-                title="Send encrypted message"
-              >
-                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              </button>
-            </form>
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          photosInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon photos">
+                          <ImageIcon size={16} />
+                        </div>
+                        <span className="attach-option-label">Photos</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="attach-option-item"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          filesInputRef.current?.click();
+                        }}
+                      >
+                        <div className="attach-option-icon files">
+                          <FileText size={16} />
+                        </div>
+                        <span className="attach-option-label">Files</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Hidden specialized file pickers */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                  <input
+                    ref={photosInputRef}
+                    type="file"
+                    accept="image/*,video/*,.heic,.heif"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                  <input
+                    ref={filesInputRef}
+                    type="file"
+                    accept="*/*"
+                    onChange={handleFileSelect}
+                    onClick={(e) => { e.target.value = null; }}
+                    hidden
+                  />
+                </div>
+
+                <input
+                  ref={messageInputRef}
+                  type="text"
+                  placeholder={`Message ${selectedGroup.name}...`}
+                  value={inputMessage}
+                  onChange={e => setInputMessage(e.target.value)}
+                  disabled={sending}
+                  className="msg-bar-text-input"
+                />
+
+                {!inputMessage.trim() && !attachedMedia ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsRecordingVoice(true)}
+                    className="msg-bar-send-btn"
+                    style={{ background: 'rgba(238, 120, 130, 0.22)', color: '#ee7882', border: '1px solid rgba(238, 120, 130, 0.35)' }}
+                    title="Record voice note"
+                  >
+                    <Mic size={17} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="msg-bar-send-btn"
+                    disabled={(!inputMessage.trim() && !attachedMedia) || sending || mediaUploading}
+                    title="Send encrypted message"
+                  >
+                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                )}
+              </form>
+            )
           ) : (
             <div className="broadcast-muted-capsule">
               <Megaphone size={17} color="#fbbf24" />
@@ -1080,9 +2691,24 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
             <div className="group-members-drawer" onClick={e => e.stopPropagation()}>
               <div className="drawer-header">
                 <div className="drawer-title-wrap">
-                  <div className="avatar-circle" style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75', width: 38, height: 38 }}>
-                    {selectedGroup.isCommunity ? <Globe size={19} /> : selectedGroup.name[0].toUpperCase()}
-                  </div>
+                  {selectedGroup.avatarUrl ? (
+                    <img
+                      src={selectedGroup.avatarUrl}
+                      alt={selectedGroup.name}
+                      className="avatar-circle"
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: `2px solid ${selectedGroup.avatarColor || '#e06c75'}`
+                      }}
+                    />
+                  ) : (
+                    <div className="avatar-circle" style={{ backgroundColor: selectedGroup.avatarColor || '#e06c75', width: 42, height: 42 }}>
+                      {selectedGroup.isCommunity ? <Globe size={20} /> : selectedGroup.name[0].toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <h3>{selectedGroup.name}</h3>
                     <span className="drawer-sub">
@@ -1098,7 +2724,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               {/* Creator Banner */}
               <div className="drawer-creator-banner">
                 <Crown size={14} color="#fbbf24" />
-                <span>Founded by <strong>@{selectedGroup.creator}</strong> {isCreator && '(You - Main Admin)'}</span>
+                <span>Founded by <strong>{allUsers.find(u => u.username === selectedGroup.creator)?.displayName || selectedGroup.creator}</strong> {isCreator && '(You - Main Admin)'}</span>
               </div>
 
               {selectedGroup.description && (
@@ -1126,7 +2752,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   onClick={() => setDrawerTab('members')}
                 >
                   <Users size={14} />
-                  <span>Members</span>
+                  <span>Members ({drawerMemberList.length}){activeGroupCount > 0 ? ` • ${activeGroupCount} active` : ''}</span>
                 </button>
                 <button
                   className={`drawer-tab-btn ${drawerTab === 'settings' ? 'active' : ''}`}
@@ -1142,6 +2768,18 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                   <ImageIcon size={14} />
                   <span>Media ({sharedMediaMessages.length})</span>
                 </button>
+                {isAdmin && (
+                  <button
+                    className={`drawer-tab-btn ${drawerTab === 'requests' ? 'active' : ''}`}
+                    onClick={() => setDrawerTab('requests')}
+                  >
+                    <UserPlus size={14} />
+                    <span>Requests {pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}</span>
+                    {pendingRequests.length > 0 && (
+                      <span className="drawer-badge-pulse">{pendingRequests.length}</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* TAB 1: MEMBERS & ROLES */}
@@ -1168,22 +2806,70 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                       const isOwner = m === selectedGroup.creator;
                       const mRole = selectedGroup.roles?.[m] || (isOwner ? 'admin' : 'member');
                       const isSelf = m === currentUser.username;
+                      const isMemberActive = u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
 
                       return (
                         <div key={m} className="drawer-member-item">
-                          <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
-                            {m[0].toUpperCase()}
+                          <div style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                            {u?.avatarUrl ? (
+                              <img
+                                src={u.avatarUrl}
+                                alt={m}
+                                className="avatar-circle"
+                                style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: `1.5px solid ${u.avatarColor || '#3b82f6'}`
+                                }}
+                              />
+                            ) : (
+                              <div className="avatar-circle" style={{ backgroundColor: u?.avatarColor || '#3b82f6' }}>
+                                {m[0].toUpperCase()}
+                              </div>
+                            )}
+                            {isMemberActive && (
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '0px',
+                                  right: '0px',
+                                  width: '10px',
+                                  height: '10px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#10b981',
+                                  border: '2px solid #1a0a11',
+                                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)'
+                                }}
+                                title="Active now"
+                              />
+                            )}
                           </div>
                           <div className="drawer-member-info">
                             <div className="member-name-row">
-                              <span className="drawer-member-name">{m} {isSelf && '(You)'}</span>
+                              <span className="drawer-member-name">{u?.displayName || m} {isSelf && '(You)'}</span>
                               {isOwner && <span className="role-tag-badge creator"><Crown size={10} /> Creator</span>}
                               {!isOwner && mRole === 'admin' && <span className="role-tag-badge admin"><Shield size={10} /> Admin</span>}
                               {!isOwner && mRole === 'moderator' && <span className="role-tag-badge mod">Mod</span>}
                             </div>
-                            <span className="member-sub-info">
-                              {isOwner ? 'Main Administrator (Founder)' : (mRole === 'admin' ? 'Co-Administrator' : (mRole === 'moderator' ? 'Moderator' : 'Member'))}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '1px' }}>
+                              <span className="member-sub-info">
+                                {isOwner ? 'Main Administrator (Founder)' : (mRole === 'admin' ? 'Co-Administrator' : (mRole === 'moderator' ? 'Moderator' : 'Member'))}
+                              </span>
+                              {isMemberActive && (
+                                <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <Circle size={5} color="#10b981" fill="#10b981" />
+                                  <span>Active now</span>
+                                </span>
+                              )}
+                              {u?.phoneNumber && (
+                                <span style={{ fontSize: '0.68rem', color: '#ee7882', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <Phone size={9} />
+                                  <span>{u.phoneNumber}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {/* 3-Dots Governance Menu (Owner & Admins can promote/demote/kick) */}
@@ -1360,6 +3046,76 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
                         {editingInfo ? (
                           <form onSubmit={handleSaveGroupInfo} className="edit-info-form">
+                            {/* Group Photo Edit */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                              {editAvatarUrl || selectedGroup.avatarUrl ? (
+                                <img
+                                  src={editAvatarUrl || selectedGroup.avatarUrl}
+                                  alt="Group Photo"
+                                  style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    borderRadius: '50%',
+                                    background: selectedGroup.avatarColor || '#e06c75',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {selectedGroup.name[0].toUpperCase()}
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                ref={editGroupFileInputRef}
+                                onChange={(e) => handleGroupPhotoSelect(e, true)}
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => editGroupFileInputRef.current?.click()}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                                  color: '#f8fafc',
+                                  padding: '6px 10px',
+                                  borderRadius: '8px',
+                                  fontSize: '0.74rem',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                <Camera size={13} />
+                                <span>Change Photo</span>
+                              </button>
+                              {(editAvatarUrl || selectedGroup.avatarUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditAvatarUrl(null)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    padding: '6px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.74rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+
                             <input
                               type="text"
                               placeholder="Group Name"
@@ -1384,6 +3140,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                             onClick={() => {
                               setEditName(selectedGroup.name);
                               setEditDesc(selectedGroup.description || '');
+                              setEditAvatarUrl(selectedGroup.avatarUrl || null);
                               setEditingInfo(true);
                             }}
                           >
@@ -1400,7 +3157,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                         <ShieldCheck size={18} color="#10b981" />
                         <div>
                           <h5>Group Rules &amp; Permissions</h5>
-                          <p>These governance rules are configured by Main Admin <strong>@{selectedGroup.creator}</strong>.</p>
+                          <p>These governance rules are configured by Main Admin <strong>{allUsers.find(u => u.username === selectedGroup.creator)?.displayName || selectedGroup.creator}</strong>.</p>
                         </div>
                       </div>
 
@@ -1475,6 +3232,114 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                                 <span className="doc-type-text">{media.mimeType.split('/')[1] || 'file'}</span>
                               </div>
                             )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: PENDING JOIN REQUESTS (ADMIN ONLY) */}
+              {drawerTab === 'requests' && isAdmin && (
+                <div className="drawer-requests-section">
+                  {pendingRequests.length === 0 ? (
+                    <div className="empty-requests-box">
+                      <UserPlus size={32} color="#64748b" />
+                      <p>No pending entry requests.</p>
+                      <span>New requests to enter this community will appear here for admin confirmation.</span>
+                    </div>
+                  ) : (
+                    <div className="drawer-requests-list">
+                      {pendingRequests.map(req => {
+                        const reqUser = allUsers.find(u => u.username === req.requester) || { username: req.requester, displayName: req.requester };
+                        return (
+                          <div key={req.id} className="drawer-request-card animate-fade-in">
+                            <div className="request-card-header">
+                              <div
+                                className="request-user-info"
+                                onClick={() => setShowProfileModalUser({ user: reqUser, request: req })}
+                                style={{ cursor: 'pointer' }}
+                                title="Click to view full user profile"
+                              >
+                                {reqUser.avatarUrl ? (
+                                  <img
+                                    src={reqUser.avatarUrl}
+                                    alt={req.requester}
+                                    className="request-user-avatar"
+                                    style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      borderRadius: '50%',
+                                      objectFit: 'cover',
+                                      border: `2px solid ${reqUser.avatarColor || '#e06c75'}`
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    className="request-user-avatar"
+                                    style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      borderRadius: '50%',
+                                      backgroundColor: reqUser.avatarColor || '#e06c75',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 'bold',
+                                      color: '#fff'
+                                    }}
+                                  >
+                                    {req.requester[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="request-names-column">
+                                  <div className="request-display-name">
+                                    <strong>{reqUser.displayName || req.requester}</strong>
+                                    {reqUser.isOnline && <span className="online-dot-mini" title="Online now" />}
+                                  </div>
+                                  <span className="request-username-tag">@{req.requester}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="view-profile-link-btn"
+                                onClick={() => setShowProfileModalUser({ user: reqUser, request: req })}
+                              >
+                                View Profile
+                              </button>
+                            </div>
+
+                            {req.note ? (
+                              <div className="request-note-quote">
+                                <div className="note-quote-label">Intro / Reason to Join:</div>
+                                <div className="note-quote-text">"{req.note}"</div>
+                              </div>
+                            ) : (
+                              <div className="request-note-quote empty">
+                                <em>No introduction note provided.</em>
+                              </div>
+                            )}
+
+                            <div className="request-card-actions">
+                              <button
+                                type="button"
+                                className="btn-approve-request"
+                                onClick={() => handleApproveJoinRequest(req.id, selectedGroup.id)}
+                              >
+                                <Check size={14} />
+                                <span>Confirm &amp; Welcome</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-reject-request"
+                                onClick={() => handleRejectJoinRequest(req.id, selectedGroup.id)}
+                              >
+                                <X size={14} />
+                                <span>Decline</span>
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -1594,7 +3459,7 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
               </div>
 
               {/* Member Search Bar */}
-              <div className="group-search-bar" style={{ margin: '4px 0 10px', borderRadius: 8 }}>
+              <div className="group-search-bar" style={{ margin: '4px 0 10px', borderRadius: '9999px' }}>
                 <Search size={14} color="#ee7882" />
                 <input
                   type="text"
@@ -1614,10 +3479,25 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                       className="add-member-item"
                       onClick={() => handleAddMember(user.username)}
                     >
-                      <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
-                        {user.username[0].toUpperCase()}
-                      </div>
-                      <span className="member-name">{user.username}</span>
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.username}
+                          className="avatar-circle"
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                          }}
+                        />
+                      ) : (
+                        <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
+                          {user.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <span className="member-name">{user.displayName || user.username}</span>
                       <button className="add-btn-badge" type="button">
                         <Plus size={14} />
                         <span>Add</span>
@@ -1634,6 +3514,36 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
             </div>
           </div>
         )}
+
+        {/* Message Long-press / Right-click Action Popup */}
+        {activePopupMsg && (
+          <MessageActionPopup
+            message={activePopupMsg.msg}
+            msgMeta={activePopupMsg.msgMeta}
+            isMine={activePopupMsg.isMine}
+            anchorRect={activePopupMsg.anchorRect}
+            onClose={() => setActivePopupMsg(null)}
+            onReact={(emoji) => toggleGroupReaction(activePopupMsg.msg.id, emoji)}
+            onReply={() => {
+              setReplyingTo({
+                id: activePopupMsg.msg.id,
+                sender: activePopupMsg.msg.sender,
+                text: activePopupMsg.msgMeta?.text || (activePopupMsg.msgMeta?.isVoice ? '🎤 Voice Note' : (activePopupMsg.msg?.mediaId ? '📷 Attachment' : 'Message'))
+              });
+              setTimeout(() => messageInputRef.current?.focus(), 60);
+            }}
+            onPin={() => handleTogglePin(activePopupMsg.msg.id)}
+            isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
+            isModerator={isModerator}
+            allUsers={allUsers}
+            onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
+          />
+        )}
+
+        {renderJoinModal()}
+        {renderPendingModal()}
+        {renderProfileModal()}
+        {renderChatActionAndLockModals()}
       </div>
     );
   }
@@ -1696,6 +3606,25 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           <Globe size={14} />
           <span>Communities</span>
         </button>
+
+        {archivedGroups.size > 0 && (
+          <button
+            type="button"
+            className={`filter-pill ${showArchivedView ? 'active' : ''}`}
+            onClick={() => setShowArchivedView(prev => !prev)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: showArchivedView ? 'linear-gradient(135deg, #ee7882 0%, #d64045 100%)' : 'rgba(238, 120, 130, 0.12)',
+              color: showArchivedView ? '#ffffff' : '#ee7882',
+              border: `1px solid ${showArchivedView ? '#ee7882' : 'rgba(238, 120, 130, 0.35)'}`
+            }}
+          >
+            {showArchivedView ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+            <span>{showArchivedView ? 'All Spaces' : `Archived (${archivedGroups.size})`}</span>
+          </button>
+        )}
       </div>
 
       {/* Groups Grid / List */}
@@ -1734,56 +3663,185 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           {filteredGroups.map(group => {
             const isGroupOwner = group.creator === currentUser.username;
             const groupRole = group.roles?.[currentUser.username] || (isGroupOwner ? 'admin' : 'member');
-            const memberNames = group.isCommunity ? allUsers.map(u => u.username) : group.members || [];
-            const previewMembers = memberNames.slice(0, 4);
+            const isGroupMember = (group.members || []).includes(currentUser?.username);
+            const hasPendingReq = (group.joinRequests || []).some(
+              r => r.requester === currentUser?.username && r.status === 'pending'
+            );
+            const memberNames = (group.members && group.members.length > 0) ? group.members : [group.creator];
+            const activeCardMembers = memberNames.filter(mName => {
+              const u = allUsers.find(user => user.username === mName) || allUsers.find(user => user.username.toLowerCase() === mName.toLowerCase());
+              return u && (u.isOnline || (u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 120000));
+            });
+            const cardActiveCount = activeCardMembers.length;
+            const previewMembers = cardActiveCount > 0 ? activeCardMembers.slice(0, 4) : memberNames.slice(0, 4);
 
             return (
               <div
                 key={group.id}
                 className="group-card"
-                onClick={() => setSelectedGroup(group)}
+                onClick={() => {
+                  handleSelectGroupWithLock(group);
+                  if (onClearGroupUnread) onClearGroupUnread(group.id);
+                  triggerMarkGroupSeen(group.id);
+                }}
               >
                 <div className="group-card-top">
-                  <div
-                    className="avatar-circle group-card-avatar"
-                    style={{ backgroundColor: group.avatarColor || '#e06c75' }}
-                  >
-                    {group.isCommunity ? <Globe size={22} /> : group.name[0].toUpperCase()}
-                  </div>
+                  {group.avatarUrl ? (
+                    <img
+                      src={group.avatarUrl}
+                      alt={group.name}
+                      className="avatar-circle group-card-avatar"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: `2px solid ${group.avatarColor || '#e06c75'}`
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="avatar-circle group-card-avatar"
+                      style={{ backgroundColor: group.avatarColor || '#e06c75' }}
+                    >
+                      {group.isCommunity ? <Globe size={22} /> : group.name[0].toUpperCase()}
+                    </div>
+                  )}
                   <div className="group-card-header-info">
                     <div className="group-card-name-row">
-                      <h4>{group.name}</h4>
-                      <div className="group-card-badges">
-                        {isGroupOwner && <span className="group-role-badge creator"><Crown size={10} /> Owner</span>}
-                        {!isGroupOwner && groupRole === 'admin' && <span className="group-role-badge admin"><Shield size={10} /> Admin</span>}
-                        <span className={`group-type-badge ${group.isCommunity ? 'community' : 'group'}`}>
-                          {group.isCommunity ? 'Community' : 'Private'}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <h4 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.name}>{group.name}</h4>
+                        {unreadGroupMap && unreadGroupMap[group.id] > 0 && (
+                          <span
+                            style={{
+                              background: '#ee7882',
+                              color: '#ffffff',
+                              fontSize: '0.66rem',
+                              fontWeight: 'bold',
+                              borderRadius: '9999px',
+                              padding: '1px 7px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 0 8px rgba(238, 120, 130, 0.6)',
+                              flexShrink: 0
+                            }}
+                          >
+                            {unreadGroupMap[group.id] > 99 ? '99+' : unreadGroupMap[group.id]}
+                          </span>
+                        )}
+                        {pinnedGroups.has(group.id) && (
+                          <span title="Pinned to top" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Pin size={12} fill="#ee7882" />
+                          </span>
+                        )}
+                        {lockedGroups.has(group.id) && (
+                          <span title="Locked with PIN" style={{ display: 'inline-flex', alignItems: 'center', color: '#ee7882', flexShrink: 0 }}>
+                            <Lock size={12} />
+                          </span>
+                        )}
+                        {mutedGroups.has(group.id) && (
+                          <span title="Notifications muted" style={{ display: 'inline-flex', alignItems: 'center', color: '#a69ea2', flexShrink: 0 }}>
+                            <BellOff size={12} />
+                          </span>
+                        )}
                       </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                        <div className="group-card-badges">
+                          {isGroupOwner && <span className="group-role-badge creator"><Crown size={10} /> Owner</span>}
+                          {!isGroupOwner && groupRole === 'admin' && <span className="group-role-badge admin"><Shield size={10} /> Admin</span>}
+                          <span className={`group-type-badge ${group.isCommunity ? 'community' : 'group'}`}>
+                            {group.isCommunity ? 'Community' : 'Private'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="peer-menu-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActionMenuGroup(group);
+                          }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '50%',
+                            width: '28px',
+                            height: '28px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#cbd5e1',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                          title="Group Options (Pin, Lock, Archive, Mute, Clear)"
+                        >
+                          <MoreVertical size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Active Count OR Members Names at bottom of Group/Community Name */}
+                    <div style={{ margin: '3px 0 5px', fontSize: '0.73rem', minWidth: 0 }}>
+                      {cardActiveCount > 0 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#ff9ea8', fontWeight: 600 }}>
+                          <Circle size={6} color="#ee7882" fill="#ee7882" />
+                          <span>{cardActiveCount} active now</span>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>•</span>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                            {group.isCommunity ? 'Public' : `${memberNames.length} members`}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={memberNames.map(m => allUsers.find(u => u.username === m)?.displayName || m).join(', ')}>
+                          <strong style={{ color: '#ee7882', fontWeight: 600 }}>Members: </strong>
+                          <span>{memberNames.map(m => m === currentUser.username ? 'You' : (allUsers.find(u => u.username === m)?.displayName || m)).slice(0, 4).join(', ')}{memberNames.length > 4 ? ` +${memberNames.length - 4}` : ''}</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Member Avatars Stack */}
                     <div className="group-card-members-row">
                       <div className="member-avatar-stack">
                         {previewMembers.map((mName, i) => {
-                          const mUser = allUsers.find(u => u.username === mName);
+                          const mUser = allUsers.find(u => u.username === mName) || allUsers.find(u => u.username.toLowerCase() === mName.toLowerCase());
                           return (
-                            <div
-                              key={mName}
-                              className="stack-avatar"
-                              style={{
-                                backgroundColor: mUser?.avatarColor || '#3b82f6',
-                                zIndex: 10 - i
-                              }}
-                              title={mName}
-                            >
-                              {mName[0].toUpperCase()}
-                            </div>
+                            mUser?.avatarUrl ? (
+                              <img
+                                key={mName}
+                                src={mUser.avatarUrl}
+                                alt={mName}
+                                className="stack-avatar"
+                                style={{
+                                  width: '26px',
+                                  height: '26px',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: `1.5px solid ${mUser.avatarColor || '#3b82f6'}`,
+                                  zIndex: 10 - i
+                                }}
+                                title={mUser.displayName || mName}
+                              />
+                            ) : (
+                              <div
+                                key={mName}
+                                className="stack-avatar"
+                                style={{
+                                  backgroundColor: mUser?.avatarColor || '#3b82f6',
+                                  zIndex: 10 - i
+                                }}
+                                title={mUser?.displayName || mName}
+                              >
+                                {mName[0].toUpperCase()}
+                              </div>
+                            )
                           );
                         })}
                       </div>
                       <span className="group-card-members-count">
-                        {group.isCommunity ? 'Public Discovery' : `${memberNames.length} ${memberNames.length === 1 ? 'member' : 'members'}`}
+                        {cardActiveCount > 0
+                          ? `${cardActiveCount} online`
+                          : (group.isCommunity ? 'Public Discovery' : `${memberNames.length} ${memberNames.length === 1 ? 'member' : 'members'}`)}
                       </span>
                     </div>
                   </div>
@@ -1795,9 +3853,38 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
 
                 <div className="group-card-footer">
                   <span className="group-creator-label">Founded by {group.creator}</span>
-                  <button className="open-group-btn" type="button">
-                    <span>{group.isCommunity ? 'Open Space' : 'Open Chat'}</span>
-                  </button>
+                  {group.isCommunity && !isGroupMember && !isGroupOwner ? (
+                    hasPendingReq ? (
+                      <button
+                        className="open-group-btn pending-btn"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingModalGroup(group);
+                        }}
+                      >
+                        <Clock size={13} />
+                        <span>Request Pending</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="open-group-btn enter-btn"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setJoinModalGroup(group);
+                          setJoinNote('');
+                        }}
+                      >
+                        <UserPlus size={13} />
+                        <span>Enter Community</span>
+                      </button>
+                    )
+                  ) : (
+                    <button className="open-group-btn" type="button">
+                      <span>{group.isCommunity ? 'Open Space' : 'Open Chat'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1840,6 +3927,81 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                 </button>
               </div>
 
+              {/* Group Photo Picker */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '14px 0 10px' }}>
+                <div style={{ position: 'relative' }}>
+                  {groupAvatarUrl ? (
+                    <img
+                      src={groupAvatarUrl}
+                      alt="Preview"
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '2px solid #ee7882'
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        background: 'rgba(238, 120, 130, 0.15)',
+                        border: '2px dashed rgba(238, 120, 130, 0.4)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ee7882',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => groupFileInputRef.current?.click()}
+                    >
+                      <Camera size={22} />
+                      <span style={{ fontSize: '0.65rem', marginTop: '2px' }}>Photo</span>
+                    </div>
+                  )}
+
+                  <input
+                    type="file"
+                    ref={groupFileInputRef}
+                    onChange={(e) => handleGroupPhotoSelect(e, false)}
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                  />
+
+                  {groupAvatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setGroupAvatarUrl(null)}
+                      style={{
+                        position: 'absolute',
+                        top: '-4px',
+                        right: '-4px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Remove Photo"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '6px' }}>
+                  {groupAvatarUrl ? 'Group photo selected' : 'Upload group icon / photo (optional)'}
+                </span>
+              </div>
+
               {/* Group Name */}
               <div className="form-group">
                 <label>Name</label>
@@ -1880,10 +4042,25 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
                             );
                           }}
                         >
-                          <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
-                            {user.username[0].toUpperCase()}
-                          </div>
-                          <span className="member-select-name">{user.username}</span>
+                          {user.avatarUrl ? (
+                            <img
+                              src={user.avatarUrl}
+                              alt={user.username}
+                              className="avatar-circle"
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: `1.5px solid ${user.avatarColor || '#3b82f6'}`
+                              }}
+                            />
+                          ) : (
+                            <div className="avatar-circle" style={{ backgroundColor: user.avatarColor }}>
+                              {user.username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span className="member-select-name">{user.displayName || user.username}</span>
                           {isSelected && <CheckCircle2 size={16} color="#10b981" />}
                         </div>
                       );
@@ -1910,6 +4087,11 @@ export default function Groups({ currentUser, allUsers = [], serverUrl, wsClient
           </div>
         </div>
       )}
+
+      {renderJoinModal()}
+      {renderPendingModal()}
+      {renderProfileModal()}
+      {renderChatActionAndLockModals()}
     </div>
   );
 }

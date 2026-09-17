@@ -82,10 +82,12 @@ const MediaUploader = forwardRef(function MediaUploader(
     clearFile: () => clearFile()
   }));
 
-  // Clean up object URL on unmount or file clear
+  const handedOffUrlRef = useRef(null);
+
+  // Clean up object URL on unmount only if NOT handed off to parent
   useEffect(() => {
     return () => {
-      if (previewUrl) {
+      if (previewUrl && previewUrl !== handedOffUrlRef.current) {
         URL.revokeObjectURL(previewUrl);
       }
     };
@@ -148,6 +150,8 @@ const MediaUploader = forwardRef(function MediaUploader(
       const data = await res.json();
       if (data.success) {
         setEncryptedMediaId(mediaId);
+        const resolvedPreviewUrl = localUrl || previewUrl || URL.createObjectURL(file);
+        handedOffUrlRef.current = resolvedPreviewUrl;
         onMediaEncrypted({
           mediaId,
           mimeType: optimizedMime || file.type || 'application/octet-stream',
@@ -155,7 +159,7 @@ const MediaUploader = forwardRef(function MediaUploader(
           originalName: file.name,
           fileSize: file.size,
           mediaKeyB64,
-          localPreviewUrl: localUrl || previewUrl || URL.createObjectURL(file),
+          localPreviewUrl: resolvedPreviewUrl,
           isImage: Boolean(file.type && file.type.startsWith('image/')),
           isVideo: Boolean(file.type && file.type.startsWith('video/'))
         });
@@ -181,8 +185,11 @@ const MediaUploader = forwardRef(function MediaUploader(
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
+    handedOffUrlRef.current = null;
     setSelectedFile(null);
     setEncryptedMediaId(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
     onMediaEncrypted(null);
     onUploadStateChange?.(false);
   };

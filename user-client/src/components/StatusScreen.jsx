@@ -354,22 +354,44 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                     )}
 
                     {mediaDecrypted ? (
-                      <img
-                        src={mediaDecrypted.objectUrl}
-                        alt="Status thumbnail"
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          position: 'absolute',
-                          top: 0,
-                          left: 0
-                        }}
-                      />
+                      mediaDecrypted.mimeType?.startsWith('video/') ? (
+                        <video
+                          src={mediaDecrypted.objectUrl}
+                          muted
+                          playsInline
+                          autoPlay
+                          loop
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            pointerEvents: 'none'
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={mediaDecrypted.objectUrl}
+                          alt="Status thumbnail"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0
+                          }}
+                        />
+                      )
                     ) : status.mediaId ? (
                       <div className="status-card-media-icon">
-                        <ImageIcon size={22} color="#ffffff" />
-                        <span>Photo / Media</span>
+                        <Loader2 size={18} className="animate-spin" color="#ee7882" />
+                        <span style={{ fontSize: '0.72rem', marginTop: '4px', color: '#ffb3ba' }}>Loading media...</span>
                       </div>
                     ) : (
                       <div className="status-card-preview-text">

@@ -454,29 +454,57 @@ export async function encryptPost(payloadText, recipientsWithPublicKeys = [], me
  * 19. Helper: High-Level Multi-Recipient Envelope Decryption for Posts, Statuses, and Group Messages
  */
 export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPrivateKey, authorPublicKey = null) {
-  if (!keyEnvelopes || !keyEnvelopes[myUsername]) {
+  if (!keyEnvelopes || typeof keyEnvelopes !== 'object') {
+    throw new Error(`No key envelopes found`);
+  }
+
+  // Prioritize exact username match first, then case-insensitive candidates
+  const candidateKeys = [];
+  if (myUsername && keyEnvelopes[myUsername]) {
+    candidateKeys.push(myUsername);
+  }
+  Object.keys(keyEnvelopes).forEach(k => {
+    if (k.toLowerCase() === (myUsername || '').toLowerCase() && !candidateKeys.includes(k)) {
+      candidateKeys.push(k);
+    }
+  });
+
+  if (candidateKeys.length === 0) {
     throw new Error(`No key envelope for ${myUsername}`);
   }
 
-  const envelope = keyEnvelopes[myUsername];
   let postKey = null;
 
-  if (envelope.ephemeralPublicKey) {
-    const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
-    const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
-    const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
-    if (rawKeyB64.startsWith("[Decryption Error")) {
-      throw new Error("Failed to unwrap post key");
+  for (const candidateKey of candidateKeys) {
+    const envelope = keyEnvelopes[candidateKey];
+    if (!envelope) continue;
+
+    if (envelope.ephemeralPublicKey) {
+      try {
+        const ephemeralPubKey = await importPublicKey(envelope.ephemeralPublicKey);
+        const sharedKey = await deriveSharedAESKey(myPrivateKey, ephemeralPubKey);
+        const rawKeyB64 = await decryptText(sharedKey, envelope.ciphertext, envelope.iv);
+        if (rawKeyB64 && !rawKeyB64.startsWith("[Decryption Error")) {
+          postKey = await getSubtleCrypto().importKey(
+            "raw",
+            base64ToBuffer(rawKeyB64),
+            { name: "AES-GCM" },
+            true,
+            ["encrypt", "decrypt"]
+          );
+          if (postKey) break;
+        }
+      } catch (e) {
+        // try next candidate
+      }
     }
-    postKey = await getSubtleCrypto().importKey(
-      "raw",
-      base64ToBuffer(rawKeyB64),
-      { name: "AES-GCM" },
-      true,
-      ["encrypt", "decrypt"]
-    );
-  } else if (authorPublicKey) {
-    postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
+
+    if (!postKey && authorPublicKey) {
+      try {
+        postKey = await unwrapPostKey(envelope, myPrivateKey, authorPublicKey);
+        if (postKey) break;
+      } catch (e) {}
+    }
   }
 
   if (!postKey) throw new Error("Could not derive post key");
@@ -488,17 +516,41 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
 
   try {
     const parsed = JSON.parse(decryptedRaw);
-    if (parsed.text !== undefined || parsed.mediaKey !== undefined) {
+    if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.mediaKey !== undefined)) {
+      let innerText = parsed.text || '';
+      let replyTo = parsed.replyTo || null;
+      let isVoice = !!parsed.isVoice;
+      let voiceDuration = parsed.voiceDuration || 0;
+
+      try {
+        const nestedParsed = JSON.parse(innerText);
+        if (nestedParsed && typeof nestedParsed === 'object') {
+          if (nestedParsed.text !== undefined) innerText = nestedParsed.text;
+          if (nestedParsed.replyTo !== undefined) replyTo = nestedParsed.replyTo;
+          if (nestedParsed.isVoice !== undefined) isVoice = !!nestedParsed.isVoice;
+          if (nestedParsed.voiceDuration !== undefined) voiceDuration = nestedParsed.voiceDuration;
+        }
+      } catch (e) {}
+
       return {
-        text: parsed.text || '',
-        mediaKey: parsed.mediaKey || null
+        text: innerText,
+        mediaKey: parsed.mediaKey || null,
+        replyTo,
+        isVoice,
+        voiceDuration,
+        rawText: parsed.text || ''
       };
     }
   } catch (e) {}
 
   return {
     text: decryptedRaw,
-    mediaKey: null
+    mediaKey: null,
+    replyTo: null,
+    isVoice: false,
+    voiceDuration: 0,
+    rawText: decryptedRaw
   };
 }
+
 

@@ -18,25 +18,10 @@ import {
   testEngineHealth,
   isCapacitorNative
 } from './utils/engineConfig';
-import { decryptionCache } from './utils/decryptionCache';
+import { soundEffects } from './utils/soundEffects';
 
 function playNotificationChime() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12); // A5
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
-  } catch (e) {}
+  soundEffects.playNotification();
 }
 
 export default function App() {
@@ -212,12 +197,14 @@ export default function App() {
   // Initialize Native Capacitor Plugins
   useEffect(() => {
     if (isCapacitorNative()) {
-      import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+      const statusBarPkg = '@capacitor/status-bar';
+      import(/* @vite-ignore */ statusBarPkg).then(({ StatusBar, Style }) => {
         StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
         StatusBar.setBackgroundColor({ color: '#0a0305' }).catch(() => {});
       }).catch(() => {});
 
-      import('@capacitor/splash-screen').then(({ SplashScreen }) => {
+      const splashPkg = '@capacitor/splash-screen';
+      import(/* @vite-ignore */ splashPkg).then(({ SplashScreen }) => {
         SplashScreen.hide().catch(() => {});
       }).catch(() => {});
     }

@@ -48,6 +48,7 @@ import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import StatusTray from './StatusTray';
 import { decryptionCache } from '../utils/decryptionCache';
+import { soundEffects } from '../utils/soundEffects';
 
 const POPULAR_EMOJIS = [
   '❤️', '🔥', '👍', '😂', '🎉', '🚀', '✨', '🔒',
@@ -443,6 +444,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
           }
         }
 
+        soundEffects.playMessageSent();
         setNewPostText('');
         setAttachedMedia(null);
         setActiveTool(null);

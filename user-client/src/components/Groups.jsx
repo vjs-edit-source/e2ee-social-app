@@ -65,6 +65,7 @@ import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { localSearchIndex } from '../search/searchIndex';
 import { decryptionCache } from '../utils/decryptionCache';
+import { soundEffects } from '../utils/soundEffects';
 
 export default function Groups({
   currentUser,
@@ -1080,6 +1081,7 @@ export default function Groups({
         if (prev.some(m => m.id === data.message.id)) return prev;
         return [...prev, data.message];
       });
+      soundEffects.playMessageSent();
       setIsRecordingVoice(false);
       setReplyingTo(null);
     } catch (err) {
@@ -1154,6 +1156,7 @@ export default function Groups({
         [tempId]: decryptedMsgCache.current[tempId]
       }));
       setMessages(prev => [...prev, optimisticMsg]);
+      soundEffects.playMessageSent();
       setInputMessage('');
       clearAttachment();
       setReplyingTo(null);

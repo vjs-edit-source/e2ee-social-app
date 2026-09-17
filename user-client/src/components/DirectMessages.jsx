@@ -59,6 +59,7 @@ import ChatLockModal from './ChatLockModal';
 import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { decryptionCache } from '../utils/decryptionCache';
+import { soundEffects } from '../utils/soundEffects';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -1290,6 +1291,7 @@ export default function DirectMessages({
           [msgData.message.id]: voiceEntry
         }));
         setMessages(prev => [...prev, msgData.message]);
+        soundEffects.playMessageSent();
         setIsRecordingVoice(false);
         setReplyingTo(null);
       }
@@ -1353,6 +1355,7 @@ export default function DirectMessages({
         [tempId]: decryptedMsgCache.current[tempId]
       }));
       setMessages(prev => [...prev, optimisticMsg]);
+      soundEffects.playMessageSent();
       setInputMessage('');
       clearAttachment();
       setReplyingTo(null);

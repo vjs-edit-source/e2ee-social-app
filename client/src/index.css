@@ -33,6 +33,21 @@
   padding: 0;
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 0.9s linear infinite !important;
+  display: inline-block;
+  transform-origin: center center;
+}
+
 html, body {
   height: 100%;
   overscroll-behavior-y: none;

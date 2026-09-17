@@ -7,6 +7,11 @@ import {
   encryptPrivateKeyVault,
   decryptPrivateKeyVault
 } from './e2ee.js';
+import {
+  generate12WordMnemonic,
+  validateMnemonic,
+  mnemonicToDeterministicPassphrase
+} from './mnemonic.js';
 
 const STORAGE_KEY = 'e2ee_social_user_session';
 
@@ -24,11 +29,19 @@ function getDefaultVaultPassphrase(username) {
  * Initialize or restore local user identity and keypair
  * Seamlessly syncs with Zero-Knowledge Cloud Vault so keys persist across Incognito / new devices automatically
  */
-export async function initializeUserIdentity(username, serverUrl = '') {
+export async function initializeUserIdentity(username, serverUrl = '', customDisplayName = null) {
   const defaultPassphrase = getDefaultVaultPassphrase(username);
 
   // 1. Check if session already exists in localStorage
   const existingRaw = localStorage.getItem(`${STORAGE_KEY}_${username}`);
+  const savedProfile = JSON.parse(localStorage.getItem(`ciphersocial_profile_${username}`) || '{}');
+
+  const cleanCustomDisplay = (typeof customDisplayName === 'string' && customDisplayName.trim()) ? customDisplayName.trim() : null;
+  if (cleanCustomDisplay) {
+    savedProfile.displayName = cleanCustomDisplay;
+    localStorage.setItem(`ciphersocial_profile_${username}`, JSON.stringify(savedProfile));
+  }
+
   if (existingRaw) {
     try {
       const data = JSON.parse(existingRaw);
@@ -42,7 +55,10 @@ export async function initializeUserIdentity(username, serverUrl = '') {
         localStorage.setItem('e2ee_current_active_user', username);
         return {
           username: data.username,
-          avatarColor: data.avatarColor || '#3b82f6',
+          displayName: cleanCustomDisplay || savedProfile.displayName || data.displayName || data.username,
+          bio: savedProfile.bio !== undefined ? savedProfile.bio : (data.bio || ''),
+          avatarUrl: savedProfile.avatarUrl || data.avatarUrl || null,
+          avatarColor: savedProfile.avatarColor || data.avatarColor || '#3b82f6',
           spkiPublicKey: data.spkiPublicKey,
           keyPair: { publicKey, privateKey }
         };
@@ -81,7 +97,10 @@ export async function initializeUserIdentity(username, serverUrl = '') {
 
           const sessionData = {
             username,
-            avatarColor: serverUser?.avatarColor || randomColor(),
+            displayName: serverUser?.displayName || savedProfile.displayName || username,
+            bio: serverUser?.bio !== undefined ? serverUser.bio : (savedProfile.bio || ''),
+            avatarUrl: serverUser?.avatarUrl || savedProfile.avatarUrl || null,
+            avatarColor: serverUser?.avatarColor || savedProfile.avatarColor || randomColor(),
             spkiPublicKey,
             pkcs8PrivateKey
           };
@@ -92,6 +111,9 @@ export async function initializeUserIdentity(username, serverUrl = '') {
           console.log(`[Vault] Successfully auto-restored identity keypair for ${username}`);
           return {
             username,
+            displayName: sessionData.displayName,
+            bio: sessionData.bio,
+            avatarUrl: sessionData.avatarUrl,
             avatarColor: sessionData.avatarColor,
             spkiPublicKey,
             keyPair: { publicKey, privateKey }
@@ -138,6 +160,7 @@ export async function initializeUserIdentity(username, serverUrl = '') {
 
   return {
     username,
+    displayName: cleanCustomDisplay || username,
     avatarColor,
     spkiPublicKey,
     keyPair
@@ -222,6 +245,44 @@ export async function restoreAccountFromBackup(username, passphrase, serverUrl =
 
 export function getCurrentUsername() {
   return localStorage.getItem('e2ee_current_active_user') || null;
+}
+
+export function getUserMnemonic(username) {
+  if (!username) return null;
+  return localStorage.getItem(`ciphersocial_mnemonic_${username}`) || null;
+}
+
+export function ensureUserMnemonic(username) {
+  if (!username) return null;
+  let phrase = localStorage.getItem(`ciphersocial_mnemonic_${username}`);
+  if (!phrase) {
+    const words = generate12WordMnemonic();
+    phrase = words.join(' ');
+    localStorage.setItem(`ciphersocial_mnemonic_${username}`, phrase);
+  }
+  return phrase;
+}
+
+/**
+ * Restore account using 12-word mnemonic phrase
+ */
+export async function restoreAccountFromMnemonic(username, mnemonicPhrase, serverUrl = '') {
+  if (!validateMnemonic(mnemonicPhrase)) {
+    throw new Error("Invalid 12-word recovery phrase. Please check the spelling and order of words.");
+  }
+  const cleanMnemonic = mnemonicPhrase.trim().toLowerCase().replace(/\s+/g, ' ');
+  const passphrase = mnemonicToDeterministicPassphrase(cleanMnemonic, username);
+
+  // Save mnemonic locally
+  localStorage.setItem(`ciphersocial_mnemonic_${username}`, cleanMnemonic);
+
+  // Attempt restore using derived passphrase or default vault
+  try {
+    return await restoreAccountFromBackup(username, passphrase, serverUrl);
+  } catch (err) {
+    // If not found with seed passphrase, fallback to standard vault restore
+    return await restoreAccountFromBackup(username, '', serverUrl);
+  }
 }
 
 export function clearUserSession() {

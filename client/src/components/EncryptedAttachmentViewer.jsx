@@ -1,31 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { FileCode, Download, Image as ImageIcon, FileText, Film, Music, File, CheckCircle2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import {
+  FileCode,
+  Download,
+  Image as ImageIcon,
+  FileText,
+  Film,
+  Music,
+  File,
+  CheckCircle2,
+  Maximize2,
+  Minimize2,
+  X
+} from 'lucide-react';
+import { formatTruncatedFileName } from '../utils/fileUtils';
 
 function getFormatDisplayLabel(fileName, mimeType) {
   const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toUpperCase() : '';
   if (mimeType) {
     const m = mimeType.toLowerCase();
-    if (m.startsWith('image/')) return ext ? `${ext} Photo` : 'Photo';
-    if (m.startsWith('video/')) return ext ? `${ext} Video` : 'Video';
-    if (m.startsWith('audio/')) return ext ? `${ext} Audio` : 'Audio Recording';
-    if (m.includes('pdf')) return 'PDF Document';
-    if (m.includes('spreadsheet') || m.includes('excel') || ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return `${ext || 'Excel'} Spreadsheet`;
-    if (m.includes('word') || m.includes('document') || ext === 'DOCX' || ext === 'DOC') return `${ext || 'Word'} Document`;
-    if (m.includes('presentation') || m.includes('powerpoint') || ext === 'PPTX' || ext === 'PPT') return `${ext || 'PowerPoint'} Presentation`;
-    if (m.includes('zip') || m.includes('rar') || m.includes('7z') || m.includes('tar') || ext === 'ZIP') return `${ext || 'ZIP'} Archive`;
+    if (m.startsWith('image/')) return ext || 'PHOTO';
+    if (m.startsWith('video/')) return ext || 'VIDEO';
+    if (m.startsWith('audio/')) return ext || 'AUDIO';
+    if (m.includes('pdf')) return 'PDF';
+    if (m.includes('spreadsheet') || m.includes('excel') || ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return ext || 'EXCEL';
+    if (m.includes('word') || m.includes('document') || ext === 'DOCX' || ext === 'DOC') return ext || 'DOC';
+    if (m.includes('presentation') || m.includes('powerpoint') || ext === 'PPTX' || ext === 'PPT') return ext || 'PPT';
+    if (m.includes('zip') || m.includes('rar') || m.includes('7z') || m.includes('tar') || ext === 'ZIP') return ext || 'ZIP';
   }
-  if (ext === 'PDF') return 'PDF Document';
-  if (ext === 'XLSX' || ext === 'XLS' || ext === 'CSV') return `${ext} Spreadsheet`;
-  if (ext === 'DOCX' || ext === 'DOC') return `${ext} Document`;
-  if (ext === 'PPTX' || ext === 'PPT') return `${ext} Presentation`;
-  if (ext === 'ZIP' || ext === 'RAR' || ext === '7Z') return `${ext} Archive`;
-  if (ext) return `${ext} File`;
-  return 'File Attachment';
+  return ext || 'FILE';
 }
 
 export default function EncryptedAttachmentViewer({ objectUrl, originalName, mimeType, mediaId }) {
   const [textContent, setTextContent] = useState(null);
   const [isTextFile, setIsTextFile] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isZoomedActual, setIsZoomedActual] = useState(false);
 
   const fileName = originalName || `file_${mediaId.slice(0, 6)}`;
   const lowerName = fileName.toLowerCase();
@@ -37,6 +47,16 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   const isVideo = lowerMime.startsWith('video/') || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(lowerName);
   const isAudio = lowerMime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(lowerName);
   const isPdf = lowerMime.includes('pdf') || /\.pdf$/i.test(lowerName);
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsLightboxOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLightboxOpen]);
 
   useEffect(() => {
     if (!objectUrl) return;
@@ -55,7 +75,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
     }
   }, [objectUrl, lowerName, lowerMime]);
 
-  const handleDownload = () => {
+  const handleDownload = (e) => {
+    if (e) e.stopPropagation();
     const a = document.createElement('a');
     a.href = objectUrl;
     a.download = fileName;
@@ -64,19 +85,116 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
     document.body.removeChild(a);
   };
 
+  // Full Screen Big / Actual Size Lightbox Modal
+  // Full Screen Big / Actual Size Lightbox Modal
+  const renderLightbox = () => {
+    if (!isLightboxOpen) return null;
+    return createPortal(
+      <div className="lightbox-overlay" onClick={() => setIsLightboxOpen(false)}>
+        <div className="lightbox-container" onClick={e => e.stopPropagation()}>
+          {/* Sleek Floating Top Controls Island */}
+          <div className="lightbox-floating-header-wrapper">
+            <div className="lightbox-header-capsule">
+              <div className="lightbox-file-info">
+                <div className="lightbox-media-icon-badge">
+                  {isStandardImage ? <ImageIcon size={14} /> : isVideo ? <Film size={14} /> : <FileText size={14} />}
+                </div>
+                <span className="lightbox-filename" title={fileName}>
+                  {formatTruncatedFileName(fileName, 18)}
+                </span>
+                <span className="lightbox-badge">{formatLabel}</span>
+              </div>
+
+              <div className="lightbox-actions">
+                {isStandardImage && (
+                  <button
+                    type="button"
+                    className={`lightbox-action-btn ${isZoomedActual ? 'active' : ''}`}
+                    onClick={() => setIsZoomedActual(z => !z)}
+                    title={isZoomedActual ? "Fit to screen view" : "View at 100% Actual Size"}
+                  >
+                    {isZoomedActual ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    <span className="lightbox-btn-label">{isZoomedActual ? 'Fit Screen' : 'Actual Size'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="lightbox-action-btn download"
+                  onClick={handleDownload}
+                  title="Download original file"
+                >
+                  <Download size={15} />
+                  <span className="lightbox-btn-label">Download</span>
+                </button>
+                <button
+                  type="button"
+                  className="lightbox-action-btn close"
+                  onClick={() => setIsLightboxOpen(false)}
+                  title="Close viewer (Esc)"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Big Media Display */}
+          <div
+            className={`lightbox-body ${isZoomedActual ? 'actual-size-mode' : 'fit-mode'}`}
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            {isStandardImage ? (
+              <img
+                src={objectUrl}
+                alt={fileName}
+                className={`lightbox-image ${isZoomedActual ? 'actual-size' : 'fit-screen'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsZoomedActual(z => !z);
+                }}
+                title="Click to toggle fit / actual size"
+              />
+            ) : isVideo ? (
+              <video
+                controls
+                autoPlay
+                src={objectUrl}
+                className="lightbox-video"
+                onClick={e => e.stopPropagation()}
+              />
+            ) : null}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
   // 1. Standard images
   if (isStandardImage) {
     return (
-      <div className="post-media-container">
-        <img src={objectUrl} alt={formatLabel} className="post-media-img" loading="lazy" />
-        <div className="file-download-bar">
-          <span className="file-name-pill">{formatLabel}</span>
-          <button className="download-btn" onClick={handleDownload} type="button">
-            <Download size={14} />
-            <span>Download</span>
+      <>
+        <div className="post-media-container" onClick={() => setIsLightboxOpen(true)}>
+          <img src={objectUrl} alt={formatLabel} className="post-media-img clickable-media" loading="lazy" />
+          <button
+            type="button"
+            className="media-expand-hint-btn"
+            onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(true); }}
+            title="Click to view big & actual size"
+          >
+            <Maximize2 size={12} />
+            <span>Full Size</span>
           </button>
+          <div className="file-download-bar" onClick={e => e.stopPropagation()}>
+            <span className="file-name-pill" title={fileName}>{formatTruncatedFileName(fileName, 14)}</span>
+            <button className="download-btn" onClick={handleDownload} type="button">
+              <Download size={14} />
+              <span>Download</span>
+            </button>
+          </div>
         </div>
-      </div>
+        {renderLightbox()}
+      </>
     );
   }
 
@@ -88,8 +206,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <ImageIcon size={22} color="#ec4899" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
-              <span className="file-type-subtitle">Apple Photo (AES-256)</span>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
+              <span className="file-type-subtitle">Photo Format</span>
             </div>
           </div>
           <button className="primary-btn download-btn-card" onClick={handleDownload} type="button">
@@ -109,7 +227,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <FileCode size={22} color="#10b981" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
               <span className="file-type-subtitle">Document</span>
             </div>
           </div>
@@ -130,16 +248,28 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   // 4. Video
   if (isVideo) {
     return (
-      <div className="post-media-container">
-        <video controls src={objectUrl} className="post-media-img" preload="metadata" />
-        <div className="file-download-bar">
-          <span className="file-name-pill">{formatLabel}</span>
-          <button className="download-btn" onClick={handleDownload} type="button">
-            <Download size={14} />
-            <span>Download</span>
+      <>
+        <div className="post-media-container" style={{ position: 'relative' }}>
+          <video controls src={objectUrl} className="post-media-img" preload="metadata" />
+          <button
+            type="button"
+            className="media-expand-hint-btn"
+            onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(true); }}
+            title="Click to view big & actual size"
+          >
+            <Maximize2 size={12} />
+            <span>Full Size</span>
           </button>
+          <div className="file-download-bar" onClick={e => e.stopPropagation()}>
+            <span className="file-name-pill" title={fileName}>{formatTruncatedFileName(fileName, 14)}</span>
+            <button className="download-btn" onClick={handleDownload} type="button">
+              <Download size={14} />
+              <span>Download</span>
+            </button>
+          </div>
         </div>
-      </div>
+        {renderLightbox()}
+      </>
     );
   }
 
@@ -151,8 +281,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <Music size={22} color="#8b5cf6" />
             <div>
-              <div className="file-title-text">{formatLabel}</div>
-              <span className="file-type-subtitle">Audio Recording</span>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
+              <span className="file-type-subtitle">Audio</span>
             </div>
           </div>
         </div>
@@ -169,8 +299,8 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
           <div className="attachment-title">
             <FileText size={22} color="#f43f5e" />
             <div>
-              <div className="file-title-text">PDF Document</div>
-              <span className="file-type-subtitle">AES-256 Encrypted PDF File</span>
+              <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
+              <span className="file-type-subtitle">Encrypted PDF File</span>
             </div>
           </div>
           <button className="primary-btn download-btn-card" onClick={handleDownload} type="button">
@@ -187,15 +317,15 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
     <div className="attachment-card doc-card">
       <div className="attachment-header">
         <div className="attachment-title">
-          <FileText size={22} color="#3b82f6" />
+          <FileText size={22} color="#ee7882" />
           <div>
-            <div className="file-title-text">{formatLabel}</div>
-            <span className="file-type-subtitle">AES-256 Encrypted Attachment</span>
+            <div className="file-title-text" title={fileName}>{formatTruncatedFileName(fileName, 14)}</div>
+            <span className="file-type-subtitle">Encrypted File Attachment</span>
           </div>
         </div>
         <button className="primary-btn download-btn-card" onClick={handleDownload} type="button">
           <Download size={14} />
-          <span>Download Decrypted File</span>
+          <span>Download File</span>
         </button>
       </div>
     </div>

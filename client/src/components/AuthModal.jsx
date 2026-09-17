@@ -1,6 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, User, Key, Lock, DownloadCloud, CheckCircle2, Sparkles, Server, AlertTriangle, Phone, ArrowRight, RefreshCw, Smartphone, Zap } from 'lucide-react';
-import { backupKeyVaultToServer, restoreAccountFromBackup } from '../crypto/vault';
+import {
+  ShieldCheck,
+  User,
+  Key,
+  Lock,
+  DownloadCloud,
+  CheckCircle2,
+  Sparkles,
+  Server,
+  AlertTriangle,
+  Phone,
+  ArrowRight,
+  RefreshCw,
+  Smartphone,
+  Zap,
+  Mail,
+  FileText,
+  X
+} from 'lucide-react';
+import {
+  backupKeyVaultToServer,
+  restoreAccountFromBackup,
+  restoreAccountFromMnemonic,
+  ensureUserMnemonic,
+  getUserMnemonic
+} from '../crypto/vault';
+import { generate12WordMnemonic } from '../crypto/mnemonic';
+import MnemonicVaultModal from './MnemonicVaultModal';
 
 const COUNTRY_CODES = [
   { code: '+91', country: 'IN', name: 'India (+91)' },
@@ -15,139 +41,118 @@ const COUNTRY_CODES = [
   { code: '+92', country: 'PK', name: 'Pakistan (+92)' }
 ];
 
-export default function AuthModal({ onLogin, activeUsername, onRestored, serverUrl, onOpenEngineSettings, engineOnline = true }) {
-  const [activeTab, setActiveTab] = useState('signin');
-  const [authMethod, setAuthMethod] = useState('username'); // 'username' (testing) | 'phone' (OTP)
-  
-  // Username signin state
+export default function AuthModal({
+  onLogin,
+  activeUsername,
+  onRestored,
+  serverUrl,
+  onOpenEngineSettings,
+  engineOnline = true,
+  onClose = null
+}) {
+  const [activeTab, setActiveTab] = useState('phone');
+
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passphraseInput, setPassphraseInput] = useState('');
-  
-  // Phone OTP state
+
+  const [createdMnemonic, setCreatedMnemonic] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null);
+
+  const [restoreUsername, setRestoreUsername] = useState('');
+  const [restoreSeedInput, setRestoreSeedInput] = useState('');
+  const [restoreMode, setRestoreMode] = useState('mnemonic');
+
+  const [emailDisplayName, setEmailDisplayName] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [emailUsername, setEmailUsername] = useState('');
+  const [emailOtpStep, setEmailOtpStep] = useState(1);
+  const [emailOtpInput, setEmailOtpInput] = useState('');
+  const [emailCooldown, setEmailCooldown] = useState(0);
+
   const [countryCode, setCountryCode] = useState('+91');
+  const [phoneDisplayName, setPhoneDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneUsername, setPhoneUsername] = useState('');
-  const [otpStep, setOtpStep] = useState(1); // 1 = enter phone, 2 = enter otp
-  const [otpInput, setOtpInput] = useState('');
-  const [devOtpHint, setDevOtpHint] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [phoneOtpStep, setPhoneOtpStep] = useState(1);
+  const [phoneOtpInput, setPhoneOtpInput] = useState('');
+  const [phoneCooldown, setPhoneCooldown] = useState(0);
 
-  // Restore state
-  const [restoreUser, setRestoreUser] = useState('');
-  const [restorePass, setRestorePass] = useState('');
-  
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // Quick-access demo accounts for rapid testing
   const presets = [
     { name: 'Alice', role: 'User', color: '#3b82f6' },
     { name: 'Bob', role: 'User', color: '#10b981' },
     { name: 'Charlie', role: 'User', color: '#8b5cf6' }
   ];
 
-  // OTP resend timer
   useEffect(() => {
-    let timer;
-    if (resendCooldown > 0) {
-      timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
-    }
-    return () => clearInterval(timer);
-  }, [resendCooldown]);
+    let t1, t2;
+    if (emailCooldown > 0) t1 = setInterval(() => setEmailCooldown(c => c - 1), 1000);
+    if (phoneCooldown > 0) t2 = setInterval(() => setPhoneCooldown(c => c - 1), 1000);
+    return () => {
+      clearInterval(t1);
+      clearInterval(t2);
+    };
+  }, [emailCooldown, phoneCooldown]);
 
-  const handleSignInSubmit = async (e) => {
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!usernameInput.trim()) return;
+    const cleanDisplay = (displayNameInput || usernameInput).trim();
+    if (!cleanDisplay) return;
+
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Setting up your secure account...');
+    setStatusMsg('Generating Zero-Knowledge Vault...');
 
     try {
-      await onLogin(usernameInput.trim());
+      // Behind the scenes, auto-derive unique internal username so ANY 2 people can have the exact same name
+      let cleanUser = cleanDisplay.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
+      if (!cleanUser) cleanUser = `user_${Date.now().toString(36).slice(-4)}`;
 
-      // Optionally back up account with a passphrase
+      try {
+        const checkRes = await fetch(`${serverUrl}/api/users/check-username?username=${encodeURIComponent(cleanUser)}`);
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (!checkData.available) {
+            cleanUser = `${cleanUser}_${Math.random().toString(36).slice(2, 6)}`;
+          }
+        }
+      } catch (_) {}
+
+      setStatusMsg('Generating Zero-Knowledge keys...');
+      const mnemonicWords = generate12WordMnemonic();
+      localStorage.setItem(`ciphersocial_mnemonic_${cleanUser}`, mnemonicWords.join(' '));
+
+      await onLogin(cleanUser, cleanDisplay);
+
       if (passphraseInput.trim()) {
-        setStatusMsg('Saving your backup securely...');
-        await backupKeyVaultToServer(usernameInput.trim(), passphraseInput.trim(), serverUrl);
-        setStatusMsg('Backup saved! You can restore on any device.');
+        await backupKeyVaultToServer(cleanUser, passphraseInput.trim(), serverUrl);
       }
+
+      setPendingUser(cleanUser);
+      setCreatedMnemonic(mnemonicWords);
     } catch (err) {
-      console.error('Sign-in error:', err);
-      setAuthError(err.message || 'Could not connect to engine. Please check your connection.');
+      console.error('Account creation error:', err);
+      setAuthError(err.message || 'Could not connect to engine.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendOtp = async (e) => {
-    e.preventDefault();
-    const cleanNum = phoneNumber.replace(/\D/g, '');
-    if (cleanNum.length < 7) {
-      setAuthError('Please enter a valid phone number (at least 7 digits).');
-      return;
-    }
-    if (!phoneUsername.trim()) {
-      setAuthError('Please choose a username for your account.');
-      return;
-    }
-
-    const fullPhone = `${countryCode}${cleanNum}`;
+  const handlePresetSelect = async (presetName) => {
+    setUsernameInput(presetName);
+    setDisplayNameInput(presetName);
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Sending secure 6-digit verification code...');
-
+    setStatusMsg(`Logging into ${presetName}...`);
     try {
-      const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone, username: phoneUsername.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send verification code.');
-
-      setOtpStep(2);
-      setResendCooldown(30);
-      if (data.testOtp) {
-        setDevOtpHint(data.testOtp);
-      }
-      setStatusMsg('');
+      ensureUserMnemonic(presetName);
+      await onLogin(presetName, presetName);
     } catch (err) {
-      console.error('Send OTP error:', err);
-      setAuthError(err.message || 'Failed to send OTP code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    if (otpInput.trim().length !== 6) {
-      setAuthError('Please enter the complete 6-digit OTP code.');
-      return;
-    }
-
-    const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
-    setLoading(true);
-    setAuthError('');
-    setStatusMsg('Verifying code & generating Zero-Knowledge keys...');
-
-    try {
-      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone, otp: otpInput.trim(), username: phoneUsername.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invalid OTP code.');
-
-      // Proceed with E2EE registration and local key generation
-      await onLogin(data.username || phoneUsername.trim());
-    } catch (err) {
-      console.error('Verify OTP error:', err);
-      setAuthError(err.message || 'OTP verification failed.');
+      setAuthError(err.message || 'Sign in failed.');
     } finally {
       setLoading(false);
     }
@@ -155,457 +160,717 @@ export default function AuthModal({ onLogin, activeUsername, onRestored, serverU
 
   const handleRestoreSubmit = async (e) => {
     e.preventDefault();
-    if (!restoreUser.trim() || !restorePass.trim()) return;
+    if (!restoreUsername.trim() || !restoreSeedInput.trim()) return;
     setLoading(true);
     setAuthError('');
-    setStatusMsg('Looking up your account...');
+    setStatusMsg('Restoring Zero-Knowledge Vault...');
 
     try {
-      const restoredUserObj = await restoreAccountFromBackup(restoreUser.trim(), restorePass.trim(), serverUrl);
-      setStatusMsg('Account restored! Welcome back.');
+      let restoredUserObj;
+      if (restoreMode === 'mnemonic') {
+        restoredUserObj = await restoreAccountFromMnemonic(restoreUsername.trim(), restoreSeedInput.trim(), serverUrl);
+      } else {
+        restoredUserObj = await restoreAccountFromBackup(restoreUsername.trim(), restoreSeedInput.trim(), serverUrl);
+      }
+      setStatusMsg('Identity restored! Welcome back.');
       onRestored(restoredUserObj);
     } catch (err) {
       console.error('Restore error:', err);
-      setAuthError(err.message || 'Could not restore account. Check your username and passphrase.');
+      setAuthError(err.message || 'Failed to restore account.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePresetSelect = async (name) => {
+  const handleSendEmailOtp = async (e) => {
+    e.preventDefault();
+    if (!emailInput.trim() || !emailInput.includes('@')) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+    const cleanName = (emailDisplayName || emailUsername).trim();
+    if (!cleanName) {
+      setAuthError('Please enter your name.');
+      return;
+    }
+
+    let userKey = emailUsername.trim();
+    if (!userKey) {
+      let base = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+      if (!base) base = emailInput.split('@')[0].replace(/[^a-z0-9]/g, '_').slice(0, 15) || 'user';
+      userKey = `${base}_${Date.now().toString(36).slice(-4)}`;
+      setEmailUsername(userKey);
+    }
+
     setLoading(true);
     setAuthError('');
+    setStatusMsg('Sending 6-digit verification code to your email inbox...');
+
     try {
-      await onLogin(name);
+      const res = await fetch(`${serverUrl}/api/auth/send-email-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailInput.trim(),
+          username: userKey
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send email verification code.');
+
+      setEmailOtpStep(2);
+      setEmailCooldown(60);
+      setStatusMsg(data.message || 'Verification code sent to your email!');
+      setTimeout(() => setStatusMsg(''), 4000);
     } catch (err) {
-      setAuthError(err.message || 'Could not connect to engine.');
+      console.error('Send Email OTP error:', err);
+      setAuthError(err.message || 'Failed to send email code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async (e) => {
+    e.preventDefault();
+    if (emailOtpInput.trim().length !== 6) {
+      setAuthError('Please enter the 6-digit code received in your email.');
+      return;
+    }
+
+    const cleanName = (emailDisplayName || emailUsername).trim();
+    let userKey = emailUsername.trim();
+    if (!userKey) {
+      let base = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+      if (!base) base = emailInput.split('@')[0].replace(/[^a-z0-9]/g, '_').slice(0, 15) || 'user';
+      userKey = `${base}_${Date.now().toString(36).slice(-4)}`;
+    }
+
+    setLoading(true);
+    setAuthError('');
+    setStatusMsg('Verifying code & generating keys...');
+
+    try {
+      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailInput.trim(),
+          otp: emailOtpInput.trim(),
+          username: userKey
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
+
+      await onLogin(userKey, cleanName);
+    } catch (err) {
+      console.error('Verify Email OTP error:', err);
+      setAuthError(err.message || 'Email verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendPhoneOtp = async (e) => {
+    e.preventDefault();
+    const cleanNum = phoneNumber.replace(/\D/g, '');
+    if (cleanNum.length < 7) {
+      setAuthError('Please enter a valid mobile number.');
+      return;
+    }
+    const cleanName = (phoneDisplayName || phoneUsername).trim();
+    if (!cleanName) {
+      setAuthError('Please enter your name.');
+      return;
+    }
+
+    let userKey = phoneUsername.trim();
+    if (!userKey) {
+      let base = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+      if (!base) base = 'user';
+      userKey = `${base}_${cleanNum.slice(-4)}`;
+      setPhoneUsername(userKey);
+    }
+
+    const fullPhone = `${countryCode}${cleanNum}`;
+    setLoading(true);
+    setAuthError('');
+    setStatusMsg(`Sending 6-digit SMS verification code to ${fullPhone}...`);
+
+    try {
+      const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: fullPhone,
+          username: userKey
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send SMS code.');
+
+      setPhoneOtpStep(2);
+      setPhoneCooldown(60);
+      setStatusMsg(data.message || 'SMS dispatched! Check your phone SMS inbox.');
+      setTimeout(() => setStatusMsg(''), 4000);
+    } catch (err) {
+      console.error('Send Phone OTP error:', err);
+      setAuthError(err.message || 'Failed to send SMS code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async (e) => {
+    e.preventDefault();
+    if (phoneOtpInput.trim().length !== 6) {
+      setAuthError('Please enter the 6-digit code received on your phone.');
+      return;
+    }
+
+    const cleanNum = phoneNumber.replace(/\D/g, '');
+    const fullPhone = `${countryCode}${cleanNum}`;
+    const cleanName = (phoneDisplayName || phoneUsername).trim();
+    let userKey = phoneUsername.trim();
+    if (!userKey) {
+      let base = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+      if (!base) base = 'user';
+      userKey = `${base}_${cleanNum.slice(-4)}`;
+    }
+
+    setLoading(true);
+    setAuthError('');
+    setStatusMsg('Verifying SMS code & securing account...');
+
+    try {
+      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: fullPhone,
+          otp: phoneOtpInput.trim(),
+          username: userKey
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
+
+      await onLogin(userKey, cleanName);
+    } catch (err) {
+      console.error('Verify Phone OTP error:', err);
+      setAuthError(err.message || 'SMS verification failed.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-overlay">
-      <div className="auth-card">
-        {/* Engine Config Pill in Auth Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px 0' }}>
+    <div
+      className="auth-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) {
+          onClose();
+        }
+      }}
+    >
+      {createdMnemonic && (
+        <MnemonicVaultModal
+          mnemonicWords={createdMnemonic}
+          username={pendingUser}
+          onClose={() => setCreatedMnemonic(null)}
+          onConfirmed={() => setCreatedMnemonic(null)}
+        />
+      )}
+
+      <div className="auth-modal-card">
+        {onClose && (
           <button
             type="button"
-            className={`engine-status-pill ${engineOnline ? 'online' : 'offline'}`}
-            onClick={onOpenEngineSettings}
-            title="Configure Backend Engine"
+            className="auth-modal-close-btn"
+            onClick={onClose}
+            title="Close"
           >
-            <span className="engine-pulse-dot" />
-            <Server size={12} />
-            <span>Engine: {engineOnline ? 'Online' : 'Offline (Tap to fix)'}</span>
+            <X size={16} />
           </button>
-        </div>
-
-        <div className="auth-header" style={{ paddingTop: '8px' }}>
-          <div className="shield-icon-wrapper">
-            <ShieldCheck size={36} color="#3b82f6" />
-          </div>
-          <h2>Welcome to SadiSocial</h2>
-          <p>End-to-end encrypted social network. Your private keys stay safely on your device.</p>
-        </div>
-
-        {authError && (
-          <div style={{
-            margin: '0 24px 14px',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.78rem',
-            color: '#ef4444'
-          }}>
-            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>{authError}</div>
-            <button
-              type="button"
-              onClick={onOpenEngineSettings}
-              style={{
-                background: 'rgba(239, 68, 68, 0.2)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                color: '#ffffff',
-                padding: '4px 8px',
-                borderRadius: '6px',
-                fontSize: '0.72rem',
-                cursor: 'pointer'
-              }}
-            >
-              Config
-            </button>
-          </div>
         )}
 
-        {/* Top Tabs */}
-        <div className="auth-tabs">
+        <div className="auth-header">
+          <div className="auth-icon-wrap">
+            <ShieldCheck size={30} color="#ee7882" />
+          </div>
+          <h2>SadiSocial Identity</h2>
+          <div className="auth-header-badge">
+            <span className="auth-badge-dot" />
+            <span>Self-Sovereign • Zero-Knowledge E2EE</span>
+          </div>
+        </div>
+
+        <div className="auth-tabs-nav">
           <button
             type="button"
-            className={`auth-tab-btn ${activeTab === 'signin' ? 'active' : ''}`}
-            onClick={() => setActiveTab('signin')}
+            className={`auth-tab-btn tab-phone ${activeTab === 'phone' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('phone'); setAuthError(''); setPhoneOtpStep(1); }}
           >
-            <User size={16} />
-            <span>Sign In / Create</span>
+            <Smartphone size={16} />
+            <span>Phone SMS</span>
           </button>
 
           <button
             type="button"
-            className={`auth-tab-btn ${activeTab === 'restore' ? 'active' : ''}`}
-            onClick={() => setActiveTab('restore')}
+            className={`auth-tab-btn tab-email ${activeTab === 'email' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('email'); setAuthError(''); setEmailOtpStep(1); }}
           >
-            <DownloadCloud size={16} />
-            <span>Restore on New Device</span>
+            <Mail size={16} />
+            <span>Email OTP</span>
+          </button>
+
+          <button
+            type="button"
+            className={`auth-tab-btn tab-create ${activeTab === 'create' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('create'); setAuthError(''); }}
+          >
+            <Zap size={16} />
+            <span>Quick Start</span>
+          </button>
+
+          <button
+            type="button"
+            className={`auth-tab-btn tab-restore ${activeTab === 'restore' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('restore'); setAuthError(''); }}
+          >
+            <Key size={16} />
+            <span>Restore</span>
           </button>
         </div>
 
-        {activeTab === 'signin' ? (
-          <>
-            {/* Method Switcher: Quick Username (Testing) vs Phone + OTP (Production) */}
-            <div style={{
-              display: 'flex',
-              background: 'rgba(255, 255, 255, 0.04)',
-              borderRadius: '12px',
-              padding: '4px',
-              margin: '0 24px 16px',
-              gap: '4px',
-              border: '1px solid rgba(255, 255, 255, 0.08)'
-            }}>
-              <button
-                type="button"
-                onClick={() => { setAuthMethod('username'); setAuthError(''); }}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '0.78rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: authMethod === 'username' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-                  color: authMethod === 'username' ? '#60a5fa' : '#94a3b8',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Zap size={14} />
-                <span>⚡ Quick Username (Test Mode)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setAuthMethod('phone'); setAuthError(''); setOtpStep(1); }}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '0.78rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: authMethod === 'phone' ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
-                  color: authMethod === 'phone' ? '#34d399' : '#94a3b8',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Smartphone size={14} />
-                <span>📱 Phone + OTP</span>
-              </button>
-            </div>
-
-            {authMethod === 'username' ? (
-              /* QUICK USERNAME TEST MODE */
-              <>
-                {/* Quick-select accounts */}
-                <div className="preset-section">
-                  <span className="section-label">1-Click Test Accounts:</span>
-                  <div className="preset-grid">
-                    {presets.map(p => (
-                      <button
-                        key={p.name}
-                        type="button"
-                        className={`preset-card ${activeUsername === p.name ? 'active' : ''}`}
-                        onClick={() => handlePresetSelect(p.name)}
-                        disabled={loading}
-                      >
-                        <div className="avatar-circle" style={{ backgroundColor: p.color }}>
-                          {p.name[0]}
-                        </div>
-                        <div className="preset-info">
-                          <div className="preset-name">{p.name}</div>
-                          <div className="preset-role">{p.role}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+        {/* ── TAB: PHONE SMS OTP ── */}
+        {activeTab === 'phone' && (
+          <div className="auth-form-container">
+            {phoneOtpStep === 1 ? (
+              <form onSubmit={handleSendPhoneOtp} className="auth-form" style={{ padding: 0 }}>
+                <div className="auth-guide-text">
+                  Enter your mobile number to receive a 6-digit SMS verification code on your device:
                 </div>
 
-                <div className="divider"><span>OR CHOOSE ANY USERNAME</span></div>
+                <div className="auth-input-group">
+                  <User size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    className="auth-input"
+                    placeholder="Enter your name (e.g. Charlie, Sadi)"
+                    value={phoneDisplayName}
+                    onChange={(e) => {
+                      setPhoneDisplayName(e.target.value);
+                      setPhoneUsername(e.target.value);
+                    }}
+                    disabled={loading}
+                    required
+                  />
+                </div>
 
-                <form onSubmit={handleSignInSubmit} className="auth-form">
-                  <div className="input-group">
-                    <User size={18} className="input-icon" />
+                <div className="auth-phone-row">
+                  <select
+                    className="auth-country-select"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    disabled={loading}
+                  >
+                    {COUNTRY_CODES.map(c => (
+                      <option key={c.code} value={c.code} style={{ background: '#190a0f', color: '#ffffff' }}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="auth-input-group" style={{ flex: 1, margin: 0 }}>
+                    <Phone size={18} className="input-icon" />
                     <input
-                      type="text"
-                      placeholder="Enter test username (e.g. Sadi, Alex)..."
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
+                      type="tel"
+                      className="auth-input"
+                      placeholder="Phone (e.g. 8926268902)"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
                       disabled={loading}
                       required
                     />
                   </div>
+                </div>
 
-                  <div className="input-group">
-                    <Lock size={18} className="input-icon" />
-                    <input
-                      type="password"
-                      placeholder="Optional: Passphrase backup"
-                      value={passphraseInput}
-                      onChange={(e) => setPassphraseInput(e.target.value)}
-                      disabled={loading}
-                    />
-                  </div>
-
-                  <button type="submit" className="primary-btn" disabled={loading || !usernameInput.trim()}>
-                    {loading ? (
-                      <span>{statusMsg || 'Setting up...'}</span>
-                    ) : (
-                      <>
-                        <Key size={18} />
-                        <span>Instant Sign In</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </>
+                <button
+                  type="submit"
+                  className="auth-submit-btn"
+                  disabled={loading || !phoneNumber.trim() || !(phoneDisplayName || phoneUsername).trim()}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Sending SMS...'}</span>
+                  ) : (
+                    <>
+                      <ArrowRight size={18} />
+                      <span>Send 6-Digit SMS Code</span>
+                    </>
+                  )}
+                </button>
+              </form>
             ) : (
-              /* PHONE NUMBER & OTP VERIFICATION MODE */
-              <div style={{ margin: '0 24px 8px' }}>
-                {otpStep === 1 ? (
-                  <form onSubmit={handleSendOtp} className="auth-form" style={{ padding: 0 }}>
-                    <div style={{ marginBottom: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                      Enter your mobile number to receive a secure 6-digit OTP verification code:
-                    </div>
+              <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
+                <div className="auth-guide-text">
+                  Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#ee7882' }}>{countryCode} {phoneNumber}</strong>:
+                </div>
 
-                    <div className="input-group">
-                      <User size={18} className="input-icon" />
-                      <input
-                        type="text"
-                        placeholder="Choose your Username..."
-                        value={phoneUsername}
-                        onChange={(e) => setPhoneUsername(e.target.value)}
-                        disabled={loading}
-                        required
-                      />
-                    </div>
+                <div className="auth-input-group">
+                  <Key size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    className="auth-input"
+                    maxLength={6}
+                    placeholder="• • • • • •"
+                    value={phoneOtpInput}
+                    onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, ''))}
+                    style={{ letterSpacing: '8px', fontSize: '1.25rem', fontWeight: '700', textAlign: 'center' }}
+                    disabled={loading}
+                    autoFocus
+                    required
+                  />
+                </div>
 
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                      <select
-                        value={countryCode}
-                        onChange={(e) => setCountryCode(e.target.value)}
-                        disabled={loading}
-                        style={{
-                          width: '120px',
-                          background: 'rgba(255, 255, 255, 0.06)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#f8fafc',
-                          borderRadius: '10px',
-                          padding: '10px 8px',
-                          fontSize: '0.82rem',
-                          outline: 'none'
-                        }}
-                      >
-                        {COUNTRY_CODES.map(c => (
-                          <option key={c.code} value={c.code} style={{ background: '#18181b', color: '#ffffff' }}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                <button
+                  type="submit"
+                  className="auth-submit-btn"
+                  style={{ marginBottom: '10px' }}
+                  disabled={loading || phoneOtpInput.trim().length !== 6}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Verifying...'}</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>Verify & Launch SadiSocial</span>
+                    </>
+                  )}
+                </button>
 
-                      <div className="input-group" style={{ flex: 1, margin: 0 }}>
-                        <Phone size={18} className="input-icon" />
-                        <input
-                          type="tel"
-                          placeholder="Phone number (e.g. 9876543210)"
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
-                          disabled={loading}
-                          required
-                        />
-                      </div>
-                    </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setPhoneOtpStep(1); setPhoneOtpInput(''); }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    ← Change Number
+                  </button>
 
-                    <button
-                      type="submit"
-                      className="primary-btn"
-                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-                      disabled={loading || !phoneNumber.trim() || !phoneUsername.trim()}
-                    >
-                      {loading ? (
-                        <span>{statusMsg || 'Sending code...'}</span>
-                      ) : (
-                        <>
-                          <ArrowRight size={18} />
-                          <span>Get 6-Digit Verification Code</span>
-                        </>
-                      )}
-                    </button>
-                  </form>
-                ) : (
-                  /* STEP 2: ENTER OTP */
-                  <form onSubmit={handleVerifyOtp} className="auth-form" style={{ padding: 0 }}>
-                    <div style={{ marginBottom: '10px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                      Enter the 6-digit code sent to <strong style={{ color: '#ffffff' }}>{countryCode} {phoneNumber}</strong>:
-                    </div>
-
-                    {devOtpHint && (
-                      <div
-                        onClick={() => setOtpInput(devOtpHint)}
-                        style={{
-                          marginBottom: '12px',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(16, 185, 129, 0.15)',
-                          border: '1px dashed rgba(16, 185, 129, 0.4)',
-                          color: '#34d399',
-                          fontSize: '0.78rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          cursor: 'pointer'
-                        }}
-                        title="Click to auto-fill test OTP"
-                      >
-                        <span>🧪 <strong>Test Mode OTP:</strong> {devOtpHint}</span>
-                        <span style={{ textDecoration: 'underline', fontSize: '0.72rem' }}>Auto-Fill</span>
-                      </div>
-                    )}
-
-                    <div className="input-group">
-                      <Key size={18} className="input-icon" />
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="• • • • • • (Enter 6-digit OTP)"
-                        value={otpInput}
-                        onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                        style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}
-                        disabled={loading}
-                        autoFocus
-                        required
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="primary-btn"
-                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)', marginBottom: '10px' }}
-                      disabled={loading || otpInput.trim().length !== 6}
-                    >
-                      {loading ? (
-                        <span>{statusMsg || 'Verifying...'}</span>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={18} />
-                          <span>Verify & Sign In</span>
-                        </>
-                      )}
-                    </button>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => { setOtpStep(1); setOtpInput(''); }}
-                        style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.76rem', cursor: 'pointer' }}
-                      >
-                        ← Change Number
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSendOtp}
-                        disabled={resendCooldown > 0 || loading}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: resendCooldown > 0 ? '#64748b' : '#60a5fa',
-                          fontSize: '0.76rem',
-                          cursor: resendCooldown > 0 ? 'default' : 'pointer'
-                        }}
-                      >
-                        {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={handleSendPhoneOtp}
+                    disabled={phoneCooldown > 0 || loading}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: phoneCooldown > 0 ? '#64748b' : '#ee7882',
+                      fontSize: '0.78rem',
+                      fontWeight: '500',
+                      cursor: phoneCooldown > 0 ? 'default' : 'pointer'
+                    }}
+                  >
+                    {phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Resend SMS Code'}
+                  </button>
+                </div>
+              </form>
             )}
-          </>
-        ) : (
-          /* Restore Account Form */
-          <form onSubmit={handleRestoreSubmit} className="auth-form" style={{ marginTop: '16px' }}>
-            <div className="restore-info-box">
-              <DownloadCloud size={20} color="#10b981" />
-              <span>
-                Enter your username and backup passphrase to restore your account on this device. Your messages stay private throughout.
-              </span>
-            </div>
-
-            <div className="input-group">
-              <User size={18} className="input-icon" />
-              <input
-                type="text"
-                placeholder="Your username..."
-                value={restoreUser}
-                onChange={(e) => setRestoreUser(e.target.value)}
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div className="input-group">
-              <Lock size={18} className="input-icon" />
-              <input
-                type="password"
-                placeholder="Your backup passphrase..."
-                value={restorePass}
-                onChange={(e) => setRestorePass(e.target.value)}
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="primary-btn restore-btn"
-              disabled={loading || !restoreUser.trim() || !restorePass.trim()}
-            >
-              {loading ? (
-                <span>{statusMsg || 'Restoring account...'}</span>
-              ) : (
-                <>
-                  <CheckCircle2 size={18} />
-                  <span>Restore My Account</span>
-                </>
-              )}
-            </button>
-          </form>
+          </div>
         )}
 
-        <div className="crypto-badge-footer">
-          <Sparkles size={14} color="#10b981" />
-          <span>Your keys are generated on your device and never sent to the server</span>
+        {/* ── TAB: EMAIL OTP ── */}
+        {activeTab === 'email' && (
+          <div className="auth-form-container">
+            {emailOtpStep === 1 ? (
+              <form onSubmit={handleSendEmailOtp} className="auth-form" style={{ padding: 0 }}>
+                <div className="auth-guide-text">
+                  Receive a 6-digit verification code directly to your private email inbox:
+                </div>
+
+                <div className="auth-input-group">
+                  <User size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    className="auth-input"
+                    placeholder="Enter your name (e.g. Charlie, Sadi)"
+                    value={emailDisplayName}
+                    onChange={(e) => {
+                      setEmailDisplayName(e.target.value);
+                      setEmailUsername(e.target.value);
+                    }}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <Mail size={18} className="input-icon" />
+                  <input
+                    type="email"
+                    className="auth-input"
+                    placeholder="Enter your Email (e.g. user@gmail.com)"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="auth-submit-btn"
+                  disabled={loading || !emailInput.trim() || !(emailDisplayName || emailUsername).trim()}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Sending email...'}</span>
+                  ) : (
+                    <>
+                      <ArrowRight size={18} />
+                      <span>Send 6-Digit Email Code</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyEmailOtp} className="auth-form" style={{ padding: 0 }}>
+                <div className="auth-guide-text">
+                  Enter the 6-digit code received in your email inbox <strong style={{ color: '#ee7882' }}>{emailInput}</strong>:
+                </div>
+
+                <div className="auth-input-group">
+                  <Key size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    className="auth-input"
+                    maxLength={6}
+                    placeholder="• • • • • •"
+                    value={emailOtpInput}
+                    onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, ''))}
+                    style={{ letterSpacing: '8px', fontSize: '1.25rem', fontWeight: '700', textAlign: 'center' }}
+                    disabled={loading}
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="auth-submit-btn"
+                  style={{ marginBottom: '10px' }}
+                  disabled={loading || emailOtpInput.trim().length !== 6}
+                >
+                  {loading ? (
+                    <span>{statusMsg || 'Verifying...'}</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>Verify Code & Enter SadiSocial</span>
+                    </>
+                  )}
+                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setEmailOtpStep(1); setEmailOtpInput(''); }}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    ← Change Email
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendEmailOtp}
+                    disabled={emailCooldown > 0 || loading}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: emailCooldown > 0 ? '#64748b' : '#ee7882',
+                      fontSize: '0.78rem',
+                      fontWeight: '500',
+                      cursor: emailCooldown > 0 ? 'default' : 'pointer'
+                    }}
+                  >
+                    {emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Resend Code'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: QUICK START ── */}
+        {activeTab === 'create' && (
+          <div className="auth-form-container">
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Instant 1-Click Demo Profiles:
+              </div>
+              <div className="auth-presets-grid">
+                {presets.map(p => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className={`auth-preset-item ${activeUsername === p.name ? 'active' : ''}`}
+                    onClick={() => handlePresetSelect(p.name)}
+                    disabled={loading}
+                  >
+                    <div className="auth-preset-avatar" style={{ backgroundColor: p.color, boxShadow: `0 0 12px ${p.color}50` }}>
+                      {p.name[0]}
+                    </div>
+                    <span className="auth-preset-name">{p.name}</span>
+                    <span className="auth-preset-tag">{p.role}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="divider" style={{ margin: '14px 0', color: '#64748b', fontSize: '0.72rem', letterSpacing: '0.5px' }}>
+              <span>OR CREATE CUSTOM PROFILE</span>
+            </div>
+
+            <form onSubmit={handleCreateSubmit} className="auth-form" style={{ padding: 0 }}>
+              <div className="auth-input-group">
+                <User size={18} className="input-icon" />
+                <input
+                  type="text"
+                  className="auth-input"
+                  placeholder="Enter your name (e.g. Charlie, Sadi, Alex)..."
+                  value={displayNameInput}
+                  onChange={(e) => {
+                    setDisplayNameInput(e.target.value);
+                    setUsernameInput(e.target.value);
+                  }}
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <Lock size={18} className="input-icon" />
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Optional: Master backup password"
+                  value={passphraseInput}
+                  onChange={(e) => setPassphraseInput(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={loading || !(displayNameInput || usernameInput).trim()}
+              >
+                {loading ? (
+                  <span>{statusMsg || 'Generating Vault...'}</span>
+                ) : (
+                  <>
+                    <Key size={18} />
+                    <span>Create & Generate 12-Word Vault</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ── TAB: RESTORE ── */}
+        {activeTab === 'restore' && (
+          <div className="auth-form-container">
+            <div className="auth-restore-switch">
+              <button
+                type="button"
+                className={`auth-restore-pill ${restoreMode === 'mnemonic' ? 'active' : ''}`}
+                onClick={() => setRestoreMode('mnemonic')}
+              >
+                12-Word Seed Phrase
+              </button>
+              <button
+                type="button"
+                className={`auth-restore-pill ${restoreMode === 'passphrase' ? 'active' : ''}`}
+                onClick={() => setRestoreMode('passphrase')}
+              >
+                Password Backup
+              </button>
+            </div>
+
+            <form onSubmit={handleRestoreSubmit} className="auth-form" style={{ padding: 0 }}>
+              <div className="auth-input-group">
+                <User size={18} className="input-icon" />
+                <input
+                  type="text"
+                  className="auth-input"
+                  placeholder="Enter your account name or ID..."
+                  value={restoreUsername}
+                  onChange={(e) => setRestoreUsername(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <FileText size={18} className="input-icon" style={{ top: '22px' }} />
+                <textarea
+                  rows={3}
+                  className="auth-input"
+                  placeholder={restoreMode === 'mnemonic' ? "Enter your 12 words separated by spaces (e.g. ocean tiger galaxy crystal silver...)" : "Enter your cloud backup password..."}
+                  value={restoreSeedInput}
+                  onChange={(e) => setRestoreSeedInput(e.target.value)}
+                  disabled={loading}
+                  required
+                  style={{
+                    minHeight: '84px',
+                    fontFamily: restoreMode === 'mnemonic' ? 'var(--font-mono, monospace)' : 'inherit',
+                    fontSize: '0.82rem',
+                    lineHeight: '1.45',
+                    resize: 'none'
+                  }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={loading || !restoreUsername.trim() || !restoreSeedInput.trim()}
+              >
+                {loading ? (
+                  <span>{statusMsg || 'Restoring...'}</span>
+                ) : (
+                  <>
+                    <DownloadCloud size={18} />
+                    <span>Restore Identity & Private Keys</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {authError && (
+          <div className="auth-error-banner">
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>{authError}</span>
+          </div>
+        )}
+
+        <div className="auth-footer">
+          <button
+            type="button"
+            className="auth-engine-pill"
+            onClick={onOpenEngineSettings}
+            title="Configure Backend Engine Connection"
+          >
+            <span className={`auth-engine-dot ${engineOnline ? 'online' : 'offline'}`} />
+            <Server size={13} />
+            <span>Backend Engine: {engineOnline ? 'Connected' : 'Offline / Settings'}</span>
+          </button>
         </div>
       </div>
     </div>
