@@ -441,7 +441,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                         />
                       ) : (
                         <div className="avatar-circle status-card-avatar" style={{ backgroundColor: avatarColor, width: '28px', height: '28px' }}>
-                          {authorUser?.displayName?.[0]?.toUpperCase() || status.author[0].toUpperCase()}
+                          {authorUser?.displayName?.[0]?.toUpperCase() || status.author?.[0]?.toUpperCase() || 'U'}
                         </div>
                       )}
                       <div className="status-card-author-meta">

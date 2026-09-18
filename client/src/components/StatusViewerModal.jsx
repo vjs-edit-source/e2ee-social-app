@@ -36,6 +36,7 @@ export default function StatusViewerModal({
   onStatusDeleted
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const currentStatus = statuses[currentIndex] || null;
   const [decryptedStatuses, setDecryptedStatuses] = useState(() => decryptionCache.getAllStatuses());
   const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
   const [showComments, setShowComments] = useState(false);
@@ -72,8 +73,6 @@ export default function StatusViewerModal({
   // Track which statuses have been marked as viewed to prevent repeat /view requests
   const recordedViewsRef = useRef(new Set());
   const activePlayingMusicRef = useRef(null);
-
-  const currentStatus = statuses[currentIndex];
 
   // Stop audio on unmount or close
   useEffect(() => {
@@ -263,7 +262,7 @@ export default function StatusViewerModal({
 
   // Toggle Like on Status
   const handleLike = async () => {
-    if (!currentStatus) return;
+    if (!currentStatus || !currentUser?.username) return;
 
     const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
     const isLiked = currentLikes.includes(currentUser.username);
@@ -294,7 +293,7 @@ export default function StatusViewerModal({
     setTimeout(() => setFloatingReaction(null), 1500);
 
     // If heart, also trigger like
-    if (emoji === '❤️') {
+    if (emoji === '❤️' && currentUser?.username) {
       const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
       if (!currentLikes.includes(currentUser.username)) {
         handleLike();
@@ -441,11 +440,11 @@ export default function StatusViewerModal({
                      allUsers.find(u => u.username?.toLowerCase() === authorLower) ||
                      (currentUser?.username?.toLowerCase() === authorLower ? currentUser : null);
   const authorAvatarUrl = authorUser?.avatarUrl;
-  const authorDisplayName = authorUser?.displayName || currentStatus.author;
-  const authorAvatarColor = authorUser?.avatarColor || '#3b82f6';
+  const authorDisplayName = authorUser?.displayName || currentStatus?.author || 'User';
+  const authorAvatarColor = authorUser?.avatarColor || '#ee7882';
 
   const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
-  const isLiked = currentLikes.includes(currentUser.username);
+  const isLiked = Boolean(currentUser?.username && currentLikes.includes(currentUser.username));
   const statusDecrypted = decryptedStatuses[currentStatus.id];
   const mediaDecrypted = currentStatus.mediaId ? decryptedMediaMap[currentStatus.mediaId] : null;
 
