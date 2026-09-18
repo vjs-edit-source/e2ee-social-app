@@ -169,24 +169,7 @@ export default function App() {
     });
   };
 
-  const [inAppNotification, setInAppNotification] = useState(null);
   const [selectedDirectPeer, setSelectedDirectPeer] = useState(null);
-
-  // Auto-dismiss in-app notification after 5 seconds
-  useEffect(() => {
-    if (!inAppNotification) return;
-    const timer = setTimeout(() => {
-      setInAppNotification(null);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [inAppNotification]);
-
-  // Request browser notification permission once on boot
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
-  }, []);
 
   // Track if a sub-chat conversation (DM or Group) is currently open fullscreen
   const [isDMChatOpen, setIsDMChatOpen] = useState(false);
@@ -436,67 +419,19 @@ export default function App() {
             } else if (data.type === 'DIRECT_MESSAGE') {
               const msg = data.message;
               if (msg && msg.recipient === currentUser?.username && msg.sender !== currentUser?.username) {
-                const authorUser = allUsersRef.current.find(u => u.username === msg.sender) || { username: msg.sender };
                 playNotificationChime();
                 setUnreadChatsCount(prev => prev + 1);
-
-                setInAppNotification({
-                  id: msg.id,
-                  sender: msg.sender,
-                  displayName: authorUser.displayName || msg.sender,
-                  avatarUrl: authorUser.avatarUrl || null,
-                  avatarColor: authorUser.avatarColor || '#3b82f6',
-                  previewText: 'Sent you an encrypted message',
-                  peerObj: authorUser
-                });
-
-                // Web Notification
-                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-                  try {
-                    new Notification(`💬 ${authorUser.displayName || msg.sender}`, {
-                      body: 'New encrypted private message on SadiSocial',
-                      icon: authorUser.avatarUrl || '/favicon.ico'
-                    });
-                  } catch (e) {}
-                }
               }
             } else if (data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED' || data.type === 'GROUP_UPDATED') {
               loadUserGroups();
             } else if (data.type === 'COMMUNITY_JOIN_REQUEST') {
               loadUserGroups();
               playNotificationChime();
-              setInAppNotification({
-                id: `jreq_${Date.now()}`,
-                sender: data.groupName || 'Community',
-                displayName: `🚪 Entry Request: ${data.groupName}`,
-                avatarUrl: null,
-                avatarColor: '#3b82f6',
-                previewText: `@${data.request?.requester} requested to enter the community`,
-                peerObj: null
-              });
             } else if (data.type === 'COMMUNITY_JOIN_APPROVED') {
               loadUserGroups();
               playNotificationChime();
-              setInAppNotification({
-                id: `japp_${Date.now()}`,
-                sender: data.groupName || 'Community',
-                displayName: `🎉 Entry Confirmed!`,
-                avatarUrl: null,
-                avatarColor: '#10b981',
-                previewText: `You are now a member of ${data.groupName}! Confirmed by @${data.adminUsername}`,
-                peerObj: null
-              });
             } else if (data.type === 'COMMUNITY_JOIN_REJECTED') {
               loadUserGroups();
-              setInAppNotification({
-                id: `jrej_${Date.now()}`,
-                sender: data.groupName || 'Community',
-                displayName: `Notice: ${data.groupName}`,
-                avatarUrl: null,
-                avatarColor: '#ef4444',
-                previewText: `Your request to enter ${data.groupName} was declined.`,
-                peerObj: null
-              });
             } else if (data.type === 'GROUP_REMOVED') {
               if (data.groupId) {
                 handleClearGroupUnread(data.groupId);
@@ -527,28 +462,6 @@ export default function App() {
                   ...prev,
                   [groupId]: (prev[groupId] || 0) + 1
                 }));
-
-                const senderUser = allUsersRef.current.find(u => u.username === sender) || { username: sender };
-
-                setInAppNotification({
-                  id: msg?.id || `gm_${Date.now()}`,
-                  sender: groupName,
-                  displayName: `👥 ${groupName}`,
-                  avatarUrl: null,
-                  avatarColor: '#ee7882',
-                  previewText: `${senderUser.displayName || sender}: New encrypted message`,
-                  peerObj: null
-                });
-
-                // Web Notification
-                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-                  try {
-                    new Notification(`👥 ${groupName}`, {
-                      body: `${senderUser.displayName || sender}: New message on SadiSocial`,
-                      icon: '/favicon.ico'
-                    });
-                  } catch (e) {}
-                }
               }
             } else if (data.type === 'CALL_OFFER') {
               if (data.target === currentUser?.username) {
@@ -642,106 +555,6 @@ export default function App() {
 
   return (
     <div className={`app-layout ${isAnyChatActive ? 'in-chat-mode' : ''}`}>
-      {/* Floating In-App Toast Notification */}
-      {inAppNotification && (
-        <div
-          onClick={() => {
-            setSelectedDirectPeer(inAppNotification.peerObj);
-            setActiveTab('messages');
-            setUnreadChatsCount(0);
-            setInAppNotification(null);
-          }}
-          style={{
-            position: 'fixed',
-            top: '16px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 999999,
-            width: '90%',
-            maxWidth: '420px',
-            background: 'rgba(15, 23, 42, 0.95)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(238, 120, 130, 0.4)',
-            borderRadius: '16px',
-            padding: '12px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            cursor: 'pointer',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.6), 0 0 16px rgba(238, 120, 130, 0.25)',
-            animation: 'fadeInDown 0.3s ease-out'
-          }}
-        >
-          {inAppNotification.avatarUrl ? (
-            <img
-              src={inAppNotification.avatarUrl}
-              alt={inAppNotification.displayName}
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: `2px solid ${inAppNotification.avatarColor || '#3b82f6'}`
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                backgroundColor: inAppNotification.avatarColor || '#3b82f6',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontWeight: 'bold',
-                fontSize: '1rem'
-              }}
-            >
-              {inAppNotification.displayName[0].toUpperCase()}
-            </div>
-          )}
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#f8fafc' }}>
-                {inAppNotification.displayName}
-              </span>
-              <span style={{ fontSize: '0.68rem', color: '#ee7882', fontWeight: '600' }}>
-                Now
-              </span>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-              {inAppNotification.previewText}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setInAppNotification(null);
-            }}
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: 'none',
-              borderRadius: '50%',
-              width: '24px',
-              height: '24px',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.75rem'
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* Top Navbar */}
       <Navigation
         activeTab={activeTab}
