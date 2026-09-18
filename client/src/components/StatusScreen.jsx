@@ -76,20 +76,20 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
     return () => wsClient.removeEventListener('message', handleMessage);
   }, [wsClient]);
 
-  // Decrypt previews and media thumbnails for all statuses
+  // Decrypt previews and media thumbnails for all statuses concurrently
   useEffect(() => {
     if (!currentUser?.keyPair || statuses.length === 0) return;
 
     let isMounted = true;
 
     async function decryptAllPreviews() {
-      for (const s of statuses) {
+      await Promise.all(statuses.map(async (s) => {
         let mediaKey = null;
         let cachedStatus = decryptionCache.getStatus(s.id);
 
         if (cachedStatus) {
           mediaKey = cachedStatus.mediaKey;
-          if (!decryptedPreviews[s.id] && isMounted) {
+          if (isMounted && !decryptedPreviews[s.id]) {
             setDecryptedPreviews(prev => ({ ...prev, [s.id]: cachedStatus.text }));
           }
         } else {
@@ -123,18 +123,18 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           }
         }
 
-        // Decrypt attached photo thumbnail
+        // Decrypt attached photo or video thumbnail in parallel
         if (s.mediaId) {
           const cachedMedia = decryptionCache.getMedia(s.mediaId);
           if (cachedMedia) {
-            if (!decryptedMediaMap[s.mediaId] && isMounted) {
+            if (isMounted && !decryptedMediaMap[s.mediaId]) {
               setDecryptedMediaMap(prev => ({ ...prev, [s.mediaId]: cachedMedia }));
             }
           } else if (mediaKey && !decryptionCache.isMediaPending(s.mediaId)) {
             decryptionCache.setMediaPending(s.mediaId);
             try {
               const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
-              if (mediaRes.ok) {
+              if (mediaRes.ok && isMounted) {
                 const mediaObj = await mediaRes.json();
                 const decRes = await decryptMediaBuffer(
                   mediaKey,
@@ -160,12 +160,12 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
             }
           }
         }
-      }
+      }));
     }
 
     decryptAllPreviews();
     return () => { isMounted = false; };
-  }, [statuses, currentUser]);
+  }, [statuses, currentUser, serverUrl]);
 
   const myStatus = statuses.find(s => s.author?.toLowerCase() === currentUser?.username?.toLowerCase());
   const otherStatuses = statuses.filter(s => s.author?.toLowerCase() !== currentUser?.username?.toLowerCase());
@@ -356,13 +356,16 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                     )}
 
                     {mediaDecrypted && resolveMediaUrl(mediaDecrypted.objectUrl) ? (
-                      mediaDecrypted.mimeType?.startsWith('video/') ? (
+                      (mediaDecrypted.mimeType?.startsWith('video/') || /\.mp4|\.webm|\.mov/i.test(mediaDecrypted.objectUrl)) ? (
                         <video
                           src={resolveMediaUrl(mediaDecrypted.objectUrl)}
                           muted
                           playsInline
                           autoPlay
                           loop
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
                           style={{
                             width: '100%',
                             height: '100%',
@@ -377,6 +380,9 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
                         <img
                           src={resolveMediaUrl(mediaDecrypted.objectUrl)}
                           alt="Status thumbnail"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
                           style={{
                             width: '100%',
                             height: '100%',

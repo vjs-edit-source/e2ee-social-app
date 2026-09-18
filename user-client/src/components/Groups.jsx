@@ -482,10 +482,11 @@ export default function Groups({
       if (res.ok) {
         const data = await res.json();
         setGroups(data);
-        if (selectedGroup) {
-          const fresh = data.find(g => g.id === selectedGroup.id);
-          if (fresh) setSelectedGroup(fresh);
-        }
+        setSelectedGroup(prev => {
+          if (!prev) return prev;
+          const fresh = data.find(g => g.id === prev.id);
+          return fresh || prev;
+        });
       }
     } catch (err) {
       console.error('Failed to load groups:', err);
@@ -548,13 +549,13 @@ export default function Groups({
         const data = JSON.parse(event.data);
         if (data.type === 'GROUP_UPDATED' || data.type === 'NEW_GROUP' || data.type === 'GROUP_MEMBER_JOINED') {
           loadGroups();
-          if (selectedGroup && data.group?.id === selectedGroup.id) {
-            setSelectedGroup(data.group);
+          if (data.group) {
+            setSelectedGroup(prev => (prev && data.group.id === prev.id) ? data.group : prev);
           }
         } else if (data.type === 'GROUP_REMOVED') {
           loadGroups();
-          if (selectedGroup && data.groupId === selectedGroup.id) {
-            setSelectedGroup(null);
+          if (data.groupId) {
+            setSelectedGroup(prev => (prev && data.groupId === prev.id) ? null : prev);
           }
         } else if (data.type === 'GROUP_MESSAGE' && data.groupId === selectedGroup?.id) {
           setMessages(prev => {
@@ -1387,6 +1388,7 @@ export default function Groups({
       if (res.ok) {
         const data = await res.json();
         setSelectedGroup(data.group);
+        setGroups(prev => prev.map(g => g.id === data.group.id ? data.group : g));
         setShowAddMemberModal(false);
       }
     } catch (err) {
@@ -1997,7 +1999,7 @@ export default function Groups({
                       </div>
                     </button>
 
-                    {canAddMembers && !selectedGroup.isCommunity && (
+                    {canAddMembers && (
                       <button
                         className="header-menu-item"
                         onClick={() => { setMemberSearchQuery(''); setShowAddMemberModal(true); setShowHeaderMenu(false); }}
@@ -2005,7 +2007,7 @@ export default function Groups({
                         <UserPlus size={16} color="#ee7882" />
                         <div className="menu-item-text">
                           <strong>Add Members</strong>
-                          <span>Invite contacts to group</span>
+                          <span>{selectedGroup.isCommunity ? 'Add members to community' : 'Invite contacts to group'}</span>
                         </div>
                       </button>
                     )}
@@ -2738,7 +2740,7 @@ export default function Groups({
                   {copiedLink ? <CheckCheck size={13} color="#10b981" /> : <Copy size={13} />}
                   <span>{copiedLink ? 'Link Copied!' : 'Copy Invite'}</span>
                 </button>
-                {canAddMembers && !selectedGroup.isCommunity && (
+                {canAddMembers && (
                   <button className="quick-action-pill highlight" onClick={() => { setMemberSearchQuery(''); setShowAddMemberModal(true); }}>
                     <UserPlus size={13} />
                     <span>Add Members</span>
@@ -2786,6 +2788,17 @@ export default function Groups({
               {/* TAB 1: MEMBERS & ROLES */}
               {drawerTab === 'members' && (
                 <div className="drawer-members-section">
+                  {canAddMembers && (
+                    <button
+                      type="button"
+                      className="drawer-add-member-cta-btn"
+                      onClick={() => { setMemberSearchQuery(''); setShowAddMemberModal(true); }}
+                    >
+                      <UserPlus size={16} />
+                      <span>Add New Members</span>
+                    </button>
+                  )}
+
                   <div className="drawer-search-row">
                     <Search size={13} color="#ee7882" />
                     <input
@@ -2874,7 +2887,7 @@ export default function Groups({
                           </div>
 
                           {/* 3-Dots Governance Menu (Owner & Admins can promote/demote/kick) */}
-                          {isAdmin && !isSelf && !selectedGroup.isCommunity && (!isOwner || isCreator) && (
+                          {isAdmin && !isSelf && (!isOwner || isCreator) && (
                             <div className="member-options-rel">
                               <button
                                 className="member-menu-btn"
@@ -2908,7 +2921,7 @@ export default function Groups({
                                       <div className="menu-divider" />
                                       <button className="danger-item" onClick={() => handleRemoveMember(m)}>
                                         <UserMinus size={13} color="#ef4444" />
-                                        <span>Remove from Group</span>
+                                        <span>{selectedGroup.isCommunity ? 'Remove from Community' : 'Remove from Group'}</span>
                                       </button>
                                     </>
                                   )}

@@ -531,32 +531,14 @@ export default function StatusViewerModal({
           className="status-content-body"
           style={{ background: currentStatus.backgroundGradient || '#190a0f', position: 'relative', overflow: 'hidden' }}
         >
-          {/* Immersive Full-Screen Photo / Video Story Layer */}
-          {resolvedMediaUrl && (isImage || isVideo) && (
-            <div className="story-canvas-media-layer" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
-              {isVideo ? (
-                <video
-                  key={resolvedMediaUrl}
-                  src={resolvedMediaUrl}
-                  autoPlay
-                  loop
-                  muted={Boolean(currentStatus.music)}
-                  playsInline
-                  controls={false}
-                  preload="auto"
-                  className="story-canvas-media-element"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
-              ) : (
-                <img
-                  key={resolvedMediaUrl}
-                  src={resolvedMediaUrl}
-                  alt="Status Photo"
-                  className="story-canvas-media-element"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
-              )}
-              <div className="story-canvas-media-vignette" />
+          {/* Status Media Display (Photo, Video, Document, etc.) */}
+          {resolvedMediaUrl && (
+            <div className="status-media-wrapper" style={{ zIndex: 10, position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <EncryptedAttachmentViewer
+                objectUrl={resolvedMediaUrl}
+                mimeType={mediaDecrypted?.mimeType}
+                mediaId={currentStatus.mediaId}
+              />
             </div>
           )}
 
@@ -565,17 +547,6 @@ export default function StatusViewerModal({
             <div className="status-decrypting-badge" style={{ zIndex: 10, position: 'relative' }}>
               <Loader2 size={20} className="animate-spin" color="#ee7882" />
               <span>Decrypting secure photo / media...</span>
-            </div>
-          )}
-
-          {/* Non-image, non-video generic attachment viewer (PDF, audio, docs) */}
-          {resolvedMediaUrl && !isImage && !isVideo && (
-            <div className="status-media-wrapper" style={{ zIndex: 10, position: 'relative' }}>
-              <EncryptedAttachmentViewer
-                objectUrl={resolvedMediaUrl}
-                mimeType={mediaDecrypted.mimeType}
-                mediaId={currentStatus.mediaId}
-              />
             </div>
           )}
 
