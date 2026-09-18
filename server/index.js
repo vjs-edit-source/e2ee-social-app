@@ -56,7 +56,17 @@ const connectedClients = new Map();
 
 // Helper to send real-time message to all active devices of a user
 function sendToUser(username, data) {
-  const sockets = connectedClients.get(username);
+  if (!username) return;
+  let sockets = connectedClients.get(username);
+  if (!sockets) {
+    const targetLower = String(username).toLowerCase().trim();
+    for (const [u, s] of connectedClients.entries()) {
+      if (String(u).toLowerCase().trim() === targetLower) {
+        sockets = s;
+        break;
+      }
+    }
+  }
   if (!sockets) return;
   const payload = JSON.stringify(data);
   for (const ws of sockets) {
@@ -1134,15 +1144,10 @@ wss.on('connection', (ws, req) => {
           db.updateUserPresence(username, true);
         }
         ws.send(JSON.stringify({ type: 'PONG' }));
-      } else if (['CALL_OFFER', 'CALL_ANSWER', 'CALL_ICE_CANDIDATE', 'CALL_REJECT', 'CALL_HANGUP'].includes(data.type)) {
+      } else if (['CALL_OFFER', 'CALL_ANSWER', 'CALL_ACCEPT', 'CALL_ICE_CANDIDATE', 'CALL_REJECT', 'CALL_HANGUP'].includes(data.type)) {
         const targetUsername = data.target || data.recipient || data.caller;
-        if (targetUsername && connectedClients.has(targetUsername)) {
-          const targetSockets = connectedClients.get(targetUsername);
-          for (const s of targetSockets) {
-            if (s.readyState === 1 /* OPEN */) {
-              s.send(JSON.stringify(data));
-            }
-          }
+        if (targetUsername) {
+          sendToUser(targetUsername, data);
         }
       } else if (data.type === 'TYPING_STATUS') {
         const { sender, recipient, isTyping } = data;

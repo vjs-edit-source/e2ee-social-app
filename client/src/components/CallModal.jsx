@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -8,14 +8,18 @@ import {
   MicOff,
   Camera,
   ShieldCheck,
-  Volume2
+  Volume2,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
+    { urls: 'stun:stun.counterpath.net:3478' }
   ]
 };
 
@@ -30,6 +34,7 @@ export default function CallModal({
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(!callData.isVideo);
   const [callDuration, setCallDuration] = useState(0);
+  const [permissionError, setPermissionError] = useState(null);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -37,6 +42,8 @@ export default function CallModal({
   const pcRef = useRef(null);
   const durationTimerRef = useRef(null);
   const ringtoneTimerRef = useRef(null);
+  const timeoutTimerRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
 
   // Play synthetic pleasant ringtone
   const playRingtone = (isOutgoing) => {
@@ -44,17 +51,23 @@ export default function CallModal({
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
 
       const ringInterval = setInterval(() => {
         if (callStatus === 'connected' || callStatus === 'ended') {
           clearInterval(ringInterval);
           return;
         }
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(isOutgoing ? 440 : 480, ctx.currentTime);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -75,10 +88,24 @@ export default function CallModal({
     return () => clearInterval(ringtoneTimerRef.current);
   }, [callStatus]);
 
+  // Ring timeout (45s) for outgoing calls
+  useEffect(() => {
+    if (callStatus === 'outgoing') {
+      timeoutTimerRef.current = setTimeout(() => {
+        if (callStatus === 'outgoing') {
+          setCallStatus('ended');
+          hangUp();
+        }
+      }, 45000);
+    }
+    return () => clearTimeout(timeoutTimerRef.current);
+  }, [callStatus]);
+
   // Duration Timer on Connected
   useEffect(() => {
     if (callStatus === 'connected') {
       clearInterval(ringtoneTimerRef.current);
+      clearTimeout(timeoutTimerRef.current);
       durationTimerRef.current = setInterval(() => {
         setCallDuration(d => d + 1);
       }, 1000);
@@ -93,21 +120,51 @@ export default function CallModal({
     const handleSignaling = async (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.caller !== callData.peer.username && data.sender !== callData.peer.username && data.target !== currentUser.username) {
+        const peerName = (callData.peer?.username || '').toLowerCase().trim();
+        const myName = (currentUser?.username || '').toLowerCase().trim();
+        const msgSender = (data.sender || data.caller || '').toLowerCase().trim();
+        const msgTarget = (data.target || data.recipient || '').toLowerCase().trim();
+
+        // Check if message is part of this call session
+        const isFromPeer = msgSender === peerName;
+        const isToPeer = msgTarget === peerName;
+
+        if (!isFromPeer && !isToPeer) {
           return;
         }
 
-        if (data.type === 'CALL_ACCEPT' && pcRef.current) {
-          setCallStatus('connected');
-          await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        } else if (data.type === 'CALL_ICE_CANDIDATE' && pcRef.current) {
+        if ((data.type === 'CALL_ACCEPT' || data.type === 'CALL_ANSWER') && pcRef.current) {
+          try {
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+            setCallStatus('connected');
+            
+            // Process any early buffered ICE candidates
+            while (pendingIceCandidatesRef.current.length > 0) {
+              const cand = pendingIceCandidatesRef.current.shift();
+              try {
+                await pcRef.current.addIceCandidate(new RTCIceCandidate(cand));
+              } catch (e) {
+                console.warn('[WebRTC] Buffered candidate add error:', e);
+              }
+            }
+          } catch (err) {
+            console.error('[WebRTC] Remote description error on caller:', err);
+          }
+        } else if (data.type === 'CALL_ICE_CANDIDATE') {
           if (data.candidate) {
-            await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+            if (pcRef.current && pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((err) => {
+                console.warn('[WebRTC] addIceCandidate error:', err);
+              });
+            } else {
+              // Buffer candidates until remote description is set
+              pendingIceCandidatesRef.current.push(data.candidate);
+            }
           }
         } else if (data.type === 'CALL_REJECT' || data.type === 'CALL_HANGUP') {
           setCallStatus('ended');
           cleanup();
-          setTimeout(onClose, 1200);
+          setTimeout(onClose, 1000);
         }
       } catch (e) {
         console.error('Call signaling error:', e);
@@ -127,34 +184,73 @@ export default function CallModal({
 
   const getMediaStream = async (video) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
         video: video ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } : false
-      });
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
+      setPermissionError(null);
       return stream;
     } catch (err) {
-      console.warn('Could not get video, falling back to audio:', err);
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = audioStream;
-      setIsVideoCall(false);
-      setIsCameraOff(true);
-      return audioStream;
+      console.warn('[WebRTC] getUserMedia initial error:', err);
+      if (video) {
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+          localStreamRef.current = audioStream;
+          setIsVideoCall(false);
+          setIsCameraOff(true);
+          setPermissionError(null);
+          return audioStream;
+        } catch (audioErr) {
+          throw audioErr;
+        }
+      }
+      throw err;
     }
   };
 
   const createPeerConnection = (stream) => {
+    if (pcRef.current) {
+      try {
+        pcRef.current.close();
+      } catch (e) {}
+    }
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
 
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    if (stream) {
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    }
 
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+      console.log('[WebRTC] Received remote track:', event.track.kind);
+      if (remoteVideoRef.current) {
+        if (event.streams && event.streams[0]) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        } else {
+          let inboundStream = remoteVideoRef.current.srcObject;
+          if (!inboundStream || !(inboundStream instanceof MediaStream)) {
+            inboundStream = new MediaStream();
+            remoteVideoRef.current.srcObject = inboundStream;
+          }
+          inboundStream.addTrack(event.track);
+        }
+        remoteVideoRef.current.play().catch(e => console.warn('Remote track play warning:', e));
       }
     };
 
@@ -170,12 +266,13 @@ export default function CallModal({
     };
 
     pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] Connection state changed:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         setCallStatus('connected');
-      } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+      } else if (pc.connectionState === 'failed') {
         setCallStatus('ended');
         cleanup();
-        setTimeout(onClose, 1000);
+        setTimeout(onClose, 1200);
       }
     };
 
@@ -184,6 +281,7 @@ export default function CallModal({
 
   const initiateCall = async () => {
     try {
+      setPermissionError(null);
       const stream = await getMediaStream(isVideoCall);
       const pc = createPeerConnection(stream);
 
@@ -203,19 +301,35 @@ export default function CallModal({
       }
     } catch (err) {
       console.error('Initiate call error:', err);
-      setCallStatus('ended');
-      setTimeout(onClose, 1000);
+      const isPermDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      setPermissionError(
+        isPermDenied
+          ? 'Microphone or camera permission was denied. Please allow audio & camera access to place calls.'
+          : (err.message || 'Could not access audio hardware.')
+      );
     }
   };
 
   const answerCall = async (withVideo = false) => {
     try {
+      setPermissionError(null);
       setIsVideoCall(withVideo);
       setIsCameraOff(!withVideo);
       const stream = await getMediaStream(withVideo);
       const pc = createPeerConnection(stream);
 
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+
+      // Process buffered candidates immediately
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const cand = pendingIceCandidatesRef.current.shift();
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (e) {
+          console.warn('[WebRTC] Drain candidate on answer error:', e);
+        }
+      }
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -231,7 +345,12 @@ export default function CallModal({
       }
     } catch (err) {
       console.error('Answer call error:', err);
-      rejectCall();
+      const isPermDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      setPermissionError(
+        isPermDenied
+          ? 'Microphone permission was denied. Please allow microphone access to answer the call.'
+          : (err.message || 'Could not access audio hardware.')
+      );
     }
   };
 
@@ -337,7 +456,7 @@ export default function CallModal({
         animation: 'fadeIn 0.25s ease-out'
       }}
     >
-      {/* Remote Video Track (Background Stream) */}
+      {/* Remote Video Track (Background Stream - kept mounted with opacity to allow uninterrupted audio streaming on mobile WebViews) */}
       <video
         ref={remoteVideoRef}
         autoPlay
@@ -348,7 +467,8 @@ export default function CallModal({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          display: callStatus === 'connected' && isVideoCall ? 'block' : 'none',
+          opacity: callStatus === 'connected' && isVideoCall ? 1 : 0,
+          pointerEvents: callStatus === 'connected' && isVideoCall ? 'auto' : 'none',
           zIndex: 1
         }}
       />
@@ -434,6 +554,75 @@ export default function CallModal({
             {callStatus === 'ended' && 'Call Ended'}
           </span>
         </div>
+
+        {/* Permission / Hardware Error Banner with Retry */}
+        {permissionError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.22)',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            maxWidth: '340px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '8px',
+            marginTop: '8px',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fca5a5', fontWeight: 600, fontSize: '0.88rem' }}>
+              <AlertCircle size={18} />
+              <span>Permission Required</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#f1f5f9', lineHeight: 1.4 }}>
+              {permissionError}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPermissionError(null);
+                  if (callData.isIncoming) {
+                    answerCall(isVideoCall);
+                  } else {
+                    initiateCall();
+                  }
+                }}
+                style={{
+                  background: '#ee7882',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <RefreshCw size={14} /> Try Again
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.12)',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Controls */}

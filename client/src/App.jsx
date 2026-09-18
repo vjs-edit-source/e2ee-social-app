@@ -464,8 +464,11 @@ export default function App() {
                 }));
               }
             } else if (data.type === 'CALL_OFFER') {
-              if (data.target === currentUser?.username) {
-                const callerUser = allUsersRef.current.find(u => u.username === data.caller) || {
+              const myName = String(currentUser?.username || '').toLowerCase().trim();
+              const targetName = String(data.target || '').toLowerCase().trim();
+              if (targetName && targetName === myName) {
+                const callerLower = String(data.caller || '').toLowerCase().trim();
+                const callerUser = allUsersRef.current.find(u => String(u.username || '').toLowerCase().trim() === callerLower) || {
                   username: data.caller,
                   displayName: data.callerDisplayName || data.caller,
                   avatarUrl: data.callerAvatarUrl || null
