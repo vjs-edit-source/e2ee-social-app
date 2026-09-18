@@ -3972,9 +3972,14 @@ textarea:focus {
 }
 
 .status-author-avatar {
-  width: 32px;
-  height: 32px;
-  border: 2px solid #ffffff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  overflow: hidden !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .status-author-name {

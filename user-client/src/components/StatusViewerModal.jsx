@@ -46,6 +46,28 @@ export default function StatusViewerModal({
   const [likesState, setLikesState] = useState({});
   const [isMuted, setIsMuted] = useState(() => musicEngine.isMuted());
   const [floatingReaction, setFloatingReaction] = useState(null);
+  const [extraAuthorUser, setExtraAuthorUser] = useState(null);
+
+  // Ensure status author user profile (photo/avatarUrl, displayName, avatarColor) is loaded
+  useEffect(() => {
+    if (!currentStatus?.author || !serverUrl) return;
+    const authorLower = currentStatus.author.toLowerCase();
+    const existing = allUsers.find(u => u.username?.toLowerCase() === authorLower) ||
+                     (currentUser?.username?.toLowerCase() === authorLower ? currentUser : null);
+    if (existing && existing.avatarUrl) {
+      setExtraAuthorUser(existing);
+    } else {
+      fetch(`${serverUrl}/api/users`)
+        .then(r => r.ok ? r.json() : null)
+        .then(users => {
+          if (Array.isArray(users)) {
+            const found = users.find(u => u.username?.toLowerCase() === authorLower);
+            if (found) setExtraAuthorUser(found);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentStatus?.author, allUsers, currentUser, serverUrl]);
 
   // Track which statuses have been marked as viewed to prevent repeat /view requests
   const recordedViewsRef = useRef(new Set());
@@ -414,12 +436,20 @@ export default function StatusViewerModal({
   if (!currentStatus) return null;
 
   const isAuthor = currentStatus.author?.toLowerCase() === currentUser?.username?.toLowerCase();
+  const authorLower = currentStatus.author?.toLowerCase();
+  const authorUser = extraAuthorUser ||
+                     allUsers.find(u => u.username?.toLowerCase() === authorLower) ||
+                     (currentUser?.username?.toLowerCase() === authorLower ? currentUser : null);
+  const authorAvatarUrl = authorUser?.avatarUrl;
+  const authorDisplayName = authorUser?.displayName || currentStatus.author;
+  const authorAvatarColor = authorUser?.avatarColor || '#3b82f6';
+
   const currentLikes = likesState[currentStatus.id] || currentStatus.likes || [];
   const isLiked = currentLikes.includes(currentUser.username);
   const statusDecrypted = decryptedStatuses[currentStatus.id];
   const mediaDecrypted = currentStatus.mediaId ? decryptedMediaMap[currentStatus.mediaId] : null;
 
-  const resolvedMediaUrl = resolveMediaUrl(mediaDecrypted?.objectUrl);
+  const resolvedMediaUrl = resolveMediaUrl(mediaDecrypted?.objectUrl || mediaDecrypted);
   const isImage = Boolean(mediaDecrypted?.mimeType?.startsWith('image/'));
   const isVideo = Boolean(mediaDecrypted?.mimeType?.startsWith('video/'));
 
@@ -446,12 +476,46 @@ export default function StatusViewerModal({
         {/* Status Header */}
         <div className="status-viewer-header">
           <div className="status-author-info">
-            <div className="avatar-circle status-author-avatar">
-              {currentStatus.author[0].toUpperCase()}
+            {authorAvatarUrl ? (
+              <img
+                src={authorAvatarUrl}
+                alt={authorDisplayName}
+                className="avatar-circle status-author-avatar"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                }}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: `2px solid ${authorAvatarColor}`,
+                  flexShrink: 0
+                }}
+              />
+            ) : null}
+            <div
+              className="avatar-circle status-author-avatar"
+              style={{
+                display: authorAvatarUrl ? 'none' : 'flex',
+                backgroundColor: authorAvatarColor,
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '700',
+                color: '#ffffff',
+                border: '2px solid rgba(255, 255, 255, 0.4)',
+                flexShrink: 0
+              }}
+            >
+              {authorDisplayName[0]?.toUpperCase() || currentStatus.author[0]?.toUpperCase() || 'U'}
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="status-author-name">{currentStatus.author}</span>
+                <span className="status-author-name">{authorDisplayName}</span>
                 {/* Music pill badge in header */}
                 {currentStatus.music && (
                   <div className="viewer-music-badge" title={`${currentStatus.music.title} - ${currentStatus.music.artist}`}>
@@ -660,7 +724,37 @@ export default function StatusViewerModal({
               ) : (
                 currentStatus.comments.map(c => (
                   <div key={c.id} className="comment-item">
-                    <div className="comment-avatar">{c.author[0].toUpperCase()}</div>
+                    {(() => {
+                      const cLower = c.author?.toLowerCase();
+                      const cUser = allUsers.find(u => u.username?.toLowerCase() === cLower) ||
+                                    (currentUser?.username?.toLowerCase() === cLower ? currentUser : null);
+                      if (cUser?.avatarUrl) {
+                        return (
+                          <img
+                            src={cUser.avatarUrl}
+                            alt={c.author}
+                            className="comment-avatar"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                            }}
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: `1.5px solid ${cUser.avatarColor || '#ee7882'}`,
+                              flexShrink: 0
+                            }}
+                          />
+                        );
+                      }
+                      return (
+                        <div className="comment-avatar" style={{ backgroundColor: cUser?.avatarColor || '#3b82f6' }}>
+                          {c.author[0].toUpperCase()}
+                        </div>
+                      );
+                    })()}
                     <div className="comment-bubble">
                       <div className="comment-author-name">{c.author}</div>
                       <div className="comment-text">
