@@ -46,11 +46,11 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   const lowerMime = (mimeType || '').toLowerCase();
   const formatLabel = getFormatDisplayLabel(fileName, mimeType);
 
-  const isStandardImage = (lowerMime.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(lowerName) || (!lowerMime && !isVideo && !isAudio && !isPdf && !isTextFile)) && !/\.(heic|heif)$/i.test(lowerName) && lowerMime !== 'image/heic' && lowerMime !== 'image/heif';
   const isHeic = lowerMime === 'image/heic' || lowerMime === 'image/heif' || /\.(heic|heif)$/i.test(lowerName);
   const isVideo = lowerMime.startsWith('video/') || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(lowerName);
   const isAudio = lowerMime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(lowerName);
   const isPdf = lowerMime.includes('pdf') || /\.pdf$/i.test(lowerName);
+  const isStandardImage = (lowerMime.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(lowerName) || (!lowerMime && !isVideo && !isAudio && !isPdf && !isTextFile)) && !isHeic;
 
   // Close lightbox on Escape key
   useEffect(() => {

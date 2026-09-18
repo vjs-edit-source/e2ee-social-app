@@ -511,7 +511,7 @@ export default function StatusViewerModal({
                 flexShrink: 0
               }}
             >
-              {authorDisplayName[0]?.toUpperCase() || currentStatus.author[0]?.toUpperCase() || 'U'}
+              {(authorDisplayName?.[0] || currentStatus?.author?.[0] || 'U').toUpperCase()}
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -751,7 +751,7 @@ export default function StatusViewerModal({
                       }
                       return (
                         <div className="comment-avatar" style={{ backgroundColor: cUser?.avatarColor || '#3b82f6' }}>
-                          {c.author[0].toUpperCase()}
+                          {(c.author?.[0] || 'U').toUpperCase()}
                         </div>
                       );
                     })()}

@@ -19,6 +19,31 @@ import { resolveMediaUrl } from '../utils/fileUtils';
 import StatusPublisherModal from './StatusPublisherModal';
 import StatusViewerModal from './StatusViewerModal';
 
+class StatusViewerErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('StatusViewer error caught by boundary:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="modal-overlay status-viewer-overlay" onClick={this.props.onClose}>
+          <div className="status-viewer-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', padding: '24px', textAlign: 'center' }}>
+            <p>Could not display status. Tap to close.</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function StatusScreen({ currentUser, allUsers = [], serverUrl, wsClient }) {
   const [statuses, setStatuses] = useState([]);
   const [showPublisher, setShowPublisher] = useState(false);
@@ -469,19 +494,21 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
 
       {/* Status Viewer Modal */}
       {viewerIndex !== null && (
-        <StatusViewerModal
-          statuses={statuses}
-          initialIndex={viewerIndex}
-          currentUser={currentUser}
-          allUsers={allUsers}
-          serverUrl={serverUrl}
-          onClose={() => setViewerIndex(null)}
-          onStatusUpdated={handleStatusUpdated}
-          onStatusDeleted={deletedId => {
-            setStatuses(prev => prev.filter(s => s.id !== deletedId));
-            setViewerIndex(null);
-          }}
-        />
+        <StatusViewerErrorBoundary onClose={() => setViewerIndex(null)}>
+          <StatusViewerModal
+            statuses={statuses}
+            initialIndex={viewerIndex}
+            currentUser={currentUser}
+            allUsers={allUsers}
+            serverUrl={serverUrl}
+            onClose={() => setViewerIndex(null)}
+            onStatusUpdated={handleStatusUpdated}
+            onStatusDeleted={deletedId => {
+              setStatuses(prev => prev.filter(s => s.id !== deletedId));
+              setViewerIndex(null);
+            }}
+          />
+        </StatusViewerErrorBoundary>
       )}
     </div>
   );
