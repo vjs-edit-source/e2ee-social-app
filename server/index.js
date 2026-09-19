@@ -149,6 +149,19 @@ app.post('/api/register', (req, res) => {
     return res.status(400).json({ error: 'Username must be between 2 and 30 characters.' });
   }
 
+  // If phone number is supplied, ensure no duplicate accounts can be created
+  if (phoneNumber) {
+    const existingWithPhone = db.findUserByPhoneNumber(phoneNumber);
+    if (existingWithPhone && existingWithPhone.username.toLowerCase() !== cleanUser.toLowerCase()) {
+      return res.json({
+        success: true,
+        isExistingUser: true,
+        user: existingWithPhone,
+        username: existingWithPhone.username
+      });
+    }
+  }
+
   try {
     const user = db.registerUser(cleanUser, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio);
     broadcast({ type: 'USER_JOINED', user });
@@ -170,19 +183,21 @@ app.post('/api/auth/send-otp', async (req, res) => {
     return res.status(400).json({ error: 'Valid phone number with country code is required (e.g. +91 9876543210)' });
   }
 
-  const cleanUser = username ? String(username).trim() : null;
-  if (cleanUser) {
+  const cleanPhone = phone.trim();
+  const existingUserWithPhone = db.findUserByPhoneNumber(cleanPhone);
+  const cleanUser = existingUserWithPhone ? existingUserWithPhone.username : (username ? String(username).trim() : null);
+
+  if (cleanUser && !existingUserWithPhone) {
     const existing = db.findUserByUsername(cleanUser);
-    const cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+    const cleanPhoneDigits = cleanPhone.replace(/[\s\-\(\)]/g, '');
     const existingPhone = existing?.phoneNumber ? existing.phoneNumber.replace(/[\s\-\(\)]/g, '') : null;
-    if (existing && existingPhone && existingPhone !== cleanPhone) {
+    if (existing && existingPhone && existingPhone !== cleanPhoneDigits) {
       return res.status(409).json({ error: `Username "@${existing.username}" is already taken by another account. Please choose a different handle.` });
     }
   }
 
   // Generate 6-digit numeric OTP fallback
   let otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const cleanPhone = phone.trim();
 
   // Dispatch via SMS Gateway
   const smsResult = await sendSmsOtp(cleanPhone, otp);
@@ -197,6 +212,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
     success: true,
     message: smsResult.message || `Verification code sent to ${cleanPhone} via SMS`,
     gateway: smsResult.gateway,
+    isExistingUser: Boolean(existingUserWithPhone),
+    existingUsername: existingUserWithPhone ? existingUserWithPhone.username : null,
     expiresInSeconds: 300
   });
 });
@@ -269,6 +286,22 @@ app.post('/api/auth/verify-otp', (req, res) => {
     return res.status(400).json({ error: result.reason || 'Invalid OTP code' });
   }
 
+  // If phone matches an existing account, do NOT create a duplicate account!
+  // Automatically restore and log the user into their previous account
+  if (phone) {
+    const existingUser = db.findUserByPhoneNumber(phone);
+    if (existingUser) {
+      console.log(`[Auth] Existing account @${existingUser.username} matched for phone ${phone}. Logging back into previous account.`);
+      return res.json({
+        success: true,
+        verified: true,
+        isExistingUser: true,
+        username: existingUser.username,
+        user: existingUser
+      });
+    }
+  }
+
   let user = null;
   const finalUsername = (username || result.username || `user_${identifier.replace(/\D/g, '').slice(-4) || 'member'}`).trim();
 
@@ -281,6 +314,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
   res.json({
     success: true,
     verified: true,
+    isExistingUser: false,
     username: finalUsername,
     user
   });
@@ -304,6 +338,13 @@ app.post('/api/user/profile', (req, res) => {
   const { username, avatarUrl, avatarColor, bio, displayName, phoneNumber } = req.body;
   if (!username) {
     return res.status(400).json({ error: 'Username is required' });
+  }
+
+  if (phoneNumber) {
+    const existingWithPhone = db.findUserByPhoneNumber(phoneNumber);
+    if (existingWithPhone && existingWithPhone.username.toLowerCase() !== username.toLowerCase()) {
+      return res.status(409).json({ error: 'This phone number is already associated with another account.' });
+    }
   }
 
   const user = db.updateUserProfile(username, { avatarUrl, avatarColor, bio, displayName, phoneNumber });

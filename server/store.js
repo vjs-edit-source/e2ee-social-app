@@ -251,6 +251,22 @@ class ZeroKnowledgeStore {
     return null;
   }
 
+  findUserByPhoneNumber(phone) {
+    if (!phone || typeof phone !== 'string') return null;
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length < 7) return null;
+
+    for (const [uname, user] of this.users.entries()) {
+      if (user.phoneNumber) {
+        const uDigits = user.phoneNumber.replace(/\D/g, '');
+        if (uDigits === cleanDigits || (cleanDigits.length >= 10 && uDigits.length >= 10 && uDigits.slice(-10) === cleanDigits.slice(-10))) {
+          return user;
+        }
+      }
+    }
+    return null;
+  }
+
   checkUsernameAvailable(username, currentPublicKey = null) {
     if (!username || typeof username !== 'string') return false;
     const clean = username.trim();

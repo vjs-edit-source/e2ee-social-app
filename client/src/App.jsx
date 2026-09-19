@@ -275,6 +275,15 @@ export default function App() {
       const userObj = await initializeUserIdentity(username, serverUrl, customDisplayName);
       setCurrentUser(userObj);
 
+      // If explicit login/relogin, advance the session login timestamp so past messages cannot be decrypted after relogin
+      if (!isSilent) {
+        localStorage.setItem(`ciphersocial_session_login_time_${userObj.username}`, new Date().toISOString());
+      } else {
+        if (!localStorage.getItem(`ciphersocial_session_login_time_${userObj.username}`)) {
+          localStorage.setItem(`ciphersocial_session_login_time_${userObj.username}`, new Date().toISOString());
+        }
+      }
+
       // Register public key with the central backend engine
       try {
         const res = await fetch(`${serverUrl}/api/register`, {
@@ -319,6 +328,9 @@ export default function App() {
   // Account restored from backup
   const handleRestoredAccount = (restoredUserObj) => {
     setCurrentUser(restoredUserObj);
+    if (restoredUserObj?.username) {
+      localStorage.setItem(`ciphersocial_session_login_time_${restoredUserObj.username}`, new Date().toISOString());
+    }
     loadUsersDirectory();
     setShowAuthModal(false);
   };
@@ -328,6 +340,9 @@ export default function App() {
     decryptionCache.clearAll();
     localStorage.removeItem('e2ee_current_active_user');
     localStorage.removeItem('ciphersocial_active_user');
+    if (currentUser?.username) {
+      localStorage.removeItem(`ciphersocial_session_login_time_${currentUser.username}`);
+    }
     setCurrentUser(null);
     setShowAuthModal(true);
   };

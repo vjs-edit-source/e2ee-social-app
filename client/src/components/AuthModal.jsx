@@ -359,7 +359,14 @@ export default function AuthModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
 
-      await onLogin(userKey, cleanName);
+      const targetUsername = data.username || userKey;
+      const targetDisplayName = data.user?.displayName || cleanName || targetUsername;
+
+      if (data.isExistingUser) {
+        setStatusMsg(`Welcome back! Existing account found (@${targetUsername}). Logging in...`);
+      }
+
+      await onLogin(targetUsername, targetDisplayName);
     } catch (err) {
       console.error('Verify Phone OTP error:', err);
       setAuthError(err.message || 'SMS verification failed.');
