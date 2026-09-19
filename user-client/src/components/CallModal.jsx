@@ -12,6 +12,7 @@ import {
   AlertCircle,
   RefreshCw
 } from 'lucide-react';
+import { soundEffects } from '../utils/soundEffects';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -27,7 +28,8 @@ export default function CallModal({
   callData, // { isIncoming, peer, isVideo, offer }
   currentUser,
   wsClient,
-  onClose
+  onClose,
+  onCallEnded = null
 }) {
   const [callStatus, setCallStatus] = useState(callData.isIncoming ? 'incoming' : 'outgoing');
   const [isVideoCall, setIsVideoCall] = useState(!!callData.isVideo);
@@ -41,51 +43,48 @@ export default function CallModal({
   const localStreamRef = useRef(null);
   const pcRef = useRef(null);
   const durationTimerRef = useRef(null);
-  const ringtoneTimerRef = useRef(null);
   const timeoutTimerRef = useRef(null);
   const pendingIceCandidatesRef = useRef([]);
+  const callEndedHandledRef = useRef(false);
 
-  // Play synthetic pleasant ringtone
-  const playRingtone = (isOutgoing) => {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
+  // Safely report call ended details exactly once
+  const reportCallEnded = (status) => {
+    if (callEndedHandledRef.current) return;
+    callEndedHandledRef.current = true;
 
-      const ringInterval = setInterval(() => {
-        if (callStatus === 'connected' || callStatus === 'ended') {
-          clearInterval(ringInterval);
-          return;
-        }
-        if (ctx.state === 'suspended') {
-          ctx.resume().catch(() => {});
-        }
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(isOutgoing ? 440 : 480, ctx.currentTime);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.8);
-      }, isOutgoing ? 2500 : 2000);
+    soundEffects.stopIncomingRingtone();
+    soundEffects.stopOutgoingRingback();
+    soundEffects.playCallEnded();
 
-      ringtoneTimerRef.current = ringInterval;
-    } catch (e) {}
+    const callerName = callData.isIncoming ? (callData.peer?.username || '') : (currentUser?.username || '');
+    const recipientName = callData.isIncoming ? (currentUser?.username || '') : (callData.peer?.username || '');
+
+    if (onCallEnded) {
+      onCallEnded({
+        callType: isVideoCall ? 'video' : 'voice',
+        status: status || (callDuration > 0 ? 'completed' : (callData.isIncoming ? 'missed' : 'cancelled')),
+        duration: callDuration,
+        caller: callerName,
+        recipient: recipientName,
+        peer: callData.peer
+      });
+    }
   };
 
+  // Play realistic ringtone for incoming calls or ringback tone for outgoing calls
   useEffect(() => {
-    if (callStatus === 'incoming' || callStatus === 'outgoing') {
-      playRingtone(callStatus === 'outgoing');
+    if (callStatus === 'incoming') {
+      soundEffects.startIncomingRingtone();
+    } else if (callStatus === 'outgoing') {
+      soundEffects.startOutgoingRingback();
     } else {
-      clearInterval(ringtoneTimerRef.current);
+      soundEffects.stopIncomingRingtone();
+      soundEffects.stopOutgoingRingback();
     }
-    return () => clearInterval(ringtoneTimerRef.current);
+    return () => {
+      soundEffects.stopIncomingRingtone();
+      soundEffects.stopOutgoingRingback();
+    };
   }, [callStatus]);
 
   // Ring timeout (45s) for outgoing calls
@@ -94,6 +93,7 @@ export default function CallModal({
       timeoutTimerRef.current = setTimeout(() => {
         if (callStatus === 'outgoing') {
           setCallStatus('ended');
+          reportCallEnded('missed');
           hangUp();
         }
       }, 45000);
@@ -101,10 +101,26 @@ export default function CallModal({
     return () => clearTimeout(timeoutTimerRef.current);
   }, [callStatus]);
 
+  // Ring timeout (45s) for incoming calls if unanswered
+  useEffect(() => {
+    if (callStatus === 'incoming') {
+      const incomingTimeout = setTimeout(() => {
+        if (callStatus === 'incoming') {
+          setCallStatus('ended');
+          cleanup();
+          reportCallEnded('missed');
+          setTimeout(onClose, 1000);
+        }
+      }, 45000);
+      return () => clearTimeout(incomingTimeout);
+    }
+  }, [callStatus]);
+
   // Duration Timer on Connected
   useEffect(() => {
     if (callStatus === 'connected') {
-      clearInterval(ringtoneTimerRef.current);
+      soundEffects.stopIncomingRingtone();
+      soundEffects.stopOutgoingRingback();
       clearTimeout(timeoutTimerRef.current);
       durationTimerRef.current = setInterval(() => {
         setCallDuration(d => d + 1);
@@ -164,6 +180,7 @@ export default function CallModal({
         } else if (data.type === 'CALL_REJECT' || data.type === 'CALL_HANGUP') {
           setCallStatus('ended');
           cleanup();
+          reportCallEnded(callDuration > 0 ? 'completed' : (callData.isIncoming ? 'missed' : 'declined'));
           setTimeout(onClose, 1000);
         }
       } catch (e) {
@@ -364,6 +381,7 @@ export default function CallModal({
     }
     setCallStatus('ended');
     cleanup();
+    reportCallEnded('declined');
     setTimeout(onClose, 400);
   };
 
@@ -377,12 +395,14 @@ export default function CallModal({
     }
     setCallStatus('ended');
     cleanup();
+    reportCallEnded(callDuration > 0 ? 'completed' : (callData.isIncoming ? 'missed' : 'cancelled'));
     setTimeout(onClose, 400);
   };
 
   const cleanup = () => {
-    clearInterval(ringtoneTimerRef.current);
-    clearInterval(durationTimerRef.current);
+    soundEffects.stopIncomingRingtone();
+    soundEffects.stopOutgoingRingback();
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;

@@ -12,6 +12,7 @@ import SettingsScreen from './components/SettingsScreen';
 import CallModal from './components/CallModal';
 import AppLockOverlay from './components/AppLockOverlay';
 import { initializeUserIdentity, getCurrentUsername } from './crypto/vault';
+import { importPublicKey, deriveSharedAESKey, encryptText } from './crypto/e2ee';
 import {
   getEngineUrl,
   getEngineWsUrl,
@@ -517,6 +518,71 @@ export default function App() {
     };
   }, [currentUser?.username, wsUrl]);
 
+  // Sync active user to Android Native Background Call Service
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.AndroidCallBridge) {
+      if (currentUser?.username) {
+        try {
+          window.AndroidCallBridge.startCallService(currentUser.username, wsUrl);
+        } catch (e) {}
+      } else {
+        try {
+          window.AndroidCallBridge.stopCallService();
+        } catch (e) {}
+      }
+    }
+  }, [currentUser?.username, wsUrl]);
+
+  // Handle call ended: log encrypted call record to conversation
+  const handleCallEnded = async (callDetails) => {
+    if (!callDetails || !currentUser) return;
+
+    // Only caller logs the call to avoid duplicate message entries
+    const isCaller = callDetails.caller && currentUser.username &&
+      callDetails.caller.toLowerCase().trim() === currentUser.username.toLowerCase().trim();
+
+    if (!isCaller) return;
+
+    const peerUsername = callDetails.recipient;
+    if (!peerUsername) return;
+
+    try {
+      const peerUser = allUsersRef.current.find(u =>
+        u.username && u.username.toLowerCase().trim() === peerUsername.toLowerCase().trim()
+      ) || callDetails.peer;
+
+      if (!peerUser || !peerUser.publicIdentityKey) return;
+
+      const peerPubKey = await importPublicKey(peerUser.publicIdentityKey);
+      const sharedKey = await deriveSharedAESKey(currentUser.keyPair.privateKey, peerPubKey);
+
+      const payloadString = JSON.stringify({
+        type: 'call_log',
+        callType: callDetails.callType || 'voice',
+        status: callDetails.status || 'completed',
+        duration: callDetails.duration || 0,
+        caller: callDetails.caller,
+        recipient: callDetails.recipient,
+        timestamp: new Date().toISOString()
+      });
+
+      const { ciphertext, iv } = await encryptText(sharedKey, payloadString);
+
+      await fetch(`${serverUrl}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: currentUser.username,
+          recipient: peerUsername,
+          ciphertext,
+          iv
+        })
+      });
+    } catch (err) {
+      console.warn('Failed to log call details:', err);
+    }
+  };
+
   const handleGroupChatStateChange = (groupIdOrBool) => {
     if (typeof groupIdOrBool === 'string') {
       setActiveGroupId(groupIdOrBool);
@@ -619,6 +685,7 @@ export default function App() {
           currentUser={currentUser}
           wsClient={wsClient}
           onClose={() => setActiveCall(null)}
+          onCallEnded={handleCallEnded}
         />
       )}
 

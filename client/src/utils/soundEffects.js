@@ -139,6 +139,183 @@ class SoundEffectsManager {
       console.warn('Notification sound error:', e);
     }
   }
+
+  // ============================================================================
+  // INCOMING CALL RINGTONE & MOBILE VIBRATION
+  // ============================================================================
+  startIncomingRingtone() {
+    this.stopIncomingRingtone();
+
+    // Trigger continuous vibration on mobile
+    const triggerVibe = () => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([800, 400, 800, 400, 1000]);
+        }
+      } catch (e) {}
+    };
+
+    triggerVibe();
+
+    // Play pleasant, loud polyphonic melodic phone ring
+    const playRingPhrase = async () => {
+      try {
+        const ctx = await this._getAudioContext();
+        if (!ctx) return;
+
+        // Sequence of melodic notes: A5 (880), C#6 (1108.7), E6 (1318.5), A6 (1760)
+        // Two melodic chirps per ring cycle like modern smartphones
+        const notes = [
+          { f: 880.00, t: 0.00, d: 0.12 },
+          { f: 1108.73, t: 0.14, d: 0.12 },
+          { f: 1318.51, t: 0.28, d: 0.12 },
+          { f: 1760.00, t: 0.42, d: 0.28 },
+          // Second rising phrase
+          { f: 1108.73, t: 0.85, d: 0.12 },
+          { f: 1318.51, t: 0.99, d: 0.12 },
+          { f: 1760.00, t: 1.13, d: 0.12 },
+          { f: 2217.46, t: 1.27, d: 0.32 }
+        ];
+
+        const now = ctx.currentTime;
+
+        notes.forEach(({ f, t, d }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          // Triangle wave for warm acoustic marimba/bell resonance
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f, now + t);
+
+          gain.gain.setValueAtTime(0.01, now + t);
+          gain.gain.linearRampToValueAtTime(0.45, now + t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + t + d);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now + t);
+          osc.stop(now + t + d + 0.05);
+
+          // Sparkle sine overtone
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(f * 2, now + t);
+
+          gain2.gain.setValueAtTime(0.001, now + t);
+          gain2.gain.linearRampToValueAtTime(0.2, now + t + 0.02);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + t + (d * 0.7));
+
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+
+          osc2.start(now + t);
+          osc2.stop(now + t + d + 0.05);
+        });
+      } catch (e) {
+        console.warn('Ringtone error:', e);
+      }
+    };
+
+    // Play immediately and repeat every 2.4 seconds
+    playRingPhrase();
+    this.ringInterval = setInterval(() => {
+      triggerVibe();
+      playRingPhrase();
+    }, 2400);
+  }
+
+  stopIncomingRingtone() {
+    if (this.ringInterval) {
+      clearInterval(this.ringInterval);
+      this.ringInterval = null;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(0);
+      }
+    } catch (e) {}
+  }
+
+  // ============================================================================
+  // OUTGOING RINGBACK TONE (Classic dual-frequency 440Hz + 480Hz)
+  // ============================================================================
+  startOutgoingRingback() {
+    this.stopOutgoingRingback();
+
+    const playRingbackBurst = async () => {
+      try {
+        const ctx = await this._getAudioContext();
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+        const duration = 1.8; // 1.8s ringback pulse
+
+        [440, 480].forEach(freq => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+          gain.gain.setValueAtTime(0.12, now + duration - 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now);
+          osc.stop(now + duration);
+        });
+      } catch (e) {
+        console.warn('Ringback error:', e);
+      }
+    };
+
+    playRingbackBurst();
+    this.ringbackInterval = setInterval(playRingbackBurst, 4500); // 1.8s sound, 2.7s silence
+  }
+
+  stopOutgoingRingback() {
+    if (this.ringbackInterval) {
+      clearInterval(this.ringbackInterval);
+      this.ringbackInterval = null;
+    }
+  }
+
+  // ============================================================================
+  // CALL ENDED TONE (3 quick descending beeps)
+  // ============================================================================
+  async playCallEnded() {
+    try {
+      const ctx = await this._getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const beeps = [480, 420, 360];
+
+      beeps.forEach((freq, idx) => {
+        const start = now + (idx * 0.14);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(0.15, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.1);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(start);
+        osc.stop(start + 0.11);
+      });
+    } catch (e) {}
+  }
 }
 
 export const soundEffects = new SoundEffectsManager();

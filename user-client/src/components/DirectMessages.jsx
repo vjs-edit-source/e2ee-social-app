@@ -13,6 +13,11 @@ import {
   Image as ImageIcon,
   FileText,
   Phone,
+  PhoneCall,
+  PhoneIncoming,
+  PhoneOutgoing,
+  PhoneMissed,
+  PhoneOff,
   Video,
   Mic,
   Star,
@@ -670,7 +675,22 @@ export default function DirectMessages({
             if (decryptedRaw.startsWith('{') && decryptedRaw.endsWith('}')) {
               try {
                 const parsed = JSON.parse(decryptedRaw);
-                if (parsed.mediaId) {
+                if (parsed.type === 'call_log' || parsed.callDetails) {
+                  const isVid = parsed.callType === 'video';
+                  const cIcon = isVid ? '🎥' : '📞';
+                  const cName = isVid ? 'Video call' : 'Voice call';
+                  if (parsed.status === 'missed') {
+                    previewText = `${cIcon} Missed ${cName.toLowerCase()}`;
+                  } else if (parsed.status === 'declined') {
+                    previewText = `${cIcon} Declined ${cName.toLowerCase()}`;
+                  } else if (parsed.duration > 0) {
+                    const m = Math.floor(parsed.duration / 60);
+                    const s = parsed.duration % 60;
+                    previewText = `${cIcon} ${cName} (${m}:${s < 10 ? '0' : ''}${s})`;
+                  } else {
+                    previewText = `${cIcon} ${cName}`;
+                  }
+                } else if (parsed.mediaId) {
                   isMedia = true;
                   mediaType = parsed.mimeType || 'file';
                   previewText = parsed.text ? `📷 ${parsed.text}` : (parsed.mimeType?.startsWith('image/') ? '📷 Photo' : (parsed.mimeType?.startsWith('video/') ? '🎥 Video' : (parsed.mimeType?.startsWith('audio/') ? '🎤 Audio' : '📄 File')));
@@ -827,11 +847,23 @@ export default function DirectMessages({
           let isVoice = false;
           let voiceDuration = 0;
           let replyTo = null;
+          let isCallLog = false;
+          let callDetails = null;
 
           if (!isLegacyExpired) {
             try {
               const parsed = JSON.parse(decryptedRaw);
-              if (parsed.text !== undefined || parsed.mediaId !== undefined) {
+              if (parsed.type === 'call_log' || parsed.callDetails) {
+                isCallLog = true;
+                callDetails = {
+                  callType: parsed.callType || 'voice',
+                  status: parsed.status || 'completed',
+                  duration: parsed.duration || 0,
+                  caller: parsed.caller,
+                  recipient: parsed.recipient
+                };
+                textContent = parsed.callType === 'video' ? '🎥 Video call' : '📞 Voice call';
+              } else if (parsed.text !== undefined || parsed.mediaId !== undefined) {
                 textContent = parsed.text || '';
                 mediaId = parsed.mediaId || null;
                 mediaKeyB64 = parsed.mediaKeyB64 || null;
@@ -855,7 +887,9 @@ export default function DirectMessages({
             isVoice,
             voiceDuration,
             replyTo,
-            isLegacyExpired
+            isLegacyExpired,
+            isCallLog,
+            callDetails
           };
 
           decryptedMsgCache.current[m.id] = msgMeta;
@@ -2371,8 +2405,116 @@ export default function DirectMessages({
                           </div>
                         )}
 
+                        {/* Call Details Card Bubble */}
+                        {msgMeta.isCallLog && msgMeta.callDetails ? (
+                          <div className="call-log-bubble" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '14px',
+                            padding: '4px 2px',
+                            minWidth: '220px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{
+                                width: '38px',
+                                height: '38px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: msgMeta.callDetails.status === 'missed'
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : msgMeta.callDetails.status === 'declined'
+                                    ? 'rgba(249, 115, 22, 0.15)'
+                                    : 'rgba(52, 211, 153, 0.15)',
+                                border: `1px solid ${
+                                  msgMeta.callDetails.status === 'missed'
+                                    ? 'rgba(239, 68, 68, 0.35)'
+                                    : msgMeta.callDetails.status === 'declined'
+                                      ? 'rgba(249, 115, 22, 0.35)'
+                                      : 'rgba(52, 211, 153, 0.35)'
+                                }`,
+                                flexShrink: 0
+                              }}>
+                                {msgMeta.callDetails.status === 'missed' ? (
+                                  <PhoneMissed size={18} color="#ef4444" />
+                                ) : msgMeta.callDetails.status === 'declined' ? (
+                                  <PhoneOff size={18} color="#f97316" />
+                                ) : msgMeta.callDetails.callType === 'video' ? (
+                                  <Video size={18} color="#60a5fa" />
+                                ) : isMine ? (
+                                  <PhoneOutgoing size={18} color="#34d399" />
+                                ) : (
+                                  <PhoneIncoming size={18} color="#34d399" />
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{
+                                  fontSize: '0.92rem',
+                                  fontWeight: 600,
+                                  color: msgMeta.callDetails.status === 'missed' ? '#f87171' : '#ffffff'
+                                }}>
+                                  {msgMeta.callDetails.status === 'missed'
+                                    ? (msgMeta.callDetails.callType === 'video' ? 'Missed Video Call' : 'Missed Voice Call')
+                                    : msgMeta.callDetails.status === 'declined'
+                                      ? 'Declined Call'
+                                      : msgMeta.callDetails.status === 'cancelled'
+                                        ? 'Cancelled Call'
+                                        : (msgMeta.callDetails.callType === 'video' ? 'Video Call' : 'Voice Call')}
+                                </span>
+
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  {msgMeta.callDetails.status === 'completed' && msgMeta.callDetails.duration > 0 ? (
+                                    `${Math.floor(msgMeta.callDetails.duration / 60)}m ${msgMeta.callDetails.duration % 60}s`
+                                  ) : msgMeta.callDetails.status === 'missed' ? (
+                                    'Unanswered'
+                                  ) : msgMeta.callDetails.status === 'declined' ? (
+                                    'Declined'
+                                  ) : msgMeta.callDetails.status === 'cancelled' ? (
+                                    'Cancelled'
+                                  ) : (
+                                    'Ended'
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Call Back Button */}
+                            {onStartCall && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onStartCall(activePeer, msgMeta.callDetails.callType === 'video');
+                                }}
+                                style={{
+                                  background: 'rgba(238, 120, 130, 0.15)',
+                                  border: '1px solid rgba(238, 120, 130, 0.35)',
+                                  color: '#ee7882',
+                                  borderRadius: '9999px',
+                                  padding: '5px 12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  flexShrink: 0,
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Call back"
+                              >
+                                {msgMeta.callDetails.callType === 'video' ? <Video size={13} /> : <Phone size={13} />}
+                                <span>Call Back</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+
                         {/* Message Text (if any) */}
-                        {msgMeta.text ? (
+                        {!msgMeta.isCallLog && msgMeta.text ? (
                           msgMeta.isLegacyExpired ? (
                             <div className="msg-text legacy-expired">
                               <Lock size={12} />
