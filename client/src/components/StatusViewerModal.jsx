@@ -462,9 +462,6 @@ export default function StatusViewerModal({
   return (
     <div className="modal-overlay status-viewer-overlay" onClick={onClose}>
       <div className="status-viewer-container" onClick={e => e.stopPropagation()}>
-        {/* Top Scrim Gradient for text and icon readability over any background */}
-        <div className="status-viewer-top-scrim" />
-
         {/* Top Progress Segment Bars */}
         <div className="status-progress-tray">
           {statuses.map((s, idx) => (
@@ -515,10 +512,10 @@ export default function StatusViewerModal({
             >
               {(authorDisplayName?.[0] || currentStatus?.author?.[0] || 'U').toUpperCase()}
             </div>
-            <div className="status-author-text">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                <span className="status-author-name" title={authorDisplayName}>{authorDisplayName}</span>
-                {/* Music pill badge in header (hidden on mobile, visible on desktop) */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="status-author-name">{authorDisplayName}</span>
+                {/* Music pill badge in header */}
                 {currentStatus.music && (
                   <div className="viewer-music-badge" title={`${currentStatus.music.title} - ${currentStatus.music.artist}`}>
                     <Music size={11} color="#ee7882" />
@@ -548,7 +545,7 @@ export default function StatusViewerModal({
                 onClick={handleToggleMute}
                 title={isMuted ? 'Unmute music' : 'Mute music'}
               >
-                {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
             )}
 
@@ -562,7 +559,7 @@ export default function StatusViewerModal({
                 onClick={e => e.stopPropagation()}
                 style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Download size={14} />
+                <Download size={15} />
               </a>
             )}
 
@@ -582,12 +579,12 @@ export default function StatusViewerModal({
                 onClick={handleDeleteStatus}
                 title="Delete this status story"
               >
-                <Trash2 size={14} />
+                <Trash2 size={15} />
               </button>
             )}
 
             <button className="status-close-btn" onClick={onClose} title="Close story">
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
         </div>
