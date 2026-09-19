@@ -27,6 +27,9 @@ import {
 } from '../crypto/vault';
 import { generate12WordMnemonic } from '../crypto/mnemonic';
 import MnemonicVaultModal from './MnemonicVaultModal';
+import { isCapacitorNative } from '../utils/engineConfig';
+
+const isAndroidVersion = () => typeof window !== 'undefined' && Boolean(isCapacitorNative() || /android/i.test(navigator.userAgent || ''));
 
 const COUNTRY_CODES = [
   { code: '+91', country: 'IN', name: 'India (+91)' },
@@ -98,6 +101,12 @@ export default function AuthModal({
       clearInterval(t2);
     };
   }, [emailCooldown, phoneCooldown]);
+
+  useEffect(() => {
+    if (isAndroidVersion() && activeTab === 'create') {
+      setActiveTab('phone');
+    }
+  }, [activeTab]);
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
@@ -446,14 +455,16 @@ export default function AuthModal({
             <span>Email OTP</span>
           </button>
 
-          <button
-            type="button"
-            className={`auth-tab-btn tab-create ${activeTab === 'create' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('create'); setAuthError(''); }}
-          >
-            <Zap size={16} />
-            <span>Quick Start</span>
-          </button>
+          {!isAndroidVersion() && (
+            <button
+              type="button"
+              className={`auth-tab-btn tab-create ${activeTab === 'create' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('create'); setAuthError(''); }}
+            >
+              <Zap size={16} />
+              <span>Quick Start</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -742,7 +753,7 @@ export default function AuthModal({
         )}
 
         {/* ── TAB: QUICK START ── */}
-        {activeTab === 'create' && (
+        {!isAndroidVersion() && activeTab === 'create' && (
           <div className="auth-form-container">
             <div style={{ marginBottom: '14px' }}>
               <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
