@@ -149,19 +149,6 @@ app.post('/api/register', (req, res) => {
     return res.status(400).json({ error: 'Username must be between 2 and 30 characters.' });
   }
 
-  // If phone number is supplied, ensure no duplicate accounts can be created
-  if (phoneNumber) {
-    const existingWithPhone = db.findUserByPhoneNumber(phoneNumber);
-    if (existingWithPhone && existingWithPhone.username.toLowerCase() !== cleanUser.toLowerCase()) {
-      return res.json({
-        success: true,
-        isExistingUser: true,
-        user: existingWithPhone,
-        username: existingWithPhone.username
-      });
-    }
-  }
-
   try {
     const user = db.registerUser(cleanUser, publicIdentityKey, publicPrekey, avatarColor, phoneNumber, avatarUrl, displayName, bio);
     broadcast({ type: 'USER_JOINED', user });
@@ -170,6 +157,16 @@ app.post('/api/register', (req, res) => {
   } catch (err) {
     if (err.code === 'USERNAME_TAKEN') {
       return res.status(409).json({ error: err.message, code: 'USERNAME_TAKEN' });
+    }
+    if (err.code === 'PHONE_NUMBER_TAKEN') {
+      return res.status(409).json({
+        error: err.message,
+        code: 'PHONE_NUMBER_TAKEN',
+        existingUser: err.existingUser ? {
+          username: err.existingUser.username,
+          displayName: err.existingUser.displayName || err.existingUser.username
+        } : null
+      });
     }
     console.error('Registration failed:', err);
     res.status(500).json({ error: 'Registration failed. Please try again.' });
@@ -184,17 +181,11 @@ app.post('/api/auth/send-otp', async (req, res) => {
   }
 
   const cleanPhone = phone.trim();
-  const existingUserWithPhone = db.findUserByPhoneNumber(cleanPhone);
-  const cleanUser = existingUserWithPhone ? existingUserWithPhone.username : (username ? String(username).trim() : null);
+  const existingPhoneUser = db.findUserByPhoneNumber(cleanPhone);
 
-  if (cleanUser && !existingUserWithPhone) {
-    const existing = db.findUserByUsername(cleanUser);
-    const cleanPhoneDigits = cleanPhone.replace(/[\s\-\(\)]/g, '');
-    const existingPhone = existing?.phoneNumber ? existing.phoneNumber.replace(/[\s\-\(\)]/g, '') : null;
-    if (existing && existingPhone && existingPhone !== cleanPhoneDigits) {
-      return res.status(409).json({ error: `Username "@${existing.username}" is already taken by another account. Please choose a different handle.` });
-    }
-  }
+  const cleanUser = username ? String(username).trim() : null;
+  // If this phone already belongs to an existing account, link OTP to that account
+  const effectiveUsername = existingPhoneUser ? existingPhoneUser.username : cleanUser;
 
   // Generate 6-digit numeric OTP fallback
   let otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -206,14 +197,15 @@ app.post('/api/auth/send-otp', async (req, res) => {
   if (smsResult.otp) {
     otp = smsResult.otp;
   }
-  db.saveOtp(cleanPhone, otp, cleanUser);
+  db.saveOtp(cleanPhone, otp, effectiveUsername);
 
   res.json({
     success: true,
     message: smsResult.message || `Verification code sent to ${cleanPhone} via SMS`,
     gateway: smsResult.gateway,
-    isExistingUser: Boolean(existingUserWithPhone),
-    existingUsername: existingUserWithPhone ? existingUserWithPhone.username : null,
+    isExistingAccount: Boolean(existingPhoneUser),
+    existingUsername: existingPhoneUser ? existingPhoneUser.username : null,
+    existingDisplayName: existingPhoneUser ? (existingPhoneUser.displayName || existingPhoneUser.username) : null,
     expiresInSeconds: 300
   });
 });
@@ -286,22 +278,22 @@ app.post('/api/auth/verify-otp', (req, res) => {
     return res.status(400).json({ error: result.reason || 'Invalid OTP code' });
   }
 
-  // If phone matches an existing account, do NOT create a duplicate account!
-  // Automatically restore and log the user into their previous account
-  if (phone) {
-    const existingUser = db.findUserByPhoneNumber(phone);
-    if (existingUser) {
-      console.log(`[Auth] Existing account @${existingUser.username} matched for phone ${phone}. Logging back into previous account.`);
-      return res.json({
-        success: true,
-        verified: true,
-        isExistingUser: true,
-        username: existingUser.username,
-        user: existingUser
-      });
-    }
+  // 1. Strict single-account enforcement for phone numbers:
+  // If an account ALREADY exists with this phone number, automatically return that existing account!
+  const existingPhoneUser = phone ? db.findUserByPhoneNumber(phone) : null;
+  if (existingPhoneUser) {
+    return res.json({
+      success: true,
+      verified: true,
+      isExistingAccount: true,
+      username: existingPhoneUser.username,
+      displayName: existingPhoneUser.displayName || existingPhoneUser.username,
+      user: existingPhoneUser,
+      message: `Welcome back, ${existingPhoneUser.displayName || existingPhoneUser.username}! Successfully verified and switched to your existing account.`
+    });
   }
 
+  // 2. New user registration if no existing account exists with this number
   let user = null;
   const finalUsername = (username || result.username || `user_${identifier.replace(/\D/g, '').slice(-4) || 'member'}`).trim();
 
@@ -314,7 +306,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
   res.json({
     success: true,
     verified: true,
-    isExistingUser: false,
+    isExistingAccount: false,
     username: finalUsername,
     user
   });
@@ -340,18 +332,18 @@ app.post('/api/user/profile', (req, res) => {
     return res.status(400).json({ error: 'Username is required' });
   }
 
-  if (phoneNumber) {
-    const existingWithPhone = db.findUserByPhoneNumber(phoneNumber);
-    if (existingWithPhone && existingWithPhone.username.toLowerCase() !== username.toLowerCase()) {
-      return res.status(409).json({ error: 'This phone number is already associated with another account.' });
+  try {
+    const user = db.updateUserProfile(username, { avatarUrl, avatarColor, bio, displayName, phoneNumber });
+    broadcast({ type: 'USER_UPDATED', user });
+    notifyInspector();
+    res.json({ success: true, user });
+  } catch (err) {
+    if (err.code === 'PHONE_NUMBER_TAKEN') {
+      return res.status(409).json({ error: err.message, code: 'PHONE_NUMBER_TAKEN' });
     }
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
-
-  const user = db.updateUserProfile(username, { avatarUrl, avatarColor, bio, displayName, phoneNumber });
-  broadcast({ type: 'USER_UPDATED', user });
-  notifyInspector();
-
-  res.json({ success: true, user });
 });
 
 // 2c. Fetch User Recent Conversations Preview

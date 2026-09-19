@@ -77,6 +77,7 @@ export default function AuthModal({
   const [phoneOtpStep, setPhoneOtpStep] = useState(1);
   const [phoneOtpInput, setPhoneOtpInput] = useState('');
   const [phoneCooldown, setPhoneCooldown] = useState(0);
+  const [existingAccountInfo, setExistingAccountInfo] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
@@ -314,8 +315,17 @@ export default function AuthModal({
 
       setPhoneOtpStep(2);
       setPhoneCooldown(60);
-      setStatusMsg(data.message || 'SMS dispatched! Check your phone SMS inbox.');
-      setTimeout(() => setStatusMsg(''), 4000);
+      if (data.isExistingAccount && data.existingUsername) {
+        setExistingAccountInfo({
+          username: data.existingUsername,
+          displayName: data.existingDisplayName || data.existingUsername
+        });
+        setStatusMsg(`Existing account found for @${data.existingDisplayName || data.existingUsername}! Verification code sent.`);
+      } else {
+        setExistingAccountInfo(null);
+        setStatusMsg(data.message || 'SMS dispatched! Check your phone SMS inbox.');
+      }
+      setTimeout(() => setStatusMsg(''), 5000);
     } catch (err) {
       console.error('Send Phone OTP error:', err);
       setAuthError(err.message || 'Failed to send SMS code.');
@@ -359,14 +369,15 @@ export default function AuthModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
 
-      const targetUsername = data.username || userKey;
-      const targetDisplayName = data.user?.displayName || cleanName || targetUsername;
-
-      if (data.isExistingUser) {
-        setStatusMsg(`Welcome back! Existing account found (@${targetUsername}). Logging in...`);
+      // If phone number already belongs to an existing account, switch automatically to that account!
+      if (data.isExistingAccount && data.username) {
+        const targetUser = data.username;
+        const targetDisplay = data.displayName || data.username;
+        setStatusMsg(`Welcome back, @${targetDisplay}! Automatically switching to your previous account...`);
+        await onLogin(targetUser, targetDisplay, false, fullPhone);
+      } else {
+        await onLogin(userKey, cleanName, false, fullPhone);
       }
-
-      await onLogin(targetUsername, targetDisplayName);
     } catch (err) {
       console.error('Verify Phone OTP error:', err);
       setAuthError(err.message || 'SMS verification failed.');
@@ -524,6 +535,25 @@ export default function AuthModal({
               </form>
             ) : (
               <form onSubmit={handleVerifyPhoneOtp} className="auth-form" style={{ padding: 0 }}>
+                {existingAccountInfo && (
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    marginBottom: '14px',
+                    fontSize: '0.85rem',
+                    color: '#93c5fd',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    lineHeight: '1.4'
+                  }}>
+                    <CheckCircle2 size={18} color="#60a5fa" style={{ flexShrink: 0 }} />
+                    <span>Existing account found: <strong>@{existingAccountInfo.displayName || existingAccountInfo.username}</strong>. Verifying will return you to your previous account.</span>
+                  </div>
+                )}
+
                 <div className="auth-guide-text">
                   Enter the 6-digit verification code sent via SMS to <strong style={{ color: '#ee7882' }}>{countryCode} {phoneNumber}</strong>:
                 </div>
@@ -555,7 +585,7 @@ export default function AuthModal({
                   ) : (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>Verify & Launch SadiSocial</span>
+                      <span>{existingAccountInfo ? 'Verify & Access Previous Account' : 'Verify & Launch SadiSocial'}</span>
                     </>
                   )}
                 </button>

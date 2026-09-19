@@ -648,21 +648,6 @@ export default function DirectMessages({
           continue;
         }
 
-        const sessionLoginTime = currentUser?.username ? localStorage.getItem(`ciphersocial_session_login_time_${currentUser.username}`) : null;
-        const isPreSessionConvo = sessionLoginTime && lastMessage.timestamp && new Date(lastMessage.timestamp).getTime() < new Date(sessionLoginTime).getTime();
-
-        if (isPreSessionConvo && !lastMessage.isSystem && !lastMessage.isWelcome) {
-          previewUpdates[peerUsername] = {
-            text: '🔒 Encrypted message',
-            timestamp: lastMessage.timestamp,
-            isMine: lastMessage.sender === currentUser.username,
-            sender: lastMessage.sender,
-            isMedia: false,
-            mediaType: null
-          };
-          continue;
-        }
-
         if (!sharedKey) continue;
 
         let previewText = 'Encrypted message';
@@ -794,13 +779,11 @@ export default function DirectMessages({
     async function decryptAllMessages() {
       let hasNewDecryptions = false;
       const newMapEntries = {};
-      const sessionLoginTime = currentUser?.username ? localStorage.getItem(`ciphersocial_session_login_time_${currentUser.username}`) : null;
 
       for (const m of messages) {
         let msgMeta = decryptionCache.getDirectMessage(m.id) || decryptedMsgCache.current[m.id];
-        const isPreSessionMsg = sessionLoginTime && m.timestamp && new Date(m.timestamp).getTime() < new Date(sessionLoginTime).getTime();
 
-        if (!msgMeta || (isPreSessionMsg && !msgMeta.isLegacyExpired && !m.isSystem && !m.isWelcome)) {
+        if (!msgMeta) {
           if (m.isSystem || m.isWelcome) {
             msgMeta = {
               text: m.text || '',
@@ -813,26 +796,6 @@ export default function DirectMessages({
               replyTo: null,
               isSystem: true,
               isWelcome: !!m.isWelcome
-            };
-            decryptedMsgCache.current[m.id] = msgMeta;
-            decryptionCache.setDirectMessage(m.id, msgMeta);
-            newMapEntries[m.id] = msgMeta;
-            hasNewDecryptions = true;
-            continue;
-          }
-
-          // If message was sent before the user's current login session, it cannot be decrypted after relogin
-          if (isPreSessionMsg) {
-            msgMeta = {
-              text: 'Encrypted in an earlier session',
-              mediaId: null,
-              mediaKeyB64: null,
-              originalName: null,
-              mimeType: null,
-              isVoice: false,
-              voiceDuration: 0,
-              replyTo: null,
-              isLegacyExpired: true
             };
             decryptedMsgCache.current[m.id] = msgMeta;
             decryptionCache.setDirectMessage(m.id, msgMeta);

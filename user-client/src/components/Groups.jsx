@@ -752,13 +752,10 @@ export default function Groups({
     async function decryptAll() {
       const newDecrypted = {};
       let hasUpdates = false;
-      const sessionLoginTime = currentUser?.username ? localStorage.getItem(`ciphersocial_session_login_time_${currentUser.username}`) : null;
 
       for (const m of messages) {
         let msgMeta = decryptionCache.getGroupMessage(m.id) || decryptedMsgCache.current[m.id];
-        const isPreSessionMsg = sessionLoginTime && m.timestamp && new Date(m.timestamp).getTime() < new Date(sessionLoginTime).getTime();
-
-        if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message' || (isPreSessionMsg && !msgMeta.isLegacyExpired && !m.isSystem && !m.isWelcome)) {
+        if (!msgMeta || msgMeta.text === '🔒 Encrypted Group Message') {
           if (m.isSystem || m.isWelcome) {
             msgMeta = {
               text: m.text || '',
@@ -769,24 +766,6 @@ export default function Groups({
               replyTo: null,
               isSystem: true,
               isWelcome: !!m.isWelcome
-            };
-            decryptedMsgCache.current[m.id] = msgMeta;
-            decryptionCache.setGroupMessage(m.id, msgMeta);
-            newDecrypted[m.id] = msgMeta;
-            hasUpdates = true;
-            continue;
-          }
-
-          // If group message was sent before user's current login session, it cannot be decrypted after relogin
-          if (isPreSessionMsg) {
-            msgMeta = {
-              text: 'Encrypted in an earlier session',
-              mediaKey: null,
-              mediaId: null,
-              isVoice: false,
-              voiceDuration: 0,
-              replyTo: null,
-              isLegacyExpired: true
             };
             decryptedMsgCache.current[m.id] = msgMeta;
             decryptionCache.setGroupMessage(m.id, msgMeta);
@@ -2360,19 +2339,12 @@ export default function Groups({
                           )}
 
                           {/* Text */}
-                          {msgMeta.text ? (
-                            msgMeta.isLegacyExpired ? (
-                              <div className="msg-text legacy-expired" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', opacity: 0.75, fontStyle: 'italic' }}>
-                                <Lock size={12} />
-                                <span>Encrypted in an earlier session</span>
-                              </div>
-                            ) : (
-                              <div className="msg-text">{msgMeta.text}</div>
-                            )
-                          ) : null}
+                          {msgMeta.text && (
+                            <div className="msg-text">{msgMeta.text}</div>
+                          )}
 
                           {/* Voice Note Player (if voice message) */}
-                          {msgMeta.isVoice && !msgMeta.isLegacyExpired && (
+                          {msgMeta.isVoice && (
                             <div style={{ margin: '4px 0' }}>
                               {mediaDecrypted ? (
                                 <VoiceWaveformPlayer
@@ -2390,7 +2362,7 @@ export default function Groups({
                           )}
 
                           {/* Media Attachment (if not voice) */}
-                          {msg.mediaId && !msgMeta.isVoice && !msgMeta.isLegacyExpired && (
+                          {msg.mediaId && !msgMeta.isVoice && (
                             <div className="dm-media-attachment-container">
                               {mediaDecrypted ? (
                                 <EncryptedAttachmentViewer

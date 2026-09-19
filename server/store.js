@@ -251,16 +251,24 @@ class ZeroKnowledgeStore {
     return null;
   }
 
-  findUserByPhoneNumber(phone) {
-    if (!phone || typeof phone !== 'string') return null;
-    const cleanDigits = phone.replace(/\D/g, '');
-    if (cleanDigits.length < 7) return null;
+  findUserByPhoneNumber(phoneNumber) {
+    if (!phoneNumber) return null;
+    const cleanTargetDigits = String(phoneNumber).replace(/\D/g, '');
+    if (cleanTargetDigits.length < 6) return null;
 
-    for (const [uname, user] of this.users.entries()) {
-      if (user.phoneNumber) {
-        const uDigits = user.phoneNumber.replace(/\D/g, '');
-        if (uDigits === cleanDigits || (cleanDigits.length >= 10 && uDigits.length >= 10 && uDigits.slice(-10) === cleanDigits.slice(-10))) {
-          return user;
+    for (const u of this.users.values()) {
+      if (!u.phoneNumber) continue;
+      const userDigits = String(u.phoneNumber).replace(/\D/g, '');
+      if (!userDigits || userDigits.length < 6) continue;
+
+      // Exact match on all digits
+      if (userDigits === cleanTargetDigits) {
+        return u;
+      }
+      // Match on the last 10 digits (handles country code differences like +91 vs 0 vs raw)
+      if (cleanTargetDigits.length >= 10 && userDigits.length >= 10) {
+        if (cleanTargetDigits.slice(-10) === userDigits.slice(-10)) {
+          return u;
         }
       }
     }
@@ -293,6 +301,19 @@ class ZeroKnowledgeStore {
     }
 
     const canonicalUsername = existing ? existing.username : cleanUsername;
+
+    // Strict phone number uniqueness: Any user can't create multiple accounts with the SAME number!
+    if (phoneNumber) {
+      const cleanPhone = String(phoneNumber).trim();
+      const existingPhoneUser = this.findUserByPhoneNumber(cleanPhone);
+      if (existingPhoneUser && existingPhoneUser.username.toLowerCase() !== canonicalUsername.toLowerCase()) {
+        const err = new Error(`This mobile number is already linked to account "@${existingPhoneUser.displayName || existingPhoneUser.username}". Multiple accounts with the same number are not allowed.`);
+        err.code = 'PHONE_NUMBER_TAKEN';
+        err.existingUser = existingPhoneUser;
+        throw err;
+      }
+    }
+
     const userData = {
       username: canonicalUsername,
       displayName: (displayName && displayName.trim()) ? displayName.trim() : (existing?.displayName || canonicalUsername),
@@ -361,7 +382,21 @@ class ZeroKnowledgeStore {
     if (avatarColor) user.avatarColor = avatarColor;
     if (bio !== undefined) user.bio = bio;
     if (displayName !== undefined) user.displayName = displayName;
-    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
+    if (phoneNumber !== undefined && phoneNumber !== null) {
+      const cleanPhone = String(phoneNumber).trim();
+      if (cleanPhone) {
+        const existingPhoneUser = this.findUserByPhoneNumber(cleanPhone);
+        if (existingPhoneUser && existingPhoneUser.username.toLowerCase() !== user.username.toLowerCase()) {
+          const err = new Error(`This mobile number is already linked to account "@${existingPhoneUser.displayName || existingPhoneUser.username}". Multiple accounts with the same number are not allowed.`);
+          err.code = 'PHONE_NUMBER_TAKEN';
+          err.existingUser = existingPhoneUser;
+          throw err;
+        }
+        user.phoneNumber = cleanPhone;
+      } else {
+        user.phoneNumber = null;
+      }
+    }
 
     this.users.set(username, user);
     this.scheduleSave();
