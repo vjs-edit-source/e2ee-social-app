@@ -22,6 +22,7 @@ import { decryptionCache } from '../utils/decryptionCache';
 import { resolveMediaUrl } from '../utils/fileUtils';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import { musicEngine } from '../utils/musicEngine';
+import { downloadFile } from '../utils/fileDownloader';
 
 const QUICK_EMOJIS = ['❤️', '🔥', '😂', '😮', '😢', '👏'];
 
@@ -551,16 +552,19 @@ export default function StatusViewerModal({
 
             {/* Download/Save button when story has media */}
             {resolvedMediaUrl && (
-              <a
-                href={resolvedMediaUrl}
-                download={isImage ? `status_photo_${currentStatus.id}.jpg` : isVideo ? `status_video_${currentStatus.id}.mp4` : `status_media_${currentStatus.id}`}
+              <button
+                type="button"
                 className="viewer-mute-btn"
                 title="Save photo / media to device"
-                onClick={e => e.stopPropagation()}
-                style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const ext = isImage ? '.jpg' : isVideo ? '.mp4' : '';
+                  downloadFile(resolvedMediaUrl, `status_media_${currentStatus.id}${ext}`, mediaDecrypted?.mimeType);
+                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <Download size={15} />
-              </a>
+              </button>
             )}
 
             {/* View count for author */}

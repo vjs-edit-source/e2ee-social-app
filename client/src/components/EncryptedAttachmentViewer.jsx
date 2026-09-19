@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { formatTruncatedFileName } from '../utils/fileUtils';
+import { downloadFile } from '../utils/fileDownloader';
 
 function getFormatDisplayLabel(fileName, mimeType) {
   const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toUpperCase() : '';
@@ -82,12 +83,7 @@ export default function EncryptedAttachmentViewer({ objectUrl, originalName, mim
   const handleDownload = (e) => {
     if (e) e.stopPropagation();
     if (!actualUrl) return;
-    const a = document.createElement('a');
-    a.href = actualUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadFile(actualUrl, fileName, mimeType);
   };
 
   // Full Screen Big / Actual Size Lightbox Modal

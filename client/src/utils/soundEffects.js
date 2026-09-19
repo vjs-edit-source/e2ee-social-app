@@ -55,6 +55,13 @@ class SoundEffectsManager {
 
   // Crisp, satisfying chime & haptics when sending a message
   async playMessageSent() {
+    // 1. Trigger native Android System Sound (STREAM_SYSTEM)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('message_sent');
+      } catch (e) {}
+    }
+
     // Haptic feedback on Android & supported devices
     try {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -107,6 +114,13 @@ class SoundEffectsManager {
 
   // Vibrant notification chime when receiving a message or notification
   async playNotification() {
+    // 1. Trigger native Android Notification Sound (STREAM_NOTIFICATION)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('message_received');
+      } catch (e) {}
+    }
+
     // Haptic feedback on Android
     try {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -145,6 +159,13 @@ class SoundEffectsManager {
   // ============================================================================
   startIncomingRingtone() {
     this.stopIncomingRingtone();
+
+    // 1. Trigger native Android Ringtone (STREAM_RING / USAGE_NOTIFICATION_RINGTONE)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.startIncomingRingtone === 'function') {
+      try {
+        window.AndroidCallBridge.startIncomingRingtone();
+      } catch (e) {}
+    }
 
     // Trigger continuous vibration on mobile
     const triggerVibe = () => {
@@ -227,6 +248,12 @@ class SoundEffectsManager {
   }
 
   stopIncomingRingtone() {
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.stopIncomingRingtone === 'function') {
+      try {
+        window.AndroidCallBridge.stopIncomingRingtone();
+      } catch (e) {}
+    }
+
     if (this.ringInterval) {
       clearInterval(this.ringInterval);
       this.ringInterval = null;
@@ -243,6 +270,13 @@ class SoundEffectsManager {
   // ============================================================================
   startOutgoingRingback() {
     this.stopOutgoingRingback();
+
+    // 1. Trigger native Android Ringback (STREAM_RING)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('ringback_start');
+      } catch (e) {}
+    }
 
     const playRingbackBurst = async () => {
       try {
@@ -279,6 +313,12 @@ class SoundEffectsManager {
   }
 
   stopOutgoingRingback() {
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('ringback_stop');
+      } catch (e) {}
+    }
+
     if (this.ringbackInterval) {
       clearInterval(this.ringbackInterval);
       this.ringbackInterval = null;
@@ -289,6 +329,13 @@ class SoundEffectsManager {
   // CALL ENDED TONE (3 quick descending beeps)
   // ============================================================================
   async playCallEnded() {
+    // 1. Trigger native Android Call Ended Tone (STREAM_RING)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('call_ended');
+      } catch (e) {}
+    }
+
     try {
       const ctx = await this._getAudioContext();
       if (!ctx) return;

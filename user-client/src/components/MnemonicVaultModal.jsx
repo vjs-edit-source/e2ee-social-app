@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Copy, Check, Download, AlertTriangle, X, Key, Sparkles } from 'lucide-react';
+import { downloadFile } from '../utils/fileDownloader';
 
 export default function MnemonicVaultModal({ mnemonicWords = [], username = '', onClose, onConfirmed = null }) {
   const [copied, setCopied] = useState(false);
@@ -18,12 +19,7 @@ export default function MnemonicVaultModal({ mnemonicWords = [], username = '', 
   const handleDownload = () => {
     const text = `SadiSocial Zero-Knowledge Secret Recovery Phrase\nGenerated: ${new Date().toISOString()}\n\n12-Word Master Recovery Phrase:\n${phraseString}\n\nWARNING: Keep this file offline and secure. Anyone with these 12 words can access your end-to-end encrypted identity.`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `SadiSocial-Backup-${username || 'identity'}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadFile(blob, `SadiSocial-Backup-${username || 'identity'}.txt`, 'text/plain');
     setHasBackedUp(true);
   };
 
