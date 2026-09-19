@@ -141,6 +141,10 @@ class ClientDecryptionCache {
     this.pendingMediaFetches.delete(mediaId);
   }
 
+  clearMedia(mediaId) {
+    if (mediaId) this.media.delete(mediaId);
+  }
+
   // ── STATUSES ────────────────────────────────────────────────
   getStatus(id) {
     return this.statuses.get(id) || null;

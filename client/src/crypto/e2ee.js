@@ -21,17 +21,68 @@ export function bufferToBase64(buffer) {
   return btoa(binary);
 }
 
-// Utility: Convert Base64 String to Uint8Array (robust against newlines/spaces in large payloads)
+// Precomputed lookup table for high-performance base64 decoding on mobile devices
+const b64Lookup = new Uint8Array(256);
+const b64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+for (let i = 0; i < b64Chars.length; i++) {
+  b64Lookup[b64Chars.charCodeAt(i)] = i;
+}
+
+// Utility: Convert Base64 String to Uint8Array (memory-safe and fast for 10MB+ files on mobile)
 export function base64ToBuffer(base64) {
   if (!base64) return new Uint8Array(0);
-  const cleanBase64 = typeof base64 === 'string' ? base64.replace(/[\r\n\s]/g, '') : base64;
-  const binaryString = atob(cleanBase64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  if (base64 instanceof Uint8Array) return base64;
+  if (base64 instanceof ArrayBuffer) return new Uint8Array(base64);
+  if (typeof base64 !== 'string') return new Uint8Array(0);
+
+  // Fast path for small strings (< 64KB)
+  if (base64.length < 65536) {
+    try {
+      const cleanBase64 = base64.replace(/[\r\n\s]/g, '');
+      const binaryString = atob(cleanBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    } catch (e) {}
   }
-  return bytes;
+
+  // Streaming lookup decoder for large payloads (avoids regex allocations and atob string limits on mobile)
+  const len = base64.length;
+  let padding = 0;
+  if (len > 0 && base64.charAt(len - 1) === '=') padding++;
+  if (len > 1 && base64.charAt(len - 2) === '=') padding++;
+
+  const outLen = Math.floor((len * 3) / 4) - padding;
+  const bytes = new Uint8Array(outLen > 0 ? outLen : 0);
+
+  let byteIdx = 0;
+  let b4Idx = 0;
+  const quartet = [0, 0, 0, 0];
+
+  for (let i = 0; i < len; i++) {
+    const c = base64.charCodeAt(i);
+    if (c <= 32) continue; // Skip whitespace/newlines without regex
+    if (c === 61) break;   // '=' padding
+
+    quartet[b4Idx++] = b64Lookup[c];
+
+    if (b4Idx === 4) {
+      bytes[byteIdx++] = (quartet[0] << 2) | (quartet[1] >> 4);
+      if (byteIdx < outLen) bytes[byteIdx++] = ((quartet[1] & 15) << 4) | (quartet[2] >> 2);
+      if (byteIdx < outLen) bytes[byteIdx++] = ((quartet[2] & 3) << 6) | quartet[3];
+      b4Idx = 0;
+    }
+  }
+
+  if (b4Idx > 1) {
+    bytes[byteIdx++] = (quartet[0] << 2) | (quartet[1] >> 4);
+    if (b4Idx > 2 && byteIdx < outLen) bytes[byteIdx++] = ((quartet[1] & 15) << 4) | (quartet[2] >> 2);
+  }
+
+  return byteIdx === bytes.length ? bytes : bytes.subarray(0, byteIdx);
 }
 
 /**

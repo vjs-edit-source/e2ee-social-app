@@ -28,7 +28,8 @@ import {
   LayoutGrid,
   Heart,
   MessageCircle,
-  Share2
+  Share2,
+  RefreshCw
 } from 'lucide-react';
 import {
   generatePostKey,
@@ -578,6 +579,19 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
     }
   };
 
+  const retryFeedMedia = (mediaId) => {
+    decryptedMediaCache.current[mediaId] = null;
+    decryptionCache.clearMedia(mediaId);
+    decryptionCache.clearMediaPending(mediaId);
+    pendingMediaFetches.current.delete(mediaId);
+    setDecryptedMediaMap(prev => {
+      const next = { ...prev };
+      delete next[mediaId];
+      return next;
+    });
+    setPosts(prev => [...prev]);
+  };
+
   const canPublish = !publishing && !mediaUploading && (Boolean(newPostText && newPostText.trim()) || Boolean(attachedMedia));
 
   return (
@@ -1070,12 +1084,34 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                         border: '1px dashed rgba(255, 255, 255, 0.1)',
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '10px',
                         fontSize: '0.78rem',
                         color: '#94a3b8'
                       }}>
-                        <ImageIcon size={18} color="#64748b" />
-                        <span>Attachment unavailable (ephemeral media from previous session)</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <ImageIcon size={18} color="#64748b" />
+                          <span>Attachment unavailable or network error</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => retryFeedMedia(post.mediaId)}
+                          style={{
+                            background: 'rgba(238, 120, 130, 0.15)',
+                            color: '#ee7882',
+                            border: '1px solid rgba(238, 120, 130, 0.3)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.72rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <RefreshCw size={12} />
+                          <span>Retry</span>
+                        </button>
                       </div>
                     ) : (
                       <div className="media-decrypting-placeholder">
