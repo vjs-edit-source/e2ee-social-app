@@ -37,11 +37,10 @@ public class MainActivity extends BridgeActivity {
             );
         }
 
-        // Request audio, camera, and notification permissions
+        // Request runtime permissions: only DANGEROUS permissions should be passed to requestPermissions!
         List<String> permissions = new ArrayList<>();
         permissions.add(Manifest.permission.RECORD_AUDIO);
         permissions.add(Manifest.permission.CAMERA);
-        permissions.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);
 
         if (Build.VERSION.SDK_INT >= 33) { // Android 13+ (TIRAMISU)
             permissions.add("android.permission.POST_NOTIFICATIONS");
@@ -49,52 +48,68 @@ public class MainActivity extends BridgeActivity {
 
         List<String> permissionsToRequest = new ArrayList<>();
         for (String perm : permissions) {
-            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(perm);
-            }
+            try {
+                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(perm);
+                }
+            } catch (Throwable ignored) {}
         }
 
         if (!permissionsToRequest.isEmpty()) {
-            ActivityCompat.requestPermissions(
-                this,
-                permissionsToRequest.toArray(new String[0]),
-                PERMISSION_REQUEST_CODE
-            );
+            try {
+                ActivityCompat.requestPermissions(
+                    this,
+                    permissionsToRequest.toArray(new String[0]),
+                    PERMISSION_REQUEST_CODE
+                );
+            } catch (Throwable ignored) {}
         }
 
         // Expose JavaScript Interface to React Web App
-        if (bridge != null && bridge.getWebView() != null) {
-            bridge.getWebView().addJavascriptInterface(new Object() {
-                @JavascriptInterface
-                public void startCallService(String username, String wsUrl) {
-                    CallBackgroundService.startService(MainActivity.this, username, wsUrl);
-                }
+        try {
+            if (bridge != null && bridge.getWebView() != null) {
+                bridge.getWebView().addJavascriptInterface(new Object() {
+                    @JavascriptInterface
+                    public void startCallService(String username, String wsUrl) {
+                        try {
+                            CallBackgroundService.startService(MainActivity.this, username, wsUrl);
+                        } catch (Throwable ignored) {}
+                    }
 
-                @JavascriptInterface
-                public void stopCallService() {
-                    CallBackgroundService.stopService(MainActivity.this);
-                }
+                    @JavascriptInterface
+                    public void stopCallService() {
+                        try {
+                            CallBackgroundService.stopService(MainActivity.this);
+                        } catch (Throwable ignored) {}
+                    }
 
-                @JavascriptInterface
-                public void dismissRingtone() {
-                    CallBackgroundService.dismissRingtone(MainActivity.this);
-                }
-            }, "AndroidCallBridge");
-        }
+                    @JavascriptInterface
+                    public void dismissRingtone() {
+                        try {
+                            CallBackgroundService.dismissRingtone(MainActivity.this);
+                        } catch (Throwable ignored) {}
+                    }
+                }, "AndroidCallBridge");
+            }
+        } catch (Throwable ignored) {}
     }
 
     @Override
     public void onStart() {
         super.onStart();
         isActivityVisible = true;
-        CallBackgroundService.dismissRingtone(this);
+        try {
+            CallBackgroundService.dismissRingtone(this);
+        } catch (Throwable ignored) {}
     }
 
     @Override
     public void onResume() {
         super.onResume();
         isActivityVisible = true;
-        CallBackgroundService.dismissRingtone(this);
+        try {
+            CallBackgroundService.dismissRingtone(this);
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -114,6 +129,8 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         isActivityVisible = true;
-        CallBackgroundService.dismissRingtone(this);
+        try {
+            CallBackgroundService.dismissRingtone(this);
+        } catch (Throwable ignored) {}
     }
 }
