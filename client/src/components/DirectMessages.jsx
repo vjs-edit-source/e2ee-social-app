@@ -936,6 +936,7 @@ export default function DirectMessages({
                   if (mediaData.ciphertextBlob) {
                     const keyToUse = meta.mediaKeyB64 || sharedKey;
                     const mediaIv = mediaData.iv || m.iv;
+                    const finalMime = meta.mimeType || mediaData.mimeType || (meta.isVoice ? 'audio/webm' : 'application/octet-stream');
                     const decRes = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
                     const objectUrl = resolveMediaUrl(decRes);
 
@@ -948,6 +949,14 @@ export default function DirectMessages({
                       decryptedMediaCache.current[mediaId] = mediaEntry;
                       decryptionCache.setMedia(mediaId, mediaEntry);
                       setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
+                    } else if (isMounted) {
+                      const failedEntry = {
+                        error: true,
+                        originalName: meta.originalName || mediaData.originalName,
+                        mimeType: finalMime
+                      };
+                      decryptedMediaCache.current[mediaId] = failedEntry;
+                      setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
                     }
                   }
                 }
@@ -2529,11 +2538,18 @@ export default function DirectMessages({
                         {msgMeta.isVoice && (
                           <div style={{ margin: '4px 0' }}>
                             {mediaDecrypted ? (
-                              <VoiceWaveformPlayer
-                                src={mediaDecrypted.objectUrl}
-                                duration={msgMeta.voiceDuration}
-                                isMine={isMine}
-                              />
+                              mediaDecrypted.error ? (
+                                <div className="dm-media-decrypting" style={{ color: '#ef4444' }}>
+                                  <AlertCircle size={14} color="#ef4444" />
+                                  <span>Voice note decryption failed</span>
+                                </div>
+                              ) : (
+                                <VoiceWaveformPlayer
+                                  src={mediaDecrypted.objectUrl}
+                                  duration={msgMeta.voiceDuration}
+                                  isMine={isMine}
+                                />
+                              )
                             ) : (
                               <div className="dm-media-decrypting">
                                 <Loader2 size={14} className="animate-spin" color="#ee7882" />
@@ -2547,12 +2563,19 @@ export default function DirectMessages({
                         {msgMeta.mediaId && !msgMeta.isVoice && (
                           <div className="dm-media-attachment-container">
                             {mediaDecrypted ? (
-                              <EncryptedAttachmentViewer
-                                objectUrl={mediaDecrypted.objectUrl}
-                                originalName={mediaDecrypted.originalName || msgMeta.originalName}
-                                mimeType={mediaDecrypted.mimeType || msgMeta.mimeType}
-                                mediaId={msgMeta.mediaId}
-                              />
+                              mediaDecrypted.error ? (
+                                <div className="dm-media-decrypting" style={{ color: '#ef4444' }}>
+                                  <AlertCircle size={14} color="#ef4444" />
+                                  <span>Attachment decryption failed</span>
+                                </div>
+                              ) : (
+                                <EncryptedAttachmentViewer
+                                  objectUrl={mediaDecrypted.objectUrl}
+                                  originalName={mediaDecrypted.originalName || msgMeta.originalName}
+                                  mimeType={mediaDecrypted.mimeType || msgMeta.mimeType}
+                                  mediaId={msgMeta.mediaId}
+                                />
+                              )
                             ) : (
                               <div className="dm-media-decrypting">
                                 <Loader2 size={14} className="animate-spin" color="#f59e0b" />

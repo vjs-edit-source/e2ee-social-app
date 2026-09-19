@@ -909,6 +909,12 @@ export default function Groups({
     try {
       const objectUrl = URL.createObjectURL(file);
       setPreviewUrl(objectUrl);
+      setAttachedMedia({
+        file,
+        originalName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'application/octet-stream'
+      });
       setMediaUploading(true);
 
       const arrayBuffer = await file.arrayBuffer();
@@ -2504,12 +2510,28 @@ export default function Groups({
         {/* Attachment Preview Box */}
         {attachedMedia && (
           <div className="dm-attached-preview-card">
-            <Lock size={14} color="#10b981" />
+            {previewUrl && (attachedMedia.mimeType?.startsWith('image/') || attachedMedia.file?.type?.startsWith('image/')) ? (
+              <img src={previewUrl} alt="Preview" className="mini-attached-thumbnail" />
+            ) : (
+              <Lock size={14} color="#10b981" />
+            )}
             <div className="dm-attach-info">
               <span className="file-format-tag" title={attachedMedia.originalName}>{formatTruncatedFileName(attachedMedia.originalName, 14)}</span>
-              <span className="file-size">({(attachedMedia.fileSize / 1024).toFixed(1)} KB)</span>
+              <span className="file-size">({((attachedMedia.fileSize || 0) / 1024).toFixed(1)} KB)</span>
             </div>
-            <button className="remove-file-btn" onClick={clearAttachment} type="button">
+
+            {mediaUploading ? (
+              <div className="status-badge encrypting" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Loader2 size={12} className="animate-spin" />
+                <span>Securing...</span>
+              </div>
+            ) : (
+              <div className="status-badge ready">
+                <span>Ready</span>
+              </div>
+            )}
+
+            <button className="remove-file-btn" onClick={clearAttachment} type="button" title="Remove attachment">
               <X size={14} />
             </button>
           </div>
@@ -2655,7 +2677,7 @@ export default function Groups({
                   className="msg-bar-text-input"
                 />
 
-                {!inputMessage.trim() && !attachedMedia ? (
+                {!inputMessage.trim() && !attachedMedia && !mediaUploading ? (
                   <button
                     type="button"
                     onClick={() => setIsRecordingVoice(true)}
@@ -2669,10 +2691,10 @@ export default function Groups({
                   <button
                     type="submit"
                     className="msg-bar-send-btn"
-                    disabled={(!inputMessage.trim() && !attachedMedia) || sending || mediaUploading}
+                    disabled={(!inputMessage.trim() && !attachedMedia?.mediaId) || sending || mediaUploading}
                     title="Send encrypted message"
                   >
-                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    {sending || mediaUploading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   </button>
                 )}
               </form>
