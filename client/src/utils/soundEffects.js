@@ -55,19 +55,20 @@ class SoundEffectsManager {
 
   // Crisp, satisfying chime & haptics when sending a message
   async playMessageSent() {
-    // 1. Trigger native Android System Sound (STREAM_SYSTEM)
-    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
-      try {
-        window.AndroidCallBridge.playSystemSound('message_sent');
-      } catch (e) {}
-    }
-
     // Haptic feedback on Android & supported devices
     try {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([25, 20]);
       }
     } catch (e) {}
+
+    // 1. Trigger native Android System Sound (STREAM_SYSTEM / USAGE_ASSISTANCE_SONIFICATION)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('message_sent');
+        return;
+      } catch (e) {}
+    }
 
     try {
       const ctx = await this._getAudioContext();
@@ -114,19 +115,20 @@ class SoundEffectsManager {
 
   // Vibrant notification chime when receiving a message or notification
   async playNotification() {
-    // 1. Trigger native Android Notification Sound (STREAM_NOTIFICATION)
-    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
-      try {
-        window.AndroidCallBridge.playSystemSound('message_received');
-      } catch (e) {}
-    }
-
     // Haptic feedback on Android
     try {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([40, 60, 40]);
       }
     } catch (e) {}
+
+    // 1. Trigger native Android System Sound (STREAM_SYSTEM / USAGE_ASSISTANCE_SONIFICATION)
+    if (typeof window !== 'undefined' && window.AndroidCallBridge && typeof window.AndroidCallBridge.playSystemSound === 'function') {
+      try {
+        window.AndroidCallBridge.playSystemSound('message_received');
+        return;
+      } catch (e) {}
+    }
 
     try {
       const ctx = await this._getAudioContext();

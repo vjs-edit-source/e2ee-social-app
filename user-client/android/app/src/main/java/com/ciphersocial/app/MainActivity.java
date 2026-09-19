@@ -6,7 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
+import android.media.AudioFormat;
 import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.media.MediaScannerConnection;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -208,22 +210,11 @@ public class MainActivity extends BridgeActivity {
     private void handlePlaySystemSound(String soundType) {
         try {
             if ("message_sent".equals(soundType)) {
-                // STREAM_SYSTEM routes to System sounds volume (not Media)
-                ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_SYSTEM, 90);
-                tg.startTone(ToneGenerator.TONE_PROP_BEEP, 100);
+                // Synthesize custom sent chime routed to System Sound stream (USAGE_ASSISTANCE_SONIFICATION)
+                playCustomChime(587.33, 1046.50, 0.24, true);
             } else if ("message_received".equals(soundType)) {
-                // STREAM_NOTIFICATION routes to Notification volume (not Media)
-                Uri alert = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-                Ringtone r = RingtoneManager.getRingtone(getApplicationContext(), alert);
-                if (r != null) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        r.setAudioAttributes(new AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                .build());
-                    }
-                    r.play();
-                }
+                // Synthesize previous custom chime routed to System Sound stream (USAGE_ASSISTANCE_SONIFICATION)
+                playCustomChime(587.33, 880.0, 0.35, false);
             } else if ("call_ended".equals(soundType)) {
                 // STREAM_RING routes to Ringtone volume
                 ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_RING, 90);
@@ -238,6 +229,99 @@ public class MainActivity extends BridgeActivity {
         } catch (Throwable t) {
             Log.w(TAG, "Error playing system sound: " + soundType, t);
         }
+    }
+
+    private void playCustomChime(final double startFreq, final double endFreq, final double durationSec, final boolean isSent) {
+        new Thread(() -> {
+            AudioTrack audioTrack = null;
+            try {
+                int sampleRate = 44100;
+                int numSamples = (int) (sampleRate * durationSec);
+                short[] buffer = new short[numSamples];
+                double phase = 0.0;
+                double rampDuration = isSent ? 0.12 : 0.10;
+
+                for (int i = 0; i < numSamples; i++) {
+                    double t = (double) i / sampleRate;
+
+                    // Frequency sweep: exponential ramp
+                    double freq;
+                    if (t < rampDuration) {
+                        double progress = t / rampDuration;
+                        freq = startFreq * Math.pow(endFreq / startFreq, progress);
+                    } else {
+                        freq = endFreq;
+                    }
+
+                    // Phase calculation
+                    phase += 2.0 * Math.PI * freq / sampleRate;
+                    if (phase > 2.0 * Math.PI) {
+                        phase -= 2.0 * Math.PI;
+                    }
+
+                    // Waveform: triangle for sent, sine for received chime
+                    double wave;
+                    if (isSent) {
+                        wave = (2.0 / Math.PI) * Math.asin(Math.sin(phase));
+                    } else {
+                        wave = Math.sin(phase);
+                    }
+
+                    // Envelope: fast linear attack, then exponential decay
+                    double envelope;
+                    double attackTime = isSent ? 0.02 : 0.03;
+                    if (t < attackTime) {
+                        envelope = t / attackTime;
+                    } else {
+                        double decayProgress = (t - attackTime) / (durationSec - attackTime);
+                        envelope = Math.exp(-5.0 * decayProgress);
+                    }
+
+                    double amplitude = (isSent ? 0.8 : 0.75) * 32767.0;
+                    buffer[i] = (short) (wave * envelope * amplitude);
+                }
+
+                int minBufferSize = AudioTrack.getMinBufferSize(
+                        sampleRate,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT
+                );
+                int bufferSize = Math.max(minBufferSize, numSamples * 2);
+
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION) // System sound stream
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build();
+
+                AudioFormat audioFormat = new AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build();
+
+                audioTrack = new AudioTrack(
+                        audioAttributes,
+                        audioFormat,
+                        bufferSize,
+                        AudioTrack.MODE_STATIC,
+                        AudioManager.AUDIO_SESSION_ID_GENERATE
+                );
+
+                audioTrack.write(buffer, 0, numSamples);
+                audioTrack.play();
+
+                Thread.sleep((long) (durationSec * 1000) + 100);
+            } catch (Throwable t) {
+                Log.w(TAG, "Error playing custom chime", t);
+            } finally {
+                if (audioTrack != null) {
+                    try {
+                        audioTrack.stop();
+                        audioTrack.release();
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }).start();
     }
 
     private void startIncomingRingtoneInternal() {

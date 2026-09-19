@@ -3839,36 +3839,62 @@ textarea:focus {
   }
 }
 
+.status-viewer-top-scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.4) 60%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+  z-index: 22;
+}
+
 .viewer-music-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: rgba(22, 18, 28, 0.75);
   border: 1px solid rgba(238, 120, 130, 0.4);
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 9999px;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: #ffffff;
   backdrop-filter: blur(10px);
-  max-width: 160px;
+  max-width: 120px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+@media (max-width: 600px) {
+  .viewer-music-badge {
+    display: none; /* Hide in compact header on mobile - canvas sticker is prominently displayed */
+  }
 }
 
 .viewer-tool-btns {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+@media (max-width: 600px) {
+  .viewer-tool-btns {
+    gap: 4px;
+  }
 }
 
 .viewer-mute-btn {
   background: rgba(22, 18, 28, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -3876,6 +3902,14 @@ textarea:focus {
   cursor: pointer;
   transition: all 0.15s;
   backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .viewer-mute-btn {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .viewer-mute-btn:hover {
@@ -3886,16 +3920,24 @@ textarea:focus {
 
 .viewer-delete-btn {
   background: rgba(22, 18, 28, 0.65);
-  border: 1px solid rgba(238, 120, 130, 0.3);
+  border: 1px solid rgba(238, 120, 130, 0.35);
   color: #ee7882;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .viewer-delete-btn {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .viewer-delete-btn:hover {
@@ -3906,30 +3948,35 @@ textarea:focus {
 .viewer-views-pill {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(0, 0, 0, 0.4);
-  padding: 4px 10px;
+  gap: 3px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 7px;
   border-radius: 9999px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  height: 28px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .viewer-views-pill {
+    padding: 2px 5px;
+    font-size: 0.68rem;
+    height: 26px;
+  }
 }
 
 .status-progress-tray {
   position: absolute;
   top: 10px;
-  top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
-  left: 12px;
-  right: 12px;
+  left: 10px;
+  right: 10px;
   display: flex;
   gap: 4px;
-  z-index: 20;
-}
-
-@media (max-width: 600px) {
-  .status-progress-tray {
-    top: 40px;
-    top: max(40px, calc(env(safe-area-inset-top, 0px) + 10px));
-  }
+  z-index: 25;
+  box-sizing: border-box;
 }
 
 .progress-segment {
@@ -3949,45 +3996,82 @@ textarea:focus {
 
 .status-viewer-header {
   position: absolute;
-  top: 20px;
-  top: max(20px, calc(env(safe-area-inset-top, 0px) + 16px));
-  left: 14px;
-  right: 14px;
+  top: 22px;
+  left: 12px;
+  right: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  z-index: 20;
+  gap: 6px;
+  z-index: 25;
+  box-sizing: border-box;
+  max-width: calc(100% - 24px);
 }
 
 @media (max-width: 600px) {
   .status-viewer-header {
-    top: 52px;
-    top: max(52px, calc(env(safe-area-inset-top, 0px) + 20px));
+    top: 20px;
+    left: 8px;
+    right: 8px;
+    max-width: calc(100% - 16px);
+    gap: 4px;
   }
 }
 
 .status-author-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.status-author-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .status-author-avatar {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50% !important;
   object-fit: cover !important;
   overflow: hidden !important;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .status-author-avatar {
+    width: 30px !important;
+    height: 30px !important;
+  }
 }
 
 .status-author-name {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #ffffff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 125px;
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .status-author-name {
+    font-size: 0.82rem;
+    max-width: 95px;
+  }
 }
 
 .status-time-badge {
@@ -3996,19 +4080,34 @@ textarea:focus {
   gap: 4px;
   font-size: 0.68rem;
   color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
 }
 
 .status-close-btn {
-  background: rgba(0, 0, 0, 0.4);
-  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   color: #ffffff;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+@media (max-width: 600px) {
+  .status-close-btn {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.status-close-btn:hover {
+  background: rgba(238, 120, 130, 0.4);
+  color: #ee7882;
 }
 
 .status-content-body {
@@ -4021,6 +4120,12 @@ textarea:focus {
   text-align: center;
   position: relative;
   overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .status-content-body {
+    padding: 65px 16px 65px 16px;
+  }
 }
 
 .status-text-display p {
