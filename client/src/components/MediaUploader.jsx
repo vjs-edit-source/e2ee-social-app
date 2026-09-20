@@ -78,8 +78,14 @@ const MediaUploader = forwardRef(function MediaUploader(
   const fileInputRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    openImagePicker: () => imageInputRef.current?.click(),
-    openFilePicker: () => fileInputRef.current?.click(),
+    openImagePicker: () => {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      imageInputRef.current?.click();
+    },
+    openFilePicker: () => {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      fileInputRef.current?.click();
+    },
     clearFile: () => clearFile()
   }));
 
@@ -97,6 +103,7 @@ const MediaUploader = forwardRef(function MediaUploader(
   const handleFileSelect = async (e) => {
     e.stopPropagation();
     const file = e.target.files && e.target.files[0];
+    if (e.target) e.target.value = '';
     if (!file) return;
 
     if (file.size > 100 * 1024 * 1024) {
@@ -216,7 +223,11 @@ const MediaUploader = forwardRef(function MediaUploader(
             <button
               type="button"
               className="master-action-btn media-btn"
-              onClick={(e) => { e.stopPropagation(); imageInputRef.current?.click(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (imageInputRef.current) imageInputRef.current.value = '';
+                imageInputRef.current?.click();
+              }}
               title="Add Photo or Video"
             >
               <ImageIcon size={18} color="#ee7882" />
@@ -225,7 +236,11 @@ const MediaUploader = forwardRef(function MediaUploader(
             <button
               type="button"
               className="master-action-btn file-btn"
-              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                fileInputRef.current?.click();
+              }}
               title="Attach Document or File"
             >
               <Paperclip size={18} color="#ff9ea8" />
@@ -239,6 +254,7 @@ const MediaUploader = forwardRef(function MediaUploader(
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (imageInputRef.current) imageInputRef.current.value = '';
                 imageInputRef.current?.click();
               }}
               style={{
@@ -269,6 +285,7 @@ const MediaUploader = forwardRef(function MediaUploader(
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (fileInputRef.current) fileInputRef.current.value = '';
                 fileInputRef.current?.click();
               }}
               style={{

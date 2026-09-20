@@ -48,6 +48,7 @@ import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import { formatRelativeTime } from '../utils/dateUtils';
 import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
+import ForwardModal from './ForwardModal';
 import StatusTray from './StatusTray';
 import { decryptionCache } from '../utils/decryptionCache';
 import { soundEffects } from '../utils/soundEffects';
@@ -83,6 +84,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [commentInputs, setCommentInputs] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
   const [shareToast, setShareToast] = useState(null);
+  const [forwardingPost, setForwardingPost] = useState(null);
+  const [forwardingPostMeta, setForwardingPostMeta] = useState(null);
   const textareaRef = useRef(null);
   const uploaderRef = useRef(null);
 
@@ -206,6 +209,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
               let mediaKeyB64 = null;
               let originalName = null;
               let mimeType = null;
+              let fileSize = null;
+              let mediaIv = null;
               let expiresIn = null;
 
               try {
@@ -215,6 +220,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   mediaKeyB64 = parsed.mediaKeyB64;
                   originalName = parsed.originalName;
                   mimeType = parsed.mimeType;
+                  fileSize = parsed.fileSize || null;
+                  mediaIv = parsed.mediaIv || parsed.iv || null;
                   expiresIn = parsed.expiresIn || null;
                 }
               } catch (e) {}
@@ -225,6 +232,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                 mediaKeyB64,
                 originalName,
                 mimeType,
+                fileSize,
+                mediaIv,
                 expiresIn,
                 isPublic: post.isPublic !== false && Boolean(post.postKeyB64),
                 postKey
@@ -283,7 +292,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             (async (mediaId, postMeta, postObj) => {
               try {
                 const mediaKeyToUse = postMeta.mediaKeyB64 || postMeta.postKey;
-                const mediaIv = postObj.iv;
+                const mediaIv = postMeta.mediaIv || postObj.iv;
                 const finalMime = postMeta.mimeType || 'image/jpeg';
                 const originalName = postMeta.originalName;
 
@@ -301,7 +310,9 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   const mediaEntry = {
                     objectUrl,
                     mimeType: result.mimeType || finalMime,
-                    originalName: result.originalName || originalName
+                    originalName: result.originalName || originalName,
+                    fileSize: postMeta.fileSize || null,
+                    iv: mediaIv
                   };
                   decryptedMediaCache.current[mediaId] = mediaEntry;
                   decryptionCache.setMedia(mediaId, mediaEntry);
@@ -360,6 +371,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
         mimeType: hasMedia ? attachedMedia.mimeType : null,
+        fileSize: hasMedia ? (attachedMedia.fileSize || null) : null,
+        mediaIv: hasMedia ? (attachedMedia.iv || null) : null,
         expiresIn: postExpiry > 0 ? postExpiry : undefined
       });
 
@@ -417,6 +430,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
             originalName: hasMedia ? attachedMedia.originalName : null,
             mimeType: hasMedia ? attachedMedia.mimeType : null,
+            fileSize: hasMedia ? (attachedMedia.fileSize || null) : null,
+            mediaIv: hasMedia ? (attachedMedia.iv || null) : null,
             expiresIn: postExpiry > 0 ? postExpiry : null,
             isPublic: isPublicPost,
             postKey
@@ -429,7 +444,9 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             const mediaEntry = {
               objectUrl: attachedMedia.objectUrl,
               mimeType: attachedMedia.mimeType,
-              originalName: attachedMedia.originalName
+              originalName: attachedMedia.originalName,
+              fileSize: attachedMedia.fileSize || null,
+              iv: attachedMedia.iv || null
             };
             decryptedMediaCache.current[attachedMedia.mediaId] = mediaEntry;
             decryptionCache.setMedia(attachedMedia.mediaId, mediaEntry);
@@ -440,6 +457,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
         soundEffects.playMessageSent();
         setNewPostText('');
         setAttachedMedia(null);
+        uploaderRef.current?.clearFile();
         setActiveTool(null);
         setShowToolsDock(false);
         setShowPreview(false);
@@ -569,6 +587,24 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
     } catch (err) {
       console.error('Failed to record share:', err);
     }
+  };
+
+  const handleOpenForwardModal = (post) => {
+    const postMeta = decryptedPostMap[post.id] || {};
+    const mediaMeta = (post.mediaId && decryptedMediaMap[post.mediaId]) ? decryptedMediaMap[post.mediaId] : {};
+
+    setForwardingPost(post);
+    setForwardingPostMeta({
+      text: postMeta.text || '',
+      mediaId: post.mediaId || null,
+      mediaKey: postMeta.mediaKeyB64 || postMeta.postKey || null,
+      mediaKeyB64: postMeta.mediaKeyB64 || null,
+      originalName: mediaMeta.originalName || postMeta.originalName || 'Attachment',
+      mimeType: mediaMeta.mimeType || postMeta.mimeType || 'application/octet-stream',
+      fileSize: mediaMeta.fileSize || postMeta.fileSize || null,
+      mediaIv: postMeta.mediaIv || mediaMeta.iv || post.iv || null,
+      iv: postMeta.mediaIv || mediaMeta.iv || post.iv || null
+    });
   };
 
   const retryFeedMedia = (mediaId) => {
@@ -1165,8 +1201,8 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   <button
                     type="button"
                     className="post-action-btn share-btn"
-                    onClick={() => handleSharePost(post)}
-                    title="Share post"
+                    onClick={() => handleOpenForwardModal(post)}
+                    title="Forward post to friends, groups or feed"
                   >
                     <Share2 size={17} color="#94a3b8" />
                     <span>{post.shares?.length || 0}</span>
@@ -1270,6 +1306,35 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
           <Check size={14} color="#10b981" />
           <span>{shareToast}</span>
         </div>
+      )}
+
+      {forwardingPost && (
+        <ForwardModal
+          isOpen={Boolean(forwardingPost)}
+          onClose={() => { setForwardingPost(null); setForwardingPostMeta(null); }}
+          message={forwardingPost}
+          msgMeta={forwardingPostMeta}
+          currentUser={currentUser}
+          allUsers={allUsers}
+          serverUrl={serverUrl}
+          onForwardSuccess={async (targetName) => {
+            setShareToast(`Forwarded to ${targetName}!`);
+            setTimeout(() => setShareToast(null), 3000);
+            try {
+              const res = await fetch(`${serverUrl}/api/posts/${forwardingPost.id}/share`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser.username })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.post) {
+                  setPosts(prev => prev.map(p => p.id === forwardingPost.id ? { ...p, ...data.post } : p));
+                }
+              }
+            } catch (e) {}
+          }}
+        />
       )}
     </div>
   );

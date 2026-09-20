@@ -11,30 +11,33 @@ import {
   Music,
   Check,
   Loader2,
-  Lock
-} from 'lucide-react';
-import {
-  importPublicKey,
-  deriveSharedAESKey,
-  deriveRatchetMessageKey,
-  encryptText,
-  encryptPost
-} from '../crypto/e2ee';
-import { soundEffects } from '../utils/soundEffects';
+  Lock,
+  Globe
+ } from 'lucide-react';
+ import {
+   importPublicKey,
+   deriveSharedAESKey,
+   deriveRatchetMessageKey,
+   encryptText,
+   encryptPost,
+   generatePostKey,
+   exportRawAESKey
+ } from '../crypto/e2ee';
+ import { soundEffects } from '../utils/soundEffects';
 
-export default function ForwardModal({
-  isOpen,
-  onClose,
-  message,
-  msgMeta = {},
-  currentUser,
-  allUsers = [],
-  groups = [],
-  serverUrl,
-  onForwardSuccess
-}) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'direct' | 'groups'
+ export default function ForwardModal({
+   isOpen,
+   onClose,
+   message,
+   msgMeta = {},
+   currentUser,
+   allUsers = [],
+   groups = [],
+   serverUrl,
+   onForwardSuccess
+ }) {
+   const [searchQuery, setSearchQuery] = useState('');
+   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'direct' | 'groups' | 'feed'
   const [forwardingTarget, setForwardingTarget] = useState(null);
   const [forwardSuccessTarget, setForwardSuccessTarget] = useState(null);
   const [error, setError] = useState(null);
@@ -232,6 +235,59 @@ export default function ForwardModal({
     }
   };
 
+  const handleForwardToFeed = async () => {
+    if (forwardingTarget) return;
+    setForwardingTarget('feed_public');
+    setError(null);
+
+    try {
+      const postKey = await generatePostKey();
+      const postKeyB64 = await exportRawAESKey(postKey);
+
+      const hasMedia = Boolean(msgMeta?.mediaId || message?.mediaId);
+      const payloadString = JSON.stringify({
+        text: msgMeta?.text || '',
+        mediaKeyB64: hasMedia ? (msgMeta?.mediaKey || msgMeta?.mediaKeyB64 || null) : null,
+        originalName: hasMedia ? (msgMeta?.originalName || null) : null,
+        mimeType: hasMedia ? (msgMeta?.mimeType || null) : null,
+        fileSize: hasMedia ? (msgMeta?.fileSize || null) : null,
+        mediaIv: hasMedia ? (msgMeta?.mediaIv || msgMeta?.iv || null) : null,
+        isForwarded: true
+      });
+
+      const { ciphertext, iv } = await encryptText(postKey, payloadString);
+
+      const res = await fetch(`${serverUrl}/api/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          author: currentUser.username,
+          ciphertext,
+          iv,
+          keyEnvelopes: {},
+          mediaId: hasMedia ? (msgMeta?.mediaId || message?.mediaId || null) : null,
+          isPublic: true,
+          postKeyB64
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
+      soundEffects.playMessageSent();
+      setForwardSuccessTarget('Public Feed');
+      setTimeout(() => {
+        onForwardSuccess?.('Public Feed');
+        onClose();
+      }, 700);
+    } catch (err) {
+      console.error('Forward to feed error:', err);
+      setError(err.message || 'Failed to share to feed.');
+      setForwardingTarget(null);
+    }
+  };
+
   return (
     <div className="forward-modal-overlay animate-fade-in" onClick={onClose}>
       <div className="forward-modal-card animate-scale-in" onClick={(e) => e.stopPropagation()}>
@@ -311,6 +367,13 @@ export default function ForwardModal({
           >
             Groups ({filteredGroups.length})
           </button>
+          <button
+            type="button"
+            className={`forward-tab-btn ${activeTab === 'feed' ? 'active' : ''}`}
+            onClick={() => setActiveTab('feed')}
+          >
+            Feed
+          </button>
         </div>
 
         {/* Error Alert */}
@@ -322,6 +385,43 @@ export default function ForwardModal({
 
         {/* Target List */}
         <div className="forward-targets-list">
+          {/* Feed Section */}
+          {(activeTab === 'all' || activeTab === 'feed') && (!searchQuery || 'feed public feed share'.includes(searchQuery.toLowerCase())) && (
+            <div className="forward-section">
+              <div className="forward-section-title">
+                <Globe size={13} />
+                <span>Feed</span>
+              </div>
+              <div
+                className={`forward-target-item ${forwardingTarget === 'feed_public' ? 'forwarding' : ''} ${forwardSuccessTarget === 'Public Feed' ? 'success' : ''}`}
+                onClick={() => !forwardingTarget && handleForwardToFeed()}
+              >
+                <div className="forward-target-avatar" style={{ backgroundColor: '#ee7882' }}>
+                  <Globe size={18} color="#ffffff" />
+                </div>
+                <div className="forward-target-info">
+                  <span className="forward-target-name">Public Feed</span>
+                  <span className="forward-target-sub">Share to public feed with zero re-upload</span>
+                </div>
+                <div className="forward-action-btn-box">
+                  {forwardingTarget === 'feed_public' ? (
+                    <Loader2 size={16} className="forward-spinner" />
+                  ) : forwardSuccessTarget === 'Public Feed' ? (
+                    <div className="forward-success-badge">
+                      <Check size={14} color="#10b981" />
+                      <span>Posted</span>
+                    </div>
+                  ) : (
+                    <button type="button" className="forward-send-btn">
+                      <CornerUpRight size={14} />
+                      <span>Post</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Direct Messages Section */}
           {(activeTab === 'all' || activeTab === 'direct') && filteredUsers.length > 0 && (
             <div className="forward-section">
