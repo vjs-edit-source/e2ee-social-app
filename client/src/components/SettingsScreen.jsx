@@ -32,10 +32,12 @@ import {
   Radio,
   Zap,
   Unlock,
-  X
+  X,
+  Fingerprint
 } from 'lucide-react';
 import { backupKeyVaultToServer, ensureUserMnemonic } from '../crypto/vault';
 import MnemonicVaultModal from './MnemonicVaultModal';
+import { isBiometricAvailable, authenticateBiometric } from '../utils/biometrics';
 
 const AVATAR_COLORS = [
   '#ee7882', '#ff477e', '#e11d48', '#be123c', '#9333ea',
@@ -181,6 +183,7 @@ export default function SettingsScreen({
   const [securityConfirmInput, setSecurityConfirmInput] = useState('');
   const [securityPasswordError, setSecurityPasswordError] = useState('');
   const [showSecurityPasswordText, setShowSecurityPasswordText] = useState(false);
+  const [hasBiometrics] = useState(() => isBiometricAvailable());
 
   const getStoredSecurityPassword = () => {
     try {
@@ -859,6 +862,48 @@ export default function SettingsScreen({
                 </div>
               )}
 
+              {hasBiometrics && !isFirstTimeSecuritySetup() && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const ok = await authenticateBiometric({
+                        title: 'Unlock Security & Keys',
+                        subtitle: 'Verify biometrics to view cryptographic keys'
+                      });
+                      if (ok) {
+                        setIsSecurityUnlocked(true);
+                        setShowSecurityPasswordModal(false);
+                        setActiveTab('security');
+                      }
+                    } catch (err) {
+                      console.log('Biometric security unlock cancelled:', err.message);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                    borderRadius: '9999px',
+                    padding: '12px',
+                    color: '#60a5fa',
+                    fontWeight: '700',
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    marginTop: '2px',
+                    boxShadow: '0 2px 10px rgba(59, 130, 246, 0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Fingerprint size={18} />
+                  <span>Unlock with Biometrics (Android 12+)</span>
+                </button>
+              )}
+
               <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                 <button
                   type="button"
@@ -1534,6 +1579,25 @@ export default function SettingsScreen({
             <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
               Require a 4-digit PIN or fingerprint authentication every time SadiSocial is opened or resumed.
             </p>
+
+            {hasBiometrics && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '14px',
+                padding: '10px 16px',
+                borderRadius: '18px',
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                color: '#60a5fa',
+                fontSize: '0.8rem',
+                fontWeight: '600'
+              }}>
+                <Fingerprint size={18} />
+                <span>✓ Android 12+ Biometric Unlock is Active</span>
+              </div>
+            )}
 
             <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
               <input

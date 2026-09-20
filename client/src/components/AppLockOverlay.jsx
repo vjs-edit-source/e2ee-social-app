@@ -1,16 +1,23 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, Fingerprint, Delete, ShieldCheck, AlertOctagon } from 'lucide-react';
+import { isBiometricAvailable, authenticateBiometric } from '../utils/biometrics';
 
 export default function AppLockOverlay({ onUnlock, onPanic }) {
   const [pinInput, setPinInput] = useState('');
   const [isError, setIsError] = useState(false);
-  const [supportsBiometrics, setSupportsBiometrics] = useState(false);
+  const [supportsBiometrics, setSupportsBiometrics] = useState(() => isBiometricAvailable());
+  const autoPromptTriggered = useRef(false);
 
   useEffect(() => {
-    if (window.PublicKeyCredential) {
-      PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.()
-        .then(available => setSupportsBiometrics(!!available))
-        .catch(() => {});
+    const available = isBiometricAvailable();
+    setSupportsBiometrics(available);
+
+    if (available && !autoPromptTriggered.current) {
+      autoPromptTriggered.current = true;
+      const timer = setTimeout(() => {
+        handleBiometricAuth();
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, []);
 
@@ -57,12 +64,15 @@ export default function AppLockOverlay({ onUnlock, onPanic }) {
 
   const handleBiometricAuth = async () => {
     try {
-      if (window.PublicKeyCredential) {
-        // Quick biometric challenge check
+      const success = await authenticateBiometric({
+        title: 'SadiSocial Lock',
+        subtitle: 'Scan fingerprint or face to unlock'
+      });
+      if (success) {
         onUnlock();
       }
     } catch (e) {
-      console.warn('Biometric auth failed:', e);
+      console.log('[AppLockOverlay] Biometric auth dismissed or cancelled:', e.message);
     }
   };
 

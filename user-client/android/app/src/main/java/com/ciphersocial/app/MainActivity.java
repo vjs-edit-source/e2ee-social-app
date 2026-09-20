@@ -27,6 +27,9 @@ import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -37,6 +40,7 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "MainActivity";
@@ -163,9 +167,92 @@ public class MainActivity extends BridgeActivity {
                     public void stopIncomingRingtone() {
                         stopIncomingRingtoneInternal();
                     }
+
+                    // Biometric Authentication strictly for Android 12+ (API 31+)
+                    @JavascriptInterface
+                    public boolean isBiometricAvailable() {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                            return false;
+                        }
+                        try {
+                            BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                            int canAuth = biometricManager.canAuthenticate(
+                                BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            );
+                            return canAuth == BiometricManager.BIOMETRIC_SUCCESS;
+                        } catch (Throwable t) {
+                            Log.e(TAG, "Biometric availability check failed", t);
+                            return false;
+                        }
+                    }
+
+                    @JavascriptInterface
+                    public void authenticateBiometric(String title, String subtitle) {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                            notifyBiometricResult("error", "Biometric authentication is only supported on Android 12+");
+                            return;
+                        }
+                        runOnUiThread(() -> {
+                            try {
+                                Executor executor = ContextCompat.getMainExecutor(MainActivity.this);
+                                BiometricPrompt biometricPrompt = new BiometricPrompt(MainActivity.this, executor, new BiometricPrompt.AuthenticationCallback() {
+                                    @Override
+                                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                                        super.onAuthenticationError(errorCode, errString);
+                                        Log.d(TAG, "Biometric authentication error: " + errorCode + " - " + errString);
+                                        notifyBiometricResult("error", errString.toString());
+                                    }
+
+                                    @Override
+                                    public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                                        super.onAuthenticationSucceeded(result);
+                                        Log.d(TAG, "Biometric authentication succeeded");
+                                        notifyBiometricResult("success", "Authentication succeeded");
+                                    }
+
+                                    @Override
+                                    public void onAuthenticationFailed() {
+                                        super.onAuthenticationFailed();
+                                        Log.d(TAG, "Biometric authentication failed");
+                                        notifyBiometricResult("failed", "Authentication failed");
+                                    }
+                                });
+
+                                String promptTitle = (title != null && !title.trim().isEmpty()) ? title.trim() : "SadiSocial Lock";
+                                String promptSubtitle = (subtitle != null && !subtitle.trim().isEmpty()) ? subtitle.trim() : "Confirm your fingerprint or face to unlock";
+
+                                BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                                        .setTitle(promptTitle)
+                                        .setSubtitle(promptSubtitle)
+                                        .setNegativeButtonText("Use PIN")
+                                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                                        .build();
+
+                                biometricPrompt.authenticate(promptInfo);
+                            } catch (Throwable t) {
+                                Log.e(TAG, "Error displaying biometric prompt", t);
+                                notifyBiometricResult("error", t.getMessage());
+                            }
+                        });
+                    }
                 }, "AndroidCallBridge");
             }
         } catch (Throwable ignored) {}
+    }
+
+    private void notifyBiometricResult(String status, String message) {
+        if (bridge != null && bridge.getWebView() != null) {
+            final String safeStatus = status != null ? status.replace("'", "\\'") : "";
+            final String safeMsg = message != null ? message.replace("'", "\\'") : "";
+            runOnUiThread(() -> {
+                try {
+                    bridge.getWebView().evaluateJavascript(
+                        "if (typeof window.onBiometricResult === 'function') { window.onBiometricResult('" + safeStatus + "', '" + safeMsg + "'); }",
+                        null
+                    );
+                } catch (Throwable ignored) {}
+            });
+        }
     }
 
     private void saveFileToDownloads(String base64Data, String fileName, String mimeType) {
