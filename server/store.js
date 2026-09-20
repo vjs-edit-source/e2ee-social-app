@@ -604,6 +604,43 @@ class ZeroKnowledgeStore {
     return post;
   }
 
+  deletePost(postId, username) {
+    const idx = this.posts.findIndex(p => p.id === postId);
+    if (idx === -1) return null;
+
+    const post = this.posts[idx];
+    if (post.author !== username) {
+      return { error: 'unauthorized' };
+    }
+
+    this.posts.splice(idx, 1);
+    this.scheduleSave();
+    if (this.mongoDb) {
+      this.mongoDb.collection('posts').deleteOne({ id: postId }).catch(() => {});
+    }
+    return { success: true, deletedPostId: postId };
+  }
+
+  editPost(postId, username, { ciphertext, iv, keyEnvelopes, postKeyB64 }) {
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) return null;
+
+    if (post.author !== username) {
+      return { error: 'unauthorized' };
+    }
+
+    post.ciphertext = ciphertext;
+    post.iv = iv;
+    if (keyEnvelopes !== undefined) post.keyEnvelopes = keyEnvelopes;
+    if (postKeyB64 !== undefined) post.postKeyB64 = postKeyB64;
+    post.editedAt = new Date().toISOString();
+    post.isEdited = true;
+
+    this.scheduleSave();
+    this.syncDocToMongo('posts', { id: post.id }, post);
+    return post;
+  }
+
   // ── DIRECT MESSAGES ───────────────────────────────────────
   addMessage(sender, recipient, ciphertext, iv, ratchetSeq = 1, dhKeyB64 = null) {
     const msg = {

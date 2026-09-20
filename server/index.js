@@ -452,6 +452,50 @@ app.post('/api/posts/:postId/share', (req, res) => {
   res.json({ success: true, post });
 });
 
+// Delete Post (Author Only)
+app.delete('/api/posts/:postId', (req, res) => {
+  const username = req.body?.username || req.query?.username;
+  const { postId } = req.params;
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username required to delete post' });
+  }
+
+  const result = db.deletePost(postId, username);
+  if (!result) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+  if (result.error === 'unauthorized') {
+    return res.status(403).json({ error: 'You can only delete your own posts' });
+  }
+
+  broadcast({ type: 'POST_DELETED', postId });
+  notifyInspector();
+  res.json({ success: true, postId });
+});
+
+// Edit Post (Author Only)
+app.put('/api/posts/:postId', (req, res) => {
+  const { username, ciphertext, iv, keyEnvelopes, postKeyB64 } = req.body;
+  const { postId } = req.params;
+
+  if (!username || !ciphertext || !iv) {
+    return res.status(400).json({ error: 'Username, ciphertext, and iv are required' });
+  }
+
+  const post = db.editPost(postId, username, { ciphertext, iv, keyEnvelopes, postKeyB64 });
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+  if (post.error === 'unauthorized') {
+    return res.status(403).json({ error: 'You can only edit your own posts' });
+  }
+
+  broadcast({ type: 'POST_EDITED', post });
+  notifyInspector();
+  res.json({ success: true, post });
+});
+
 // 5. Send Encrypted Direct Message (with Double Ratchet support)
 app.post('/api/messages', (req, res) => {
   const { sender, recipient, ciphertext, iv, ratchetSeq, dhKeyB64 } = req.body;

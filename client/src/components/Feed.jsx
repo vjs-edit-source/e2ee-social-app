@@ -29,7 +29,9 @@ import {
   Heart,
   MessageCircle,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import {
   generatePostKey,
@@ -77,6 +79,11 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [downloadProgressMap, setDownloadProgressMap] = useState({});
   const [publishing, setPublishing] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
+
+  // Edit post state
+  const [editingPostId, setEditingPostId] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // New rich writing & master toolbar state
   const [showToolsDock, setShowToolsDock] = useState(false);
@@ -165,6 +172,24 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             return [data.post, ...prev];
           });
         } else if (data.type === 'POST_UPDATED' && data.post) {
+          setPosts(prev => prev.map(p => p.id === data.post.id ? { ...p, ...data.post } : p));
+        } else if (data.type === 'POST_DELETED' && data.postId) {
+          setPosts(prev => prev.filter(p => p.id !== data.postId));
+          delete decryptedPostsCache.current[data.postId];
+          decryptionCache.setFeedPost(data.postId, null);
+          setDecryptedPostMap(prev => {
+            const next = { ...prev };
+            delete next[data.postId];
+            return next;
+          });
+        } else if (data.type === 'POST_EDITED' && data.post) {
+          decryptionCache.setFeedPost(data.post.id, null);
+          delete decryptedPostsCache.current[data.post.id];
+          setDecryptedPostMap(prev => {
+            const next = { ...prev };
+            delete next[data.post.id];
+            return next;
+          });
           setPosts(prev => prev.map(p => p.id === data.post.id ? { ...p, ...data.post } : p));
         }
       } catch (e) {}
@@ -674,6 +699,143 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
     }
   };
 
+  const handleDeletePost = async (postId) => {
+    if (!postId || !currentUser) return;
+    const confirmDelete = window.confirm('Are you sure you want to delete this post? This action cannot be undone.');
+    if (!confirmDelete) return;
+
+    try {
+      // Optimistic removal
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      delete decryptedPostsCache.current[postId];
+      decryptionCache.setFeedPost(postId, null);
+      setDecryptedPostMap(prev => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+
+      const res = await fetch(`${serverUrl}/api/posts/${postId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+      alert(`Could not delete post: ${err.message}`);
+      loadPosts();
+    }
+  };
+
+  const handleStartEditPost = (post) => {
+    const postMeta = decryptedPostMap[post.id] || decryptionCache.getFeedPost(post.id);
+    setEditingPostId(post.id);
+    setEditingText(postMeta?.text || '');
+  };
+
+  const handleCancelEditPost = () => {
+    setEditingPostId(null);
+    setEditingText('');
+    setSavingEdit(false);
+  };
+
+  const handleSaveEditedPost = async (post) => {
+    if (!editingText.trim() || savingEdit || !currentUser) return;
+    setSavingEdit(true);
+
+    try {
+      const postMeta = decryptedPostMap[post.id] || decryptionCache.getFeedPost(post.id) || {};
+
+      const payloadString = JSON.stringify({
+        text: editingText.trim(),
+        mediaKeyB64: postMeta.mediaKeyB64 || null,
+        originalName: postMeta.originalName || null,
+        mimeType: postMeta.mimeType || null,
+        fileSize: postMeta.fileSize || null,
+        mediaIv: postMeta.mediaIv || null,
+        expiresIn: postMeta.expiresIn || undefined
+      });
+
+      let postKey = postMeta.postKey;
+      if (!postKey) {
+        if (post.postKeyB64) {
+          postKey = await importRawAESKey(post.postKeyB64);
+        } else {
+          postKey = await generatePostKey();
+        }
+      }
+
+      const isPublic = post.isPublic !== false && Boolean(post.postKeyB64 || postMeta.isPublic);
+      const postKeyB64 = isPublic ? (post.postKeyB64 || await exportRawAESKey(postKey)) : null;
+
+      const { ciphertext, iv } = await encryptText(postKey, payloadString);
+
+      let keyEnvelopes = post.keyEnvelopes;
+      if (!isPublic && !post.postKeyB64) {
+        keyEnvelopes = {};
+        for (const u of allUsers) {
+          try {
+            if (!u.publicIdentityKey) continue;
+            const peerPubKey = await importPublicKey(u.publicIdentityKey);
+            const wrappedEnvelope = await wrapKeyForRecipient(postKey, currentUser.keyPair.privateKey, peerPubKey);
+            keyEnvelopes[u.username] = wrappedEnvelope;
+          } catch (e) {}
+        }
+        if (currentUser.spkiPublicKey && !keyEnvelopes[currentUser.username]) {
+          try {
+            const myPubKey = await importPublicKey(currentUser.spkiPublicKey);
+            const myWrapped = await wrapKeyForRecipient(postKey, currentUser.keyPair.privateKey, myPubKey);
+            keyEnvelopes[currentUser.username] = myWrapped;
+          } catch (e) {}
+        }
+      }
+
+      const res = await fetch(`${serverUrl}/api/posts/${post.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: currentUser.username,
+          ciphertext,
+          iv,
+          keyEnvelopes,
+          postKeyB64
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.success && data.post) {
+        const updatedMeta = {
+          ...postMeta,
+          success: true,
+          text: editingText.trim(),
+          postKey,
+          isEdited: true
+        };
+        decryptedPostsCache.current[post.id] = updatedMeta;
+        decryptionCache.setFeedPost(post.id, updatedMeta);
+        setDecryptedPostMap(prev => ({ ...prev, [post.id]: updatedMeta }));
+        setPosts(prev => prev.map(p => p.id === post.id ? { ...p, ...data.post, isEdited: true } : p));
+        setEditingPostId(null);
+        setEditingText('');
+      }
+    } catch (err) {
+      console.error('Failed to save edited post:', err);
+      alert(`Could not save edit: ${err.message}`);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const canPublish = !publishing && !mediaUploading && (Boolean(newPostText && newPostText.trim()) || Boolean(attachedMedia));
 
   return (
@@ -1113,6 +1275,11 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                   <div className="author-meta">
                     <span className="author-name">{authorObj.displayName || post.author}</span>
                     <span className="post-time">{new Date(post.timestamp).toLocaleTimeString()}</span>
+                    {(post.isEdited || decState.isEdited) && (
+                      <span className="post-edited-badge" style={{ fontSize: '0.68rem', color: '#94a3b8', marginLeft: '4px' }}>
+                        • Edited
+                      </span>
+                    )}
                   </div>
 
                   <div className="encryption-pill" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1138,10 +1305,117 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                         Private
                       </span>
                     )}
+
+                    {/* Author Edit & Delete Action Buttons */}
+                    {post.author === currentUser.username && (
+                      <div className="author-post-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPost(post)}
+                          title="Edit post text"
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.07)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '6px',
+                            color: '#94a3b8',
+                            padding: '3px 7px',
+                            fontSize: '0.7rem',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Edit3 size={11} color="#38bdf8" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePost(post.id)}
+                          title="Delete post"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: '6px',
+                            color: '#f87171',
+                            padding: '3px 7px',
+                            fontSize: '0.7rem',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Trash2 size={11} color="#f87171" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {decState.text ? (
+                {editingPostId === post.id ? (
+                  <div className="post-inline-editor" style={{ marginTop: '10px', background: 'rgba(15, 23, 42, 0.5)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(224, 108, 117, 0.35)' }}>
+                    <textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      rows={3}
+                      placeholder="Edit your post..."
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '6px',
+                        color: '#f1f5f9',
+                        fontSize: '0.85rem',
+                        fontFamily: 'inherit',
+                        resize: 'vertical',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleCancelEditPost}
+                        disabled={savingEdit}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#cbd5e1',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEditedPost(post)}
+                        disabled={savingEdit || !editingText.trim()}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #ee7882, #e05260)',
+                          border: 'none',
+                          color: '#fff',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {savingEdit ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        <span>{savingEdit ? 'Saving...' : 'Save'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : decState.text ? (
                   <div className="post-content">
                     <p className={decState.success ? 'decrypted-text' : 'ciphertext-preview'}>
                       {decState.text}
