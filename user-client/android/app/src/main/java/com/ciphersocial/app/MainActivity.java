@@ -26,6 +26,7 @@ import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -90,6 +91,29 @@ public class MainActivity extends BridgeActivity {
                 );
             } catch (Throwable ignored) {}
         }
+
+        // Android Device Back Navigation (Gestures, 3-Button Nav, Hardware Back)
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (bridge != null && bridge.getWebView() != null) {
+                    bridge.getWebView().evaluateJavascript(
+                        "typeof window.handleAndroidDeviceBack === 'function' ? window.handleAndroidDeviceBack() : false;",
+                        value -> {
+                            boolean handled = "true".equals(value) || "\"true\"".equals(value);
+                            Log.d(TAG, "Android back gesture/button triggered: handled=" + handled + ", raw=" + value);
+                            if (!handled) {
+                                runOnUiThread(() -> {
+                                    moveTaskToBack(true);
+                                });
+                            }
+                        }
+                    );
+                    return;
+                }
+                moveTaskToBack(true);
+            }
+        });
 
         // Expose JavaScript Interface to React Web App
         try {
@@ -437,7 +461,8 @@ public class MainActivity extends BridgeActivity {
             bridge.getWebView().evaluateJavascript(
                 "typeof window.handleAndroidDeviceBack === 'function' ? window.handleAndroidDeviceBack() : false;",
                 value -> {
-                    if ("false".equals(value) || "null".equals(value) || value == null) {
+                    boolean handled = "true".equals(value) || "\"true\"".equals(value);
+                    if (!handled) {
                         runOnUiThread(() -> {
                             // If not consumed by JS handlers, minimize the app to home screen
                             moveTaskToBack(true);

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { isCapacitorNative } from './engineConfig';
+import { useEffect, useRef } from 'react';
+import { App as CapApp } from '@capacitor/app';
 
 // Array of registered back handlers: { id, fn, priority }
 // Higher priority runs first. If a handler returns true, back press is consumed.
@@ -33,11 +33,14 @@ export function registerBackHandler(fn, priority = 50) {
  * React hook to register a back handler while component is mounted/enabled.
  */
 export function useBackHandler(fn, priority = 50, enabled = true) {
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+
   useEffect(() => {
     if (!enabled) return;
-    const unregister = registerBackHandler(fn, priority);
+    const unregister = registerBackHandler(() => fnRef.current(), priority);
     return unregister;
-  }, [fn, priority, enabled]);
+  }, [priority, enabled]);
 }
 
 /**
@@ -74,20 +77,17 @@ if (typeof window !== 'undefined') {
   };
 }
 
-// Initialize Capacitor App backButton listener if running natively
+// Initialize Capacitor App backButton listener
 if (typeof window !== 'undefined') {
-  if (isCapacitorNative()) {
-    const appPkg = '@capacitor/app';
-    import(/* @vite-ignore */ appPkg)
-      .then(({ App }) => {
-        App.addListener('backButton', () => {
-          const handled = triggerBack();
-          if (!handled) {
-            // If no handler consumed the event, minimize/exit
-            App.exitApp().catch(() => {});
-          }
-        }).catch(() => {});
-      })
-      .catch(() => {});
+  try {
+    CapApp.addListener('backButton', () => {
+      const handled = triggerBack();
+      if (!handled) {
+        // If no handler consumed the event, minimize/exit
+        CapApp.exitApp().catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (e) {
+    console.warn('Capacitor App plugin listener setup error:', e);
   }
 }
