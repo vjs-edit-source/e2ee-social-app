@@ -300,10 +300,16 @@ export async function encryptMediaBuffer(sharedKeyOrNull, arrayBuffer) {
     buffer
   );
 
-  const ciphertextBlob = await bufferToBase64Native(ciphertextBuffer);
-
+  let cachedB64 = null;
   return {
-    ciphertextBlob,
+    ciphertextBuffer,
+    encryptedBuffer: ciphertextBuffer,
+    get ciphertextBlob() {
+      if (!cachedB64) {
+        cachedB64 = bufferToBase64(ciphertextBuffer);
+      }
+      return cachedB64;
+    },
     iv: bufferToBase64(iv),
     mediaKeyB64
   };
@@ -311,18 +317,19 @@ export async function encryptMediaBuffer(sharedKeyOrNull, arrayBuffer) {
 
 /**
  * 13. Decrypt Binary Media Buffer to a Blob Object URL for display
- * Accepts CryptoKey object or Base64 raw key string
+ * Accepts CryptoKey object or Base64 raw key string.
+ * Supports ArrayBuffer or Base64 string for ciphertext and IV.
  */
 export async function decryptMediaBuffer(keyOrBlob, blobOrKey, ivB64, mimeType = 'application/octet-stream') {
   try {
     let keyInput = keyOrBlob;
-    let cipherB64 = blobOrKey;
+    let cipherInput = blobOrKey;
 
     // Detect if key and ciphertext arguments were swapped
-    if (typeof keyInput === 'string' && keyInput.length > 256 && typeof cipherB64 === 'string' && cipherB64.length <= 128) {
+    if (typeof keyInput === 'string' && keyInput.length > 256 && typeof cipherInput === 'string' && cipherInput.length <= 128) {
       const temp = keyInput;
-      keyInput = cipherB64;
-      cipherB64 = temp;
+      keyInput = cipherInput;
+      cipherInput = temp;
     }
 
     let key = keyInput;
@@ -337,8 +344,19 @@ export async function decryptMediaBuffer(keyOrBlob, blobOrKey, ivB64, mimeType =
       );
     }
 
-    const ciphertext = base64ToBuffer(cipherB64);
-    const iv = base64ToBuffer(ivB64);
+    // Support cipherInput as either ArrayBuffer / Uint8Array (binary) OR base64 string
+    let ciphertext;
+    if (cipherInput instanceof ArrayBuffer) {
+      ciphertext = cipherInput;
+    } else if (ArrayBuffer.isView(cipherInput)) {
+      ciphertext = cipherInput.buffer;
+    } else if (typeof cipherInput === 'string') {
+      ciphertext = base64ToBuffer(cipherInput);
+    } else {
+      throw new Error('Invalid ciphertext input: expected ArrayBuffer or Base64 string');
+    }
+
+    const iv = (ivB64 instanceof ArrayBuffer || ArrayBuffer.isView(ivB64)) ? ivB64 : base64ToBuffer(ivB64);
 
     const decryptedBuffer = await getSubtleCrypto().decrypt(
       { name: "AES-GCM", iv: iv },
@@ -602,6 +620,126 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
     voiceDuration: 0,
     rawText: decryptedRaw
   };
+}
+
+/**
+ * 20. Upload Encrypted Binary Media with Live Progress Reporting
+ * Streams raw AES-256-GCM ciphertext bytes to server without Base64 overhead
+ */
+export function uploadEncryptedMediaBinary(serverUrl, mediaId, ciphertextBuffer, iv, mimeType, uploader, originalName, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${serverUrl}/api/media/binary/${encodeURIComponent(mediaId)}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('x-media-iv', iv || '');
+    xhr.setRequestHeader('x-mime-type', mimeType || 'application/octet-stream');
+    xhr.setRequestHeader('x-uploader', uploader || 'anonymous');
+    if (originalName) {
+      xhr.setRequestHeader('x-original-name', encodeURIComponent(originalName));
+    }
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          resolve({ success: true, mediaId });
+        }
+      } else {
+        reject(new Error(`Media upload failed (HTTP ${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during media upload'));
+    xhr.send(ciphertextBuffer);
+  });
+}
+
+/**
+ * 21. Fetch and Decrypt Binary Media with Live Progress Reporting
+ * Directly receives raw ciphertext ArrayBuffer and decrypts without Base64 conversions
+ */
+export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbackIv, fallbackMime, fallbackName, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', `${serverUrl}/api/media/binary/${encodeURIComponent(mediaId)}`);
+    xhr.responseType = 'arraybuffer';
+
+    if (onProgress) {
+      xhr.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const arrayBuffer = xhr.response;
+          const iv = xhr.getResponseHeader('x-media-iv') || fallbackIv;
+          const mimeType = xhr.getResponseHeader('x-mime-type') || fallbackMime || 'application/octet-stream';
+          let originalName = fallbackName;
+          const headerName = xhr.getResponseHeader('x-original-name');
+          if (headerName) {
+            try { originalName = decodeURIComponent(headerName); } catch { originalName = headerName; }
+          }
+
+          const objectUrl = await decryptMediaBuffer(keyOrB64, arrayBuffer, iv, mimeType);
+          resolve({ objectUrl, mimeType, originalName, error: !objectUrl });
+        } catch (err) {
+          console.error('[BinaryMedia] Decryption error:', err);
+          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+        }
+      } else {
+        // Fallback to legacy JSON endpoint if binary endpoint returns 404
+        try {
+          const legacyRes = await fetch(`${serverUrl}/api/media/${encodeURIComponent(mediaId)}`);
+          if (legacyRes.ok) {
+            const mediaData = await legacyRes.json();
+            const keyToUse = keyOrB64;
+            const mediaIv = mediaData.iv || fallbackIv;
+            const finalMime = mediaData.mimeType || fallbackMime || 'application/octet-stream';
+            const originalName = mediaData.originalName || fallbackName;
+            const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+            resolve({ objectUrl, mimeType: finalMime, originalName, error: !objectUrl });
+          } else {
+            resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+          }
+        } catch (err) {
+          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+        }
+      }
+    };
+
+    xhr.onerror = async () => {
+      // Network error on binary endpoint -> try fallback
+      try {
+        const legacyRes = await fetch(`${serverUrl}/api/media/${encodeURIComponent(mediaId)}`);
+        if (legacyRes.ok) {
+          const mediaData = await legacyRes.json();
+          const objectUrl = await decryptMediaBuffer(keyOrB64, mediaData.ciphertextBlob, mediaData.iv || fallbackIv, mediaData.mimeType || fallbackMime);
+          resolve({ objectUrl, mimeType: mediaData.mimeType || fallbackMime, originalName: mediaData.originalName || fallbackName, error: !objectUrl });
+        } else {
+          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+        }
+      } catch {
+        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+      }
+    };
+
+    xhr.send();
+  });
 }
 
 

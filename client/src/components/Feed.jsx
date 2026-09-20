@@ -39,11 +39,12 @@ import {
   unwrapPostKey,
   importPublicKey,
   decryptMediaBuffer,
+  fetchAndDecryptMediaBinary,
   exportRawAESKey,
   importRawAESKey
 } from '../crypto/e2ee';
 import { localSearchIndex } from '../search/searchIndex';
-import { formatTruncatedFileName } from '../utils/fileUtils';
+import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import { formatRelativeTime } from '../utils/dateUtils';
 import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
@@ -279,60 +280,51 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
             pendingMediaFetches.current.add(post.mediaId);
             decryptionCache.setMediaPending(post.mediaId);
 
-            fetch(`${serverUrl}/api/media/${post.mediaId}`)
-              .then(res => {
-                if (!res.ok) throw new Error(`Media fetch failed: HTTP ${res.status}`);
-                return res.json();
-              })
-              .then(async (mediaObj) => {
-                if (mediaObj.ciphertextBlob && (mediaObj.iv || post.iv)) {
-                  const mediaKeyToUse = cachedPost.mediaKeyB64 || cachedPost.postKey;
-                  const mediaIv = mediaObj.iv || post.iv;
-                  const finalMime = mediaObj.mimeType || cachedPost.mimeType || 'image/jpeg';
-                  const decRes = await decryptMediaBuffer(
-                    mediaKeyToUse,
-                    mediaObj.ciphertextBlob,
-                    mediaIv,
-                    finalMime
-                  );
-                  const objectUrl = typeof decRes === 'string' ? decRes : (decRes?.objectUrl || decRes?.url || null);
+            (async (mediaId, postMeta, postObj) => {
+              try {
+                const mediaKeyToUse = postMeta.mediaKeyB64 || postMeta.postKey;
+                const mediaIv = postObj.iv;
+                const finalMime = postMeta.mimeType || 'image/jpeg';
+                const originalName = postMeta.originalName;
 
-                  if (objectUrl && isMounted) {
-                    const mediaEntry = {
-                      objectUrl,
-                      mimeType: finalMime,
-                      originalName: cachedPost.originalName || mediaObj.originalName
-                    };
+                const result = await fetchAndDecryptMediaBinary(
+                  serverUrl,
+                  mediaId,
+                  mediaKeyToUse,
+                  mediaIv,
+                  finalMime,
+                  originalName
+                );
 
-                    decryptedMediaCache.current[post.mediaId] = mediaEntry;
-                    decryptionCache.setMedia(post.mediaId, mediaEntry);
-                    setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: mediaEntry }));
-                  } else if (isMounted) {
-                    const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
-                    decryptedMediaCache.current[post.mediaId] = failedEntry;
-                    decryptionCache.setMedia(post.mediaId, failedEntry);
-                    setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
-                  }
+                const objectUrl = resolveMediaUrl(result.objectUrl);
+                if (objectUrl && !result.error && isMounted) {
+                  const mediaEntry = {
+                    objectUrl,
+                    mimeType: result.mimeType || finalMime,
+                    originalName: result.originalName || originalName
+                  };
+                  decryptedMediaCache.current[mediaId] = mediaEntry;
+                  decryptionCache.setMedia(mediaId, mediaEntry);
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
                 } else if (isMounted) {
-                  const failedEntry = { failed: true, error: 'Media payload missing' };
-                  decryptedMediaCache.current[post.mediaId] = failedEntry;
-                  decryptionCache.setMedia(post.mediaId, failedEntry);
-                  setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
+                  const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
+                  decryptedMediaCache.current[mediaId] = failedEntry;
+                  decryptionCache.setMedia(mediaId, failedEntry);
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
                 }
-              })
-              .catch(e => {
+              } catch (e) {
                 console.warn('Feed media fetch info:', e.message);
                 if (isMounted) {
                   const failedEntry = { failed: true, error: 'Attachment from previous session expired' };
-                  decryptedMediaCache.current[post.mediaId] = failedEntry;
-                  decryptionCache.setMedia(post.mediaId, failedEntry);
-                  setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: failedEntry }));
+                  decryptedMediaCache.current[mediaId] = failedEntry;
+                  decryptionCache.setMedia(mediaId, failedEntry);
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
                 }
-              })
-              .finally(() => {
-                pendingMediaFetches.current.delete(post.mediaId);
-                decryptionCache.clearMediaPending(post.mediaId);
-              });
+              } finally {
+                pendingMediaFetches.current.delete(mediaId);
+                decryptionCache.clearMediaPending(mediaId);
+              }
+            })(post.mediaId, cachedPost, post);
           }
         }
       }

@@ -13,7 +13,7 @@ import {
   Loader2,
   Music
 } from 'lucide-react';
-import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
+import { decryptPost, decryptMediaBuffer, fetchAndDecryptMediaBinary } from '../crypto/e2ee';
 import { decryptionCache } from '../utils/decryptionCache';
 import { resolveMediaUrl } from '../utils/fileUtils';
 import { useBackHandler } from '../utils/backHandler';
@@ -172,25 +172,22 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
           } else if (mediaKey && !decryptionCache.isMediaPending(s.mediaId)) {
             decryptionCache.setMediaPending(s.mediaId);
             try {
-              const mediaRes = await fetch(`${serverUrl}/api/media/${s.mediaId}`);
-              if (mediaRes.ok && isMounted) {
-                const mediaObj = await mediaRes.json();
-                const decRes = await decryptMediaBuffer(
-                  mediaKey,
-                  mediaObj.ciphertextBlob,
-                  mediaObj.iv,
-                  mediaObj.mimeType
-                );
-                const objectUrl = resolveMediaUrl(decRes);
+              const result = await fetchAndDecryptMediaBinary(
+                serverUrl,
+                s.mediaId,
+                mediaKey,
+                s.iv,
+                'application/octet-stream'
+              );
+              const objectUrl = resolveMediaUrl(result.objectUrl);
 
-                if (objectUrl && isMounted) {
-                  const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
-                  decryptionCache.setMedia(s.mediaId, mediaEntry);
-                  setDecryptedMediaMap(prev => ({
-                    ...prev,
-                    [s.mediaId]: mediaEntry
-                  }));
-                }
+              if (objectUrl && !result.error && isMounted) {
+                const mediaEntry = { objectUrl, mimeType: result.mimeType || 'application/octet-stream' };
+                decryptionCache.setMedia(s.mediaId, mediaEntry);
+                setDecryptedMediaMap(prev => ({
+                  ...prev,
+                  [s.mediaId]: mediaEntry
+                }));
               }
             } catch (e) {
               console.warn('Status thumbnail decryption error:', e);

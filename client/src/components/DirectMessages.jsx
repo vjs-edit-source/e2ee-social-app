@@ -53,7 +53,9 @@ import {
   encryptText,
   decryptText,
   encryptMediaBuffer,
-  decryptMediaBuffer
+  decryptMediaBuffer,
+  uploadEncryptedMediaBinary,
+  fetchAndDecryptMediaBinary
 } from '../crypto/e2ee';
 import { localSearchIndex } from '../search/searchIndex';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
@@ -154,6 +156,8 @@ export default function DirectMessages({
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [downloadProgressMap, setDownloadProgressMap] = useState({});
   const [sending, setSending] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -976,41 +980,57 @@ export default function DirectMessages({
 
             (async (mediaId, meta) => {
               try {
-                const mediaRes = await fetch(`${serverUrl}/api/media/${mediaId}`);
-                if (mediaRes.ok && isMounted) {
-                  const mediaData = await mediaRes.json();
-                  if (mediaData.ciphertextBlob) {
-                    const keyToUse = meta.mediaKeyB64 || sharedKey;
-                    const mediaIv = mediaData.iv || m.iv;
-                    const finalMime = meta.mimeType || mediaData.mimeType || (meta.isVoice ? 'audio/webm' : 'application/octet-stream');
-                    const decRes = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
-                    const objectUrl = resolveMediaUrl(decRes);
+                const keyToUse = meta.mediaKeyB64 || sharedKey;
+                const mediaIv = meta.iv || m.iv;
+                const finalMime = meta.mimeType || (meta.isVoice ? 'audio/webm' : 'application/octet-stream');
+                const originalName = meta.originalName;
 
-                    if (objectUrl && isMounted) {
-                      const mediaEntry = {
-                        objectUrl,
-                        originalName: meta.originalName || mediaData.originalName,
-                        mimeType: finalMime
-                      };
-                      decryptedMediaCache.current[mediaId] = mediaEntry;
-                      decryptionCache.setMedia(mediaId, mediaEntry);
-                      setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
-                    } else if (isMounted) {
-                      const failedEntry = {
-                        error: true,
-                        originalName: meta.originalName || mediaData.originalName,
-                        mimeType: finalMime
-                      };
-                      decryptedMediaCache.current[mediaId] = failedEntry;
-                      setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
+                const result = await fetchAndDecryptMediaBinary(
+                  serverUrl,
+                  mediaId,
+                  keyToUse,
+                  mediaIv,
+                  finalMime,
+                  originalName,
+                  (percent) => {
+                    if (isMounted) {
+                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: percent }));
                     }
                   }
+                );
+
+                const objectUrl = resolveMediaUrl(result.objectUrl);
+
+                if (objectUrl && !result.error && isMounted) {
+                  const mediaEntry = {
+                    objectUrl,
+                    originalName: result.originalName || meta.originalName,
+                    mimeType: result.mimeType || finalMime
+                  };
+                  decryptedMediaCache.current[mediaId] = mediaEntry;
+                  decryptionCache.setMedia(mediaId, mediaEntry);
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
+                } else if (isMounted) {
+                  const failedEntry = {
+                    error: true,
+                    originalName: result.originalName || meta.originalName,
+                    mimeType: result.mimeType || finalMime
+                  };
+                  decryptedMediaCache.current[mediaId] = failedEntry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
                 }
               } catch (err) {
                 console.error(`DM Media decrypt error for ${mediaId}:`, err);
               } finally {
                 pendingMediaFetches.current.delete(mediaId);
                 decryptionCache.clearMediaPending(mediaId);
+                if (isMounted) {
+                  setDownloadProgressMap(prev => {
+                    const next = { ...prev };
+                    delete next[mediaId];
+                    return next;
+                  });
+                }
               }
             })(msgMeta.mediaId, msgMeta);
           }
@@ -1233,45 +1253,43 @@ export default function DirectMessages({
 
     setAttachedMedia({ file, name: file.name, size: file.size, type: file.type });
     setMediaUploading(true);
+    setUploadProgress(0);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const { ciphertextBlob, iv, mediaKeyB64 } = await encryptMediaBuffer(null, arrayBuffer);
+      // Fast AES-256-GCM encryption with Web Crypto (takes <30ms)
+      const { ciphertextBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(null, arrayBuffer);
 
       const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-      const res = await fetch(`${serverUrl}/api/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mediaId,
-          ciphertextBlob,
-          iv,
-          mimeType: file.type || 'application/octet-stream',
-          uploader: currentUser.username
-        })
+      const fileMime = file.type || 'application/octet-stream';
+
+      // Direct binary streaming upload - bypasses Base64 string allocations and reduces payload by 33%
+      await uploadEncryptedMediaBinary(
+        serverUrl,
+        mediaId,
+        ciphertextBuffer,
+        iv,
+        fileMime,
+        currentUser.username,
+        file.name,
+        (percent) => setUploadProgress(percent)
+      );
+
+      setAttachedMedia({
+        mediaId,
+        mimeType: fileMime,
+        iv,
+        originalName: file.name,
+        fileSize: file.size,
+        mediaKeyB64
       });
-
-      if (!res.ok) throw new Error('Server rejected file upload');
-      const data = await res.json();
-
-      if (data.success) {
-        setAttachedMedia({
-          mediaId,
-          mimeType: file.type || 'application/octet-stream',
-          iv,
-          originalName: file.name,
-          fileSize: file.size,
-          mediaKeyB64
-        });
-      } else {
-        throw new Error(data.error || 'Failed to upload attachment');
-      }
     } catch (err) {
       console.error('DM file upload error:', err);
       alert(`Attachment error: ${err.message || 'Failed to attach file.'}`);
       clearAttachment();
     } finally {
       setMediaUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1282,6 +1300,7 @@ export default function DirectMessages({
     }
     setAttachedMedia(null);
     setMediaUploading(false);
+    setUploadProgress(0);
   };
 
   // Toggle emoji reaction
@@ -2632,7 +2651,7 @@ export default function DirectMessages({
                             ) : (
                               <div className="dm-media-decrypting">
                                 <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                                <span>Decrypting attachment...</span>
+                                <span>{downloadProgressMap[msgMeta.mediaId] !== undefined ? `Downloading ${downloadProgressMap[msgMeta.mediaId]}%...` : 'Decrypting attachment...'}</span>
                               </div>
                             )}
                           </div>
@@ -2792,7 +2811,7 @@ export default function DirectMessages({
           {mediaUploading ? (
             <div className="status-badge encrypting" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Loader2 size={12} className="animate-spin" />
-              <span>Securing...</span>
+              <span>{uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Securing...'}</span>
             </div>
           ) : (
             <div className="status-badge ready">

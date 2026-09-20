@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 class ZeroKnowledgeStore {
   constructor() {
     this.dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.resolve(__dirname, 'data');
+    this.mediaDir = path.resolve(this.dataDir, 'media');
     this.dataFile = path.resolve(this.dataDir, 'zk_database.json');
 
     this.users = new Map();         // username -> { username, publicIdentityKey, publicPrekey, avatarColor, registeredAt }
@@ -117,6 +118,9 @@ class ZeroKnowledgeStore {
     try {
       if (!fs.existsSync(this.dataDir)) {
         fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+      if (!fs.existsSync(this.mediaDir)) {
+        fs.mkdirSync(this.mediaDir, { recursive: true });
       }
 
       if (fs.existsSync(this.dataFile)) {
@@ -225,7 +229,7 @@ class ZeroKnowledgeStore {
         users: Array.from(this.users.entries()),
         posts: this.posts,
         messages: this.messages,
-        media: Array.from(this.media.entries()),
+        media: Array.from(this.media.entries()).map(([id, m]) => [id, m.isBinary ? { ...m, ciphertextBlob: null } : m]),
         vaults: Array.from(this.vaults.entries()),
         groups: Array.from(this.groups.entries()),
         groupMessages: Array.from(this.groupMessages.entries()),
@@ -1315,13 +1319,20 @@ class ZeroKnowledgeStore {
   }
 
   // ── ENCRYPTED MEDIA STORAGE ───────────────────────────────
-  addMedia(mediaId, ciphertextBlob, iv, mimeType, uploader) {
+  getMediaFilePath(mediaId) {
+    const safeId = path.basename(mediaId);
+    return path.resolve(this.mediaDir, `${safeId}.bin`);
+  }
+
+  addMedia(mediaId, ciphertextBlob, iv, mimeType, uploader, originalName = null, isBinary = false) {
     const mediaObj = {
       id: mediaId,
-      ciphertextBlob,
+      ciphertextBlob: isBinary ? null : ciphertextBlob,
       iv,
       mimeType,
       uploader,
+      originalName,
+      isBinary: !!isBinary,
       uploadedAt: new Date().toISOString()
     };
     this.media.set(mediaId, mediaObj);

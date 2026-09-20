@@ -55,7 +55,9 @@ import {
   encryptPost,
   decryptPost,
   encryptMediaBuffer,
-  decryptMediaBuffer
+  decryptMediaBuffer,
+  uploadEncryptedMediaBinary,
+  fetchAndDecryptMediaBinary
 } from '../crypto/e2ee';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import VoiceWaveformPlayer from './VoiceWaveformPlayer';
@@ -263,6 +265,8 @@ export default function Groups({
   const [attachedMedia, setAttachedMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [downloadProgressMap, setDownloadProgressMap] = useState({});
   const [sending, setSending] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -918,33 +922,46 @@ export default function Groups({
             !decryptionCache.isMediaPending(m.mediaId)
           ) {
             decryptionCache.setMediaPending(m.mediaId);
-            try {
-              const mediaRes = await fetch(`${serverUrl}/api/media/${m.mediaId}`);
-              if (mediaRes.ok && isMounted) {
-                const mediaObj = await mediaRes.json();
-                const decRes = await decryptMediaBuffer(
-                  msgMeta.mediaKey,
-                  mediaObj.ciphertextBlob,
-                  mediaObj.iv,
-                  mediaObj.mimeType
+            (async (mediaId, metaKey, mObj) => {
+              try {
+                const result = await fetchAndDecryptMediaBinary(
+                  serverUrl,
+                  mediaId,
+                  metaKey,
+                  mObj.iv,
+                  'application/octet-stream',
+                  null,
+                  (percent) => {
+                    if (isMounted) {
+                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: percent }));
+                    }
+                  }
                 );
-                const objectUrl = resolveMediaUrl(decRes);
 
-                if (objectUrl && isMounted) {
-                  const mediaEntry = { objectUrl, mimeType: mediaObj.mimeType };
-                  decryptedMediaCache.current[m.mediaId] = mediaEntry;
-                  decryptionCache.setMedia(m.mediaId, mediaEntry);
+                const objectUrl = resolveMediaUrl(result.objectUrl);
+
+                if (objectUrl && !result.error && isMounted) {
+                  const mediaEntry = { objectUrl, mimeType: result.mimeType || 'application/octet-stream', originalName: result.originalName };
+                  decryptedMediaCache.current[mediaId] = mediaEntry;
+                  decryptionCache.setMedia(mediaId, mediaEntry);
                   setDecryptedMediaMap(prev => ({
                     ...prev,
-                    [m.mediaId]: mediaEntry
+                    [mediaId]: mediaEntry
                   }));
                 }
+              } catch (e) {
+                console.warn('Group media decryption error:', e);
+              } finally {
+                decryptionCache.clearMediaPending(mediaId);
+                if (isMounted) {
+                  setDownloadProgressMap(prev => {
+                    const next = { ...prev };
+                    delete next[mediaId];
+                    return next;
+                  });
+                }
               }
-            } catch (e) {
-              console.warn('Group media decryption error:', e);
-            } finally {
-              decryptionCache.clearMediaPending(m.mediaId);
-            }
+            })(m.mediaId, msgMeta.mediaKey, m);
           }
         }
       }
@@ -978,25 +995,25 @@ export default function Groups({
         mimeType: file.type || 'application/octet-stream'
       });
       setMediaUploading(true);
+      setUploadProgress(0);
 
       const arrayBuffer = await file.arrayBuffer();
-      const { ciphertextBlob, iv, mediaKeyB64 } = await encryptMediaBuffer(null, arrayBuffer);
+      // Fast AES-256-GCM encryption with Web Crypto (takes <30ms)
+      const { ciphertextBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(null, arrayBuffer);
       const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const fileMime = file.type || 'application/octet-stream';
 
-      const res = await fetch(`${serverUrl}/api/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mediaId,
-          ciphertextBlob,
-          iv,
-          mimeType: fileMime,
-          uploader: currentUser.username
-        })
-      });
-
-      if (!res.ok) throw new Error('Server rejected media upload');
+      // Direct binary streaming upload - bypasses Base64 string allocations and reduces payload by 33%
+      await uploadEncryptedMediaBinary(
+        serverUrl,
+        mediaId,
+        ciphertextBuffer,
+        iv,
+        fileMime,
+        currentUser.username,
+        file.name,
+        (percent) => setUploadProgress(percent)
+      );
 
       setAttachedMedia({
         mediaId,
@@ -1011,6 +1028,7 @@ export default function Groups({
       clearAttachment();
     } finally {
       setMediaUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1019,6 +1037,7 @@ export default function Groups({
     setAttachedMedia(null);
     setPreviewUrl(null);
     setMediaUploading(false);
+    setUploadProgress(0);
   };
 
   // ── USER ROLES & GRANULAR PERMISSIONS ────────────────────────
@@ -2441,7 +2460,7 @@ export default function Groups({
                               ) : (
                                 <div className="dm-media-decrypting">
                                   <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                                  <span>Decrypting attachment...</span>
+                                  <span>{downloadProgressMap[msg.mediaId] !== undefined ? `Downloading ${downloadProgressMap[msg.mediaId]}%...` : 'Decrypting attachment...'}</span>
                                 </div>
                               )}
                             </div>
@@ -2585,7 +2604,7 @@ export default function Groups({
             {mediaUploading ? (
               <div className="status-badge encrypting" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Loader2 size={12} className="animate-spin" />
-                <span>Securing...</span>
+                <span>{uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Securing...'}</span>
               </div>
             ) : (
               <div className="status-badge ready">

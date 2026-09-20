@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { FileText, Lock, CheckCircle2, X, Loader2, Image as ImageIcon, Paperclip } from 'lucide-react';
-import { encryptMediaBuffer } from '../crypto/e2ee';
+import { encryptMediaBuffer, uploadEncryptedMediaBinary } from '../crypto/e2ee';
 import { formatTruncatedFileName } from '../utils/fileUtils';
 
 function getFileFormatBadge(fileName, mimeType) {
@@ -72,6 +72,7 @@ const MediaUploader = forwardRef(function MediaUploader(
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [encrypting, setEncrypting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [encryptedMediaId, setEncryptedMediaId] = useState(null);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -109,16 +110,17 @@ const MediaUploader = forwardRef(function MediaUploader(
     // Generate local preview for images and videos so author can view while editing
     let localUrl = null;
     if (file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrl && previewUrl !== handedOffUrlRef.current) URL.revokeObjectURL(previewUrl);
       localUrl = URL.createObjectURL(file);
       setPreviewUrl(localUrl);
     } else {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrl && previewUrl !== handedOffUrlRef.current) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
 
     setSelectedFile(file);
     setEncrypting(true);
+    setUploadProgress(0);
     onUploadStateChange?.(true);
 
     try {
@@ -126,72 +128,66 @@ const MediaUploader = forwardRef(function MediaUploader(
       const { buffer, mimeType: optimizedMime } = await optimizeImageForEncryption(file);
 
       // 2. Encrypt the file locally with WebCrypto AES-GCM (takes <10ms)
-      const { ciphertextBlob, iv, mediaKeyB64 } = await encryptMediaBuffer(sharedKey, buffer);
+      const { ciphertextBuffer, iv, mediaKeyB64 } = await encryptMediaBuffer(sharedKey, buffer);
 
-      // 3. Upload encrypted blob to server
+      // 3. Upload encrypted binary directly to server - bypasses Base64 overhead
       const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
       const effectiveUploader = uploaderName || currentUser?.username || 'user';
-      const res = await fetch(`${serverUrl}/api/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mediaId,
-          ciphertextBlob,
-          iv,
-          mimeType: optimizedMime || file.type || 'application/octet-stream',
-          uploader: effectiveUploader
-        })
+      const fileMime = optimizedMime || file.type || 'application/octet-stream';
+
+      await uploadEncryptedMediaBinary(
+        serverUrl,
+        mediaId,
+        ciphertextBuffer,
+        iv,
+        fileMime,
+        effectiveUploader,
+        file.name,
+        (percent) => setUploadProgress(percent)
+      );
+
+      setEncryptedMediaId(mediaId);
+      const resolvedPreviewUrl = localUrl || previewUrl || URL.createObjectURL(file);
+      handedOffUrlRef.current = resolvedPreviewUrl;
+      onMediaEncrypted({
+        mediaId,
+        mimeType: fileMime,
+        iv,
+        originalName: file.name,
+        fileSize: file.size,
+        mediaKeyB64,
+        localPreviewUrl: resolvedPreviewUrl,
+        isImage: Boolean(file.type && file.type.startsWith('image/')),
+        isVideo: Boolean(file.type && file.type.startsWith('video/'))
       });
-
-      if (!res.ok) {
-        throw new Error(`Upload returned status ${res.status}`);
-      }
-
-      const data = await res.json();
-      if (data.success) {
-        setEncryptedMediaId(mediaId);
-        const resolvedPreviewUrl = localUrl || previewUrl || URL.createObjectURL(file);
-        handedOffUrlRef.current = resolvedPreviewUrl;
-        onMediaEncrypted({
-          mediaId,
-          mimeType: optimizedMime || file.type || 'application/octet-stream',
-          iv,
-          originalName: file.name,
-          fileSize: file.size,
-          mediaKeyB64,
-          localPreviewUrl: resolvedPreviewUrl,
-          isImage: Boolean(file.type && file.type.startsWith('image/')),
-          isVideo: Boolean(file.type && file.type.startsWith('video/'))
-        });
-      } else {
-        throw new Error(data.error || 'Server rejected media upload');
-      }
     } catch (err) {
       console.error('File encryption/upload failed:', err);
       alert(`Attachment error: ${err.message || 'Failed to attach file.'}`);
       clearFile();
     } finally {
       setEncrypting(false);
+      setUploadProgress(0);
       onUploadStateChange?.(false);
     }
   };
 
   const clearFile = (e) => {
     if (e) {
-      e.preventDefault();
       e.stopPropagation();
+      e.preventDefault();
     }
-    if (previewUrl) {
+    if (previewUrl && previewUrl !== handedOffUrlRef.current) {
       URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
     }
-    handedOffUrlRef.current = null;
     setSelectedFile(null);
+    setPreviewUrl(null);
     setEncryptedMediaId(null);
+    setEncrypting(false);
+    setUploadProgress(0);
+    onMediaEncrypted?.(null);
+    onUploadStateChange?.(false);
     if (imageInputRef.current) imageInputRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
-    onMediaEncrypted(null);
-    onUploadStateChange?.(false);
   };
 
   return (
@@ -323,7 +319,7 @@ const MediaUploader = forwardRef(function MediaUploader(
           {encrypting ? (
             <div className="status-badge encrypting" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Loader2 size={12} className="animate-spin" />
-              <span>Securing...</span>
+              <span>{uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Securing...'}</span>
             </div>
           ) : (
             <div className="status-badge ready">

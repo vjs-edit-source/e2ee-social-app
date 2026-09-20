@@ -1128,10 +1128,96 @@ app.post('/api/media', (req, res) => {
   res.json({ success: true, mediaId: media.id });
 });
 
+// Binary streaming upload (Direct encrypted binary to disk - eliminates Base64 overhead & memory freeze)
+app.post('/api/media/binary/:mediaId', (req, res) => {
+  const mediaId = req.params.mediaId;
+  const iv = req.headers['x-media-iv'];
+  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
+  const uploader = req.headers['x-uploader'] || 'anonymous';
+  const rawOrig = req.headers['x-original-name'];
+  let originalName = null;
+  if (rawOrig) {
+    try {
+      originalName = decodeURIComponent(rawOrig);
+    } catch {
+      originalName = rawOrig;
+    }
+  }
+
+  if (!mediaId || !iv) {
+    return res.status(400).json({ error: 'Missing mediaId or IV header' });
+  }
+
+  const filePath = db.getMediaFilePath(mediaId);
+  const writeStream = fs.createWriteStream(filePath);
+
+  req.pipe(writeStream);
+
+  writeStream.on('finish', () => {
+    db.addMedia(mediaId, null, iv, mimeType, uploader, originalName, true);
+    notifyInspector();
+    res.json({ success: true, mediaId });
+  });
+
+  writeStream.on('error', (err) => {
+    console.error('[BinaryMedia] Write error:', err);
+    res.status(500).json({ error: 'Failed to save binary media stream' });
+  });
+
+  req.on('error', (err) => {
+    console.error('[BinaryMedia] Request stream error:', err);
+    writeStream.destroy();
+    res.status(500).json({ error: 'Upload stream interrupted' });
+  });
+});
+
+// Binary streaming download (Direct encrypted binary from disk)
+app.get('/api/media/binary/:mediaId', (req, res) => {
+  const media = db.getMedia(req.params.mediaId);
+  if (!media) {
+    return res.status(404).json({ error: 'Media blob not found' });
+  }
+
+  res.setHeader('Access-Control-Expose-Headers', 'x-media-iv, x-mime-type, x-original-name, x-uploader');
+  res.setHeader('x-media-iv', media.iv || '');
+  res.setHeader('x-mime-type', media.mimeType || 'application/octet-stream');
+  res.setHeader('x-uploader', media.uploader || 'anonymous');
+  if (media.originalName) {
+    res.setHeader('x-original-name', encodeURIComponent(media.originalName));
+  }
+  res.setHeader('Content-Type', 'application/octet-stream');
+
+  const filePath = db.getMediaFilePath(media.id);
+  if (fs.existsSync(filePath)) {
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
+  } else if (media.ciphertextBlob) {
+    // Legacy Base64 fallback
+    const buf = Buffer.from(media.ciphertextBlob, 'base64');
+    res.end(buf);
+  } else {
+    res.status(404).json({ error: 'Media file not found on disk' });
+  }
+});
+
 app.get('/api/media/:mediaId', (req, res) => {
   const media = db.getMedia(req.params.mediaId);
   if (!media) {
     return res.status(404).json({ error: 'Media blob not found' });
+  }
+  if (!media.ciphertextBlob && media.isBinary) {
+    const filePath = db.getMediaFilePath(media.id);
+    if (fs.existsSync(filePath)) {
+      try {
+        const buf = fs.readFileSync(filePath);
+        return res.json({
+          ...media,
+          ciphertextBlob: buf.toString('base64')
+        });
+      } catch (err) {
+        console.error('[Media] Failed reading binary media for legacy endpoint:', err);
+      }
+    }
   }
   res.json(media);
 });
