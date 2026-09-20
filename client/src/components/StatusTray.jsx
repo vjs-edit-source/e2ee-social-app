@@ -23,7 +23,7 @@ export default function StatusTray({ currentUser, allUsers = [], serverUrl, wsCl
 
   useEffect(() => {
     loadStatuses();
-    const interval = setInterval(loadStatuses, 10000);
+    const interval = setInterval(loadStatuses, 60000);
     return () => clearInterval(interval);
   }, []);
 

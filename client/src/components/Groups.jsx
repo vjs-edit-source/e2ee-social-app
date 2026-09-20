@@ -607,10 +607,10 @@ export default function Groups({
     // Immediately mark group messages as seen
     triggerMarkGroupSeen(selectedGroup.id);
 
-    // Fast 2.5s live polling sync fallback
+    // Relaxed 30s fallback sync to save bandwidth and avoid HTTP 429 rate limiting
     const syncInterval = setInterval(() => {
       loadGroupMessages();
-    }, 2500);
+    }, 30000);
 
     return () => clearInterval(syncInterval);
   }, [selectedGroup?.id, serverUrl]);

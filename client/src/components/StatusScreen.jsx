@@ -86,7 +86,7 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
 
   useEffect(() => {
     loadStatuses();
-    const interval = setInterval(loadStatuses, 8000);
+    const interval = setInterval(loadStatuses, 60000);
     return () => clearInterval(interval);
   }, []);
 

@@ -258,7 +258,7 @@ export default function App() {
 
   useEffect(() => {
     checkEngine(serverUrl);
-    const interval = setInterval(() => checkEngine(serverUrl), 15000);
+    const interval = setInterval(() => checkEngine(serverUrl), 25000);
     return () => clearInterval(interval);
   }, [serverUrl]);
 

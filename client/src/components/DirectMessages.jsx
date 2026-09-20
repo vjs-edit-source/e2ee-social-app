@@ -777,7 +777,7 @@ export default function DirectMessages({
 
   useEffect(() => {
     loadConversationsOverview();
-    const interval = setInterval(loadConversationsOverview, 4000);
+    const interval = setInterval(loadConversationsOverview, 30000);
     return () => clearInterval(interval);
   }, [currentUser, allUsers, serverUrl]);
 
@@ -828,14 +828,49 @@ export default function DirectMessages({
     }
   };
 
+  // Real-time WebSocket incoming direct message and read-receipt handler
+  useEffect(() => {
+    if (!wsClient) return;
+
+    const handleWSEvent = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'DIRECT_MESSAGE' && data.message) {
+          const newMsg = data.message;
+          const myName = String(currentUser?.username || '').toLowerCase().trim();
+          const peerName = String(selectedPeer?.username || '').toLowerCase().trim();
+          const sender = String(newMsg.sender || '').toLowerCase().trim();
+          const recipient = String(newMsg.recipient || '').toLowerCase().trim();
+
+          const isForCurrentChat = (sender === peerName && recipient === myName) || (sender === myName && recipient === peerName);
+          if (isForCurrentChat) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          }
+
+          loadConversationsOverview();
+        } else if (data.type === 'MESSAGES_SEEN') {
+          if (selectedPeer && data.peer === currentUser?.username && data.user === selectedPeer.username) {
+            setMessages(prev => prev.map(m => m.sender === currentUser?.username ? { ...m, seen: true } : m));
+          }
+        }
+      } catch (e) {}
+    };
+
+    wsClient.addEventListener('message', handleWSEvent);
+    return () => wsClient.removeEventListener('message', handleWSEvent);
+  }, [wsClient, selectedPeer?.username, currentUser?.username]);
+
   useEffect(() => {
     loadChatHistory();
     if (!selectedPeer) return;
 
-    // Fast 2.5s live polling sync fallback to guarantee simultaneous message display
+    // Relaxed 25s fallback sync to save bandwidth and prevent HTTP 429 rate limiting
     const syncInterval = setInterval(() => {
       loadChatHistory();
-    }, 2500);
+    }, 25000);
 
     return () => clearInterval(syncInterval);
   }, [selectedPeer, currentUser, serverUrl]);

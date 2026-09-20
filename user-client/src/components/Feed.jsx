@@ -143,7 +143,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
   useEffect(() => {
     loadPosts();
-    const interval = setInterval(loadPosts, 2500);
+    const interval = setInterval(loadPosts, 45000);
     return () => clearInterval(interval);
   }, [serverUrl]);
 
