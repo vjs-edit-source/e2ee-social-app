@@ -44,6 +44,7 @@ import {
   MoreVertical,
   KeyRound
 } from 'lucide-react';
+import { useBackHandler } from '../utils/backHandler';
 import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import {
   importPublicKey,
@@ -535,6 +536,51 @@ export default function DirectMessages({
   const [activePopupMsg, setActivePopupMsg] = useState(null);
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  // Android Back Navigation Handlers
+  // 1. Modals & Overlays inside DM (Priority 80)
+  useBackHandler(() => {
+    if (previewUrl) {
+      setPreviewUrl(null);
+      setAttachedMedia(null);
+      return true;
+    }
+    if (activePopupMsg) {
+      setActivePopupMsg(null);
+      return true;
+    }
+    if (showAddContactModal) {
+      setShowAddContactModal(false);
+      return true;
+    }
+    if (activeActionPeer) {
+      setActiveActionPeer(null);
+      return true;
+    }
+    if (unlockingPeer) {
+      setUnlockingPeer(null);
+      return true;
+    }
+    if (showSearchBar) {
+      setShowSearchBar(false);
+      setSearchQuery('');
+      return true;
+    }
+    if (showArchivedView) {
+      setShowArchivedView(false);
+      return true;
+    }
+    return false;
+  }, 80, Boolean(previewUrl || activePopupMsg || showAddContactModal || activeActionPeer || unlockingPeer || showSearchBar || showArchivedView));
+
+  // 2. Active conversation open: back returns to chat list (Priority 50)
+  useBackHandler(() => {
+    if (selectedPeer) {
+      setSelectedPeer(null);
+      return true;
+    }
+    return false;
+  }, 50, Boolean(selectedPeer));
 
   const handleTouchStart = (msg, msgMeta, isMine, e) => {
     const el = e.currentTarget;
@@ -2097,13 +2143,13 @@ export default function DirectMessages({
                 {((activePeer?.displayName || activePeer?.username) || '?')[0].toUpperCase()}
               </div>
             )}
-            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              {/* Row 1: Name */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}>
+              {/* Row 1: Name & E2EE badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
                 <h4
                   style={{
                     margin: 0,
-                    fontSize: '1rem',
+                    fontSize: '0.95rem',
                     fontWeight: 700,
                     color: '#ffffff',
                     whiteSpace: 'nowrap',
@@ -2116,58 +2162,80 @@ export default function DirectMessages({
                 >
                   {activePeer?.displayName || activePeer?.username || 'Chat'}
                 </h4>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    color: '#ff9ea8',
+                    fontSize: '0.60rem',
+                    fontWeight: 600,
+                    background: 'rgba(238, 120, 130, 0.12)',
+                    border: '1px solid rgba(238, 120, 130, 0.25)',
+                    borderRadius: '4px',
+                    padding: '0 4px',
+                    flexShrink: 0
+                  }}
+                  title="Zero-Knowledge End-to-End Encrypted (AES-GCM 256)"
+                >
+                  <ShieldCheck size={9} color="#ee7882" style={{ flexShrink: 0 }} />
+                  <span>E2EE</span>
+                </span>
               </div>
 
-              {/* Row 2: Friends contact number at bottom of name, Status Presence, and E2EE */}
+              {/* Row 2: Friends contact number at bottom of name (vertical) */}
+              {activePeer.phoneNumber && (
+                <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      fontSize: '0.65rem',
+                      color: '#ee7882',
+                      background: 'rgba(238, 120, 130, 0.10)',
+                      border: '1px solid rgba(238, 120, 130, 0.22)',
+                      borderRadius: '9999px',
+                      padding: '0.5px 6px',
+                      fontWeight: 500,
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={`Phone: ${activePeer.phoneNumber}`}
+                  >
+                    <Phone size={8} color="#ee7882" style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {activePeer.phoneNumber}
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {/* Row 3: Online Status / Last Seen (vertical, decreased font size) */}
               <div
                 className="handshake-status"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.73rem',
+                  gap: '4px',
+                  fontSize: '0.65rem',
                   minWidth: 0,
                   overflow: 'hidden',
-                  flexWrap: 'nowrap'
+                  whiteSpace: 'nowrap'
                 }}
               >
-                {/* Contact Number at bottom of Name */}
-                {activePeer.phoneNumber && (
-                  <>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontSize: '0.70rem',
-                        color: '#ee7882',
-                        background: 'rgba(238, 120, 130, 0.12)',
-                        border: '1px solid rgba(238, 120, 130, 0.25)',
-                        borderRadius: '9999px',
-                        padding: '1px 8px',
-                        fontWeight: 500,
-                        flexShrink: 0
-                      }}
-                      title={`Phone: ${activePeer.phoneNumber}`}
-                    >
-                      <Phone size={9} color="#ee7882" />
-                      <span>{activePeer.phoneNumber}</span>
-                    </span>
-                    <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
-                  </>
-                )}
-
-                {/* Online Status / Last Seen - Fully Visible without cut-offs */}
-                {/* Typing Indicator or Online Status / Last Seen */}
                 {isPeerTyping ? (
                   <span
                     className="typing-indicator-header"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '3px',
                       color: '#ff9ea8',
                       fontWeight: 600,
+                      fontSize: '0.65rem',
                       whiteSpace: 'nowrap',
                       flexShrink: 0
                     }}
@@ -2187,41 +2255,26 @@ export default function DirectMessages({
                       gap: '4px',
                       color: isPeerActive ? '#ff9ea8' : '#a69ea2',
                       fontWeight: isPeerActive ? 600 : 400,
+                      fontSize: '0.65rem',
                       whiteSpace: 'nowrap',
-                      flexShrink: 0
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}
                     title={formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
                   >
-                    <Circle size={6} color={isPeerActive ? '#ee7882' : '#94a3b8'} fill={isPeerActive ? '#ee7882' : '#94a3b8'} style={{ flexShrink: 0 }} />
-                    <span>{formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}</span>
+                    <Circle size={5} color={isPeerActive ? '#ee7882' : '#94a3b8'} fill={isPeerActive ? '#ee7882' : '#94a3b8'} style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {formatLastSeen(activePeer.lastSeen, activePeer.isOnline)}
+                    </span>
                   </span>
                 )}
-
-                <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
-
-                {/* Compact E2EE badge */}
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    color: '#ff9ea8',
-                    fontSize: '0.68rem',
-                    fontWeight: 600,
-                    flexShrink: 0
-                  }}
-                  title="Zero-Knowledge End-to-End Encrypted (AES-GCM 256)"
-                >
-                  <ShieldCheck size={11} color="#ee7882" style={{ flexShrink: 0 }} />
-                  <span>E2EE</span>
-                </span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Header Action Buttons: Search, Call & Chat Options */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           <button
             type="button"
             className={`header-icon-btn ${showSearchBar ? 'active' : ''}`}

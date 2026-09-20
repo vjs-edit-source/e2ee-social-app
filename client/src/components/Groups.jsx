@@ -49,6 +49,7 @@ import {
   BellOff,
   KeyRound
 } from 'lucide-react';
+import { useBackHandler } from '../utils/backHandler';
 import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
 import {
   encryptPost,
@@ -337,6 +338,67 @@ export default function Groups({
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [showAttachMenu]);
+
+  // Android Back Navigation Handlers
+  // 1. Overlays & Modals inside Groups (Priority 80)
+  useBackHandler(() => {
+    if (showMembersDrawer) {
+      setShowMembersDrawer(false);
+      return true;
+    }
+    if (showCreateModal) {
+      setShowCreateModal(false);
+      return true;
+    }
+    if (showAddMemberModal) {
+      setShowAddMemberModal(false);
+      return true;
+    }
+    if (showPollModal) {
+      setShowPollModal(false);
+      return true;
+    }
+    if (showProfileModalUser) {
+      setShowProfileModalUser(null);
+      return true;
+    }
+    if (showHeaderMenu) {
+      setShowHeaderMenu(false);
+      return true;
+    }
+    if (actionMenuGroup) {
+      setActionMenuGroup(null);
+      return true;
+    }
+    if (unlockingGroup) {
+      setUnlockingGroup(null);
+      return true;
+    }
+    if (showSearchBar) {
+      setShowSearchBar(false);
+      setSearchQuery('');
+      return true;
+    }
+    if (showArchivedView) {
+      setShowArchivedView(false);
+      return true;
+    }
+    if (previewUrl) {
+      setPreviewUrl(null);
+      setAttachedMedia(null);
+      return true;
+    }
+    return false;
+  }, 80, Boolean(showMembersDrawer || showCreateModal || showAddMemberModal || showPollModal || showProfileModalUser || showHeaderMenu || actionMenuGroup || unlockingGroup || showSearchBar || showArchivedView || previewUrl));
+
+  // 2. Active group conversation open: back returns to group list (Priority 50)
+  useBackHandler(() => {
+    if (selectedGroup) {
+      setSelectedGroup(null);
+      return true;
+    }
+    return false;
+  }, 50, Boolean(selectedGroup));
 
   // Message Action Popup state & touch/long-press tracking
   const [activePopupMsg, setActivePopupMsg] = useState(null);

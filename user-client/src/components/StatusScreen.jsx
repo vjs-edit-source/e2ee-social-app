@@ -16,6 +16,7 @@ import {
 import { decryptPost, decryptMediaBuffer } from '../crypto/e2ee';
 import { decryptionCache } from '../utils/decryptionCache';
 import { resolveMediaUrl } from '../utils/fileUtils';
+import { useBackHandler } from '../utils/backHandler';
 import StatusPublisherModal from './StatusPublisherModal';
 import StatusViewerModal from './StatusViewerModal';
 
@@ -48,6 +49,19 @@ export default function StatusScreen({ currentUser, allUsers = [], serverUrl, ws
   const [statuses, setStatuses] = useState([]);
   const [showPublisher, setShowPublisher] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
+
+  // Android Back Navigation: close status viewer or status publisher (Priority 80)
+  useBackHandler(() => {
+    if (viewerIndex !== null) {
+      setViewerIndex(null);
+      return true;
+    }
+    if (showPublisher) {
+      setShowPublisher(false);
+      return true;
+    }
+    return false;
+  }, 80, Boolean(viewerIndex !== null || showPublisher));
   const [decryptedPreviews, setDecryptedPreviews] = useState(() => {
     const cached = decryptionCache.getAllStatuses();
     const previews = {};

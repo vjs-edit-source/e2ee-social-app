@@ -432,6 +432,25 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    public void onBackPressed() {
+        if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().evaluateJavascript(
+                "typeof window.handleAndroidDeviceBack === 'function' ? window.handleAndroidDeviceBack() : false;",
+                value -> {
+                    if ("false".equals(value) || "null".equals(value) || value == null) {
+                        runOnUiThread(() -> {
+                            // If not consumed by JS handlers, minimize the app to home screen
+                            moveTaskToBack(true);
+                        });
+                    }
+                }
+            );
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
     public void onDestroy() {
         try {
             stopIncomingRingtoneInternal();

@@ -13,6 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { soundEffects } from '../utils/soundEffects';
+import { useBackHandler } from '../utils/backHandler';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -398,6 +399,12 @@ export default function CallModal({
     reportCallEnded(callDuration > 0 ? 'completed' : (callData.isIncoming ? 'missed' : 'cancelled'));
     setTimeout(onClose, 400);
   };
+
+  // Android Device Back Navigation: hang up / close call modal (Priority 100)
+  useBackHandler(() => {
+    hangUp();
+    return true;
+  }, 100, true);
 
   const cleanup = () => {
     soundEffects.stopIncomingRingtone();

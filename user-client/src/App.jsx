@@ -20,6 +20,7 @@ import {
   isCapacitorNative
 } from './utils/engineConfig';
 import { soundEffects } from './utils/soundEffects';
+import { useBackHandler } from './utils/backHandler';
 
 function playNotificationChime() {
   soundEffects.playNotification();
@@ -47,6 +48,33 @@ export default function App() {
       localStorage.setItem('ciphersocial_active_tab', activeTab);
     }
   }, [activeTab]);
+
+  // Android Back Navigation Handlers in App
+  // 1. Modals at App root level (Priority 70)
+  useBackHandler(() => {
+    if (showSearchModal) {
+      setShowSearchModal(false);
+      return true;
+    }
+    if (showEngineModal) {
+      setShowEngineModal(false);
+      return true;
+    }
+    if (showAuthModal && currentUser) {
+      setShowAuthModal(false);
+      return true;
+    }
+    return false;
+  }, 70, Boolean(showSearchModal || showEngineModal || (showAuthModal && currentUser)));
+
+  // 2. Tab Navigation: return to 'feed' when on other tabs (Priority 20)
+  useBackHandler(() => {
+    if (activeTab !== 'feed') {
+      setActiveTab('feed');
+      return true;
+    }
+    return false;
+  }, 20, activeTab !== 'feed');
 
   // App Lock State
   const [isAppLocked, setIsAppLocked] = useState(() => Boolean(localStorage.getItem('ciphersocial_pin_hash')));
