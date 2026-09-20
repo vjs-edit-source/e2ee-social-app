@@ -68,6 +68,7 @@ import ChatLockModal from './ChatLockModal';
 import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { decryptionCache } from '../utils/decryptionCache';
+import { mediaDownloadManager } from '../utils/mediaDownloadManager';
 import { soundEffects } from '../utils/soundEffects';
 
 function getFileFormatBadge(fileName, mimeType) {
@@ -966,78 +967,58 @@ export default function DirectMessages({
 
         // Decrypt attached media if present in DM (checking global session cache first)
         if (msgMeta.mediaId) {
-          const cachedMedia = decryptionCache.getMedia(msgMeta.mediaId);
+          const mediaId = msgMeta.mediaId;
+          const cachedMedia = decryptionCache.getMedia(mediaId);
           if (cachedMedia) {
-            if (!decryptedMediaCache.current[msgMeta.mediaId]) {
-              decryptedMediaCache.current[msgMeta.mediaId] = cachedMedia;
+            if (!decryptedMediaCache.current[mediaId]) {
+              decryptedMediaCache.current[mediaId] = cachedMedia;
             }
-            if (!decryptedMediaMap[msgMeta.mediaId]) {
-              setDecryptedMediaMap(prev => ({ ...prev, [msgMeta.mediaId]: cachedMedia }));
+            if (!decryptedMediaMap[mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: cachedMedia }));
             }
-          } else if (
-            !decryptedMediaCache.current[msgMeta.mediaId] &&
-            !pendingMediaFetches.current.has(msgMeta.mediaId) &&
-            !decryptionCache.isMediaPending(msgMeta.mediaId)
-          ) {
-            pendingMediaFetches.current.add(msgMeta.mediaId);
-            decryptionCache.setMediaPending(msgMeta.mediaId);
+          } else if (!decryptedMediaCache.current[mediaId]) {
+            const keyToUse = msgMeta.mediaKeyB64 || sharedKey;
+            const mediaIv = msgMeta.iv || m.iv;
+            const finalMime = msgMeta.mimeType || (msgMeta.isVoice ? 'audio/webm' : 'application/octet-stream');
+            const originalName = msgMeta.originalName;
 
-            (async (mediaId, meta) => {
-              try {
-                const keyToUse = meta.mediaKeyB64 || sharedKey;
-                const mediaIv = meta.iv || m.iv;
-                const finalMime = meta.mimeType || (meta.isVoice ? 'audio/webm' : 'application/octet-stream');
-                const originalName = meta.originalName;
+            // Immediately display any existing in-flight progress without waiting
+            const existingProgress = mediaDownloadManager.getProgress(mediaId);
+            if (existingProgress && isMounted) {
+              setDownloadProgressMap(prev => ({ ...prev, [mediaId]: existingProgress }));
+            }
 
-                const result = await fetchAndDecryptMediaBinary(
-                  serverUrl,
-                  mediaId,
-                  keyToUse,
-                  mediaIv,
-                  finalMime,
-                  originalName,
-                  (progress) => {
-                    if (isMounted) {
-                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
-                    }
-                  },
-                  meta.fileSize || null
-                );
-
-                const objectUrl = resolveMediaUrl(result.objectUrl);
-
-                if (objectUrl && !result.error && isMounted) {
-                  const mediaEntry = {
-                    objectUrl,
-                    originalName: result.originalName || meta.originalName,
-                    mimeType: result.mimeType || finalMime
-                  };
-                  decryptedMediaCache.current[mediaId] = mediaEntry;
-                  decryptionCache.setMedia(mediaId, mediaEntry);
-                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
-                } else if (isMounted) {
-                  const failedEntry = {
-                    error: true,
-                    originalName: result.originalName || meta.originalName,
-                    mimeType: result.mimeType || finalMime
-                  };
-                  decryptedMediaCache.current[mediaId] = failedEntry;
-                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
-                }
-              } catch (err) {
-                console.error(`DM Media decrypt error for ${mediaId}:`, err);
-              } finally {
-                pendingMediaFetches.current.delete(mediaId);
-                decryptionCache.clearMediaPending(mediaId);
+            mediaDownloadManager.downloadAndDecrypt(
+              serverUrl,
+              mediaId,
+              keyToUse,
+              mediaIv,
+              finalMime,
+              originalName,
+              (progress) => {
                 if (isMounted) {
-                  setDownloadProgressMap(prev => {
-                    const next = { ...prev };
-                    delete next[mediaId];
-                    return next;
-                  });
+                  setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
+                }
+              },
+              msgMeta.fileSize || null
+            ).then((mediaEntry) => {
+              if (isMounted) {
+                setDownloadProgressMap(prev => {
+                  const next = { ...prev };
+                  delete next[mediaId];
+                  return next;
+                });
+                if (mediaEntry && !mediaEntry.error && mediaEntry.objectUrl) {
+                  const resolvedUrl = resolveMediaUrl(mediaEntry.objectUrl);
+                  const entry = { ...mediaEntry, objectUrl: resolvedUrl };
+                  decryptedMediaCache.current[mediaId] = entry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: entry }));
+                } else if (mediaEntry?.error) {
+                  decryptedMediaCache.current[mediaId] = mediaEntry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
                 }
               }
-            })(msgMeta.mediaId, msgMeta);
+            }).catch(() => {});
           }
         }
       }

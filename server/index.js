@@ -1171,14 +1171,14 @@ app.post('/api/media/binary/:mediaId', (req, res) => {
   });
 });
 
-// Binary streaming download (Direct encrypted binary from disk)
+// Binary streaming download (Direct encrypted binary from disk with Range support)
 app.get('/api/media/binary/:mediaId', (req, res) => {
   const media = db.getMedia(req.params.mediaId);
   if (!media) {
     return res.status(404).json({ error: 'Media blob not found' });
   }
 
-  res.setHeader('Access-Control-Expose-Headers', 'x-media-iv, x-mime-type, x-original-name, x-uploader, Content-Length');
+  res.setHeader('Access-Control-Expose-Headers', 'x-media-iv, x-mime-type, x-original-name, x-uploader, Content-Length, Content-Range, Accept-Ranges');
   res.setHeader('x-media-iv', media.iv || '');
   res.setHeader('x-mime-type', media.mimeType || 'application/octet-stream');
   res.setHeader('x-uploader', media.uploader || 'anonymous');
@@ -1186,13 +1186,50 @@ app.get('/api/media/binary/:mediaId', (req, res) => {
     res.setHeader('x-original-name', encodeURIComponent(media.originalName));
   }
   res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Accept-Ranges', 'bytes');
 
   const filePath = db.getMediaFilePath(media.id);
   if (fs.existsSync(filePath)) {
     const stat = fs.statSync(filePath);
-    res.setHeader('Content-Length', stat.size);
-    const readStream = fs.createReadStream(filePath);
-    readStream.pipe(res);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize || end >= fileSize) {
+        res.setHeader('Content-Range', `bytes */${fileSize}`);
+        return res.status(416).end();
+      }
+
+      const chunksize = (end - start) + 1;
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader('Content-Length', chunksize);
+
+      const readStream = fs.createReadStream(filePath, { start, end });
+      readStream.on('error', (err) => {
+        console.error('[BinaryMedia] Stream range error:', err);
+        if (!res.headersSent) res.status(500).end();
+      });
+      req.on('close', () => {
+        readStream.destroy();
+      });
+      readStream.pipe(res);
+    } else {
+      res.setHeader('Content-Length', fileSize);
+      const readStream = fs.createReadStream(filePath);
+      readStream.on('error', (err) => {
+        console.error('[BinaryMedia] Stream error:', err);
+        if (!res.headersSent) res.status(500).end();
+      });
+      req.on('close', () => {
+        readStream.destroy();
+      });
+      readStream.pipe(res);
+    }
   } else if (media.ciphertextBlob) {
     // Legacy Base64 fallback
     const buf = Buffer.from(media.ciphertextBlob, 'base64');
@@ -1212,6 +1249,15 @@ app.get('/api/media/:mediaId', (req, res) => {
     const filePath = db.getMediaFilePath(media.id);
     if (fs.existsSync(filePath)) {
       try {
+        const stat = fs.statSync(filePath);
+        // Protect server against V8 heap exhaustion and event-loop freeze
+        if (stat.size > 5 * 1024 * 1024) {
+          return res.status(413).json({
+            error: 'Media file exceeds JSON payload limit. Use /api/media/binary/:mediaId',
+            isBinary: true,
+            size: stat.size
+          });
+        }
         const buf = fs.readFileSync(filePath);
         return res.json({
           ...media,

@@ -719,47 +719,32 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
           console.error('[BinaryMedia] Decryption error:', err);
           resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
         }
-      } else {
-        // Fallback to legacy JSON endpoint if binary endpoint returns 404
+      } else if (xhr.status === 404 && (!fallbackTotal || fallbackTotal < 5 * 1024 * 1024)) {
+        // Fallback to legacy JSON endpoint ONLY for small legacy attachments that returned 404
         try {
-          if (onProgress) {
-            onProgress({ percent: null, loaded: 0, total: fallbackTotal, status: 'downloading' });
-          }
           const legacyRes = await fetch(`${serverUrl}/api/media/${encodeURIComponent(mediaId)}`);
           if (legacyRes.ok) {
             const mediaData = await legacyRes.json();
-            if (onProgress) {
-              onProgress({ percent: 100, loaded: fallbackTotal || 0, total: fallbackTotal, status: 'decrypting' });
+            if (mediaData.ciphertextBlob) {
+              const keyToUse = keyOrB64;
+              const mediaIv = mediaData.iv || fallbackIv;
+              const finalMime = mediaData.mimeType || fallbackMime || 'application/octet-stream';
+              const originalName = mediaData.originalName || fallbackName;
+              const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+              resolve({ objectUrl, mimeType: finalMime, originalName, error: !objectUrl });
+              return;
             }
-            const keyToUse = keyOrB64;
-            const mediaIv = mediaData.iv || fallbackIv;
-            const finalMime = mediaData.mimeType || fallbackMime || 'application/octet-stream';
-            const originalName = mediaData.originalName || fallbackName;
-            const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
-            resolve({ objectUrl, mimeType: finalMime, originalName, error: !objectUrl });
-          } else {
-            resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
           }
-        } catch (err) {
-          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
-        }
+        } catch (err) {}
+        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+      } else {
+        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
       }
     };
 
-    xhr.onerror = async () => {
-      // Network error on binary endpoint -> try fallback
-      try {
-        const legacyRes = await fetch(`${serverUrl}/api/media/${encodeURIComponent(mediaId)}`);
-        if (legacyRes.ok) {
-          const mediaData = await legacyRes.json();
-          const objectUrl = await decryptMediaBuffer(keyOrB64, mediaData.ciphertextBlob, mediaData.iv || fallbackIv, mediaData.mimeType || fallbackMime);
-          resolve({ objectUrl, mimeType: mediaData.mimeType || fallbackMime, originalName: mediaData.originalName || fallbackName, error: !objectUrl });
-        } else {
-          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
-        }
-      } catch {
-        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
-      }
+    xhr.onerror = () => {
+      console.warn(`[BinaryMedia] Network error during binary media download for ${mediaId}`);
+      resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
     };
 
     xhr.send();

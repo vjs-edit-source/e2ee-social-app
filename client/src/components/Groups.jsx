@@ -69,6 +69,7 @@ import ChatActionMenu from './ChatActionMenu';
 import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dateUtils';
 import { localSearchIndex } from '../search/searchIndex';
 import { decryptionCache } from '../utils/decryptionCache';
+import { mediaDownloadManager } from '../utils/mediaDownloadManager';
 import { soundEffects } from '../utils/soundEffects';
 
 export default function Groups({
@@ -585,7 +586,14 @@ export default function Groups({
       const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/messages`);
       if (res.ok) {
         const history = await res.json();
-        setMessages(history);
+        if (Array.isArray(history)) {
+          setMessages(prev => {
+            if (prev.length === history.length && prev.length > 0 && prev[prev.length - 1]?.id === history[history.length - 1]?.id) {
+              return prev;
+            }
+            return history;
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to load group messages:', err);
@@ -920,66 +928,53 @@ export default function Groups({
         }
 
         // Decrypt attached media (checking global session cache first)
-        if (m.mediaId) {
-          const cachedMedia = decryptionCache.getMedia(m.mediaId);
+        if (m.mediaId && msgMeta?.mediaKey) {
+          const mediaId = m.mediaId;
+          const cachedMedia = decryptionCache.getMedia(mediaId);
           if (cachedMedia) {
-            if (!decryptedMediaCache.current[m.mediaId]) {
-              decryptedMediaCache.current[m.mediaId] = cachedMedia;
+            if (!decryptedMediaCache.current[mediaId]) {
+              decryptedMediaCache.current[mediaId] = cachedMedia;
             }
-            if (!decryptedMediaMap[m.mediaId]) {
-              setDecryptedMediaMap(prev => ({ ...prev, [m.mediaId]: cachedMedia }));
+            if (!decryptedMediaMap[mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: cachedMedia }));
             }
-          } else if (
-            msgMeta?.mediaKey &&
-            !decryptedMediaCache.current[m.mediaId] &&
-            !decryptionCache.isMediaPending(m.mediaId)
-          ) {
-            decryptionCache.setMediaPending(m.mediaId);
-            (async (mediaId, metaKey, mObj, meta) => {
-              try {
-                const result = await fetchAndDecryptMediaBinary(
-                  serverUrl,
-                  mediaId,
-                  metaKey,
-                  mObj.iv,
-                  meta?.mimeType || 'application/octet-stream',
-                  meta?.originalName || null,
-                  (progress) => {
-                    if (isMounted) {
-                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
-                    }
-                  },
-                  meta?.fileSize || null
-                );
+          } else if (!decryptedMediaCache.current[mediaId]) {
+            const existingProgress = mediaDownloadManager.getProgress(mediaId);
+            if (existingProgress && isMounted) {
+              setDownloadProgressMap(prev => ({ ...prev, [mediaId]: existingProgress }));
+            }
 
-                const objectUrl = resolveMediaUrl(result.objectUrl);
-
-                if (objectUrl && !result.error && isMounted) {
-                  const mediaEntry = {
-                    objectUrl,
-                    mimeType: result.mimeType || meta?.mimeType || 'application/octet-stream',
-                    originalName: result.originalName || meta?.originalName
-                  };
-                  decryptedMediaCache.current[mediaId] = mediaEntry;
-                  decryptionCache.setMedia(mediaId, mediaEntry);
-                  setDecryptedMediaMap(prev => ({
-                    ...prev,
-                    [mediaId]: mediaEntry
-                  }));
-                }
-              } catch (e) {
-                console.warn('Group media decryption error:', e);
-              } finally {
-                decryptionCache.clearMediaPending(mediaId);
+            mediaDownloadManager.downloadAndDecrypt(
+              serverUrl,
+              mediaId,
+              msgMeta.mediaKey,
+              m.iv,
+              msgMeta.mimeType || 'application/octet-stream',
+              msgMeta.originalName || null,
+              (progress) => {
                 if (isMounted) {
-                  setDownloadProgressMap(prev => {
-                    const next = { ...prev };
-                    delete next[mediaId];
-                    return next;
-                  });
+                  setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
+                }
+              },
+              msgMeta.fileSize || null
+            ).then((mediaEntry) => {
+              if (isMounted) {
+                setDownloadProgressMap(prev => {
+                  const next = { ...prev };
+                  delete next[mediaId];
+                  return next;
+                });
+                if (mediaEntry && !mediaEntry.error && mediaEntry.objectUrl) {
+                  const resolvedUrl = resolveMediaUrl(mediaEntry.objectUrl);
+                  const entry = { ...mediaEntry, objectUrl: resolvedUrl };
+                  decryptedMediaCache.current[mediaId] = entry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: entry }));
+                } else if (mediaEntry?.error) {
+                  decryptedMediaCache.current[mediaId] = mediaEntry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
                 }
               }
-            })(m.mediaId, msgMeta.mediaKey, m, msgMeta);
+            }).catch(() => {});
           }
         }
       }

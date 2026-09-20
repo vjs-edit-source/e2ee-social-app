@@ -85,28 +85,39 @@ export function setEngineUrl(url) {
  */
 export async function testEngineHealth(url) {
   const target = (url || getEngineUrl()).replace(/\/+$/, '');
-  const testUrl = target ? `${target}/api/users` : '/api/users';
+  const testUrl = target ? `${target}/api/health` : '/api/health';
   const startTime = performance.now();
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(testUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal
-    });
+    let res;
+    try {
+      res = await fetch(testUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
+      });
+    } catch (fetchErr) {
+      // Fallback to /health or /api/users
+      const fallbackUrl = target ? `${target}/health` : '/health';
+      res = await fetch(fallbackUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
+      });
+    }
     clearTimeout(timeoutId);
 
     const latencyMs = Math.round(performance.now() - startTime);
 
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       return {
         online: true,
         latencyMs,
-        usersCount: Array.isArray(data) ? data.length : 0,
+        usersCount: Array.isArray(data) ? data.length : undefined,
         statusText: `Online (${latencyMs}ms)`
       };
     } else {
