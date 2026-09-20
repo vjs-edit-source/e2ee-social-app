@@ -3,6 +3,7 @@ import {
   Clock,
   ShieldCheck,
   CornerUpLeft,
+  CornerUpRight,
   Copy,
   Check,
   CheckCheck,
@@ -24,6 +25,7 @@ export default function MessageActionPopup({
   onClose,
   onReact,
   onReply,
+  onForward = null,
   onStar = null,
   isStarred = false,
   onPin = null,
@@ -266,6 +268,20 @@ export default function MessageActionPopup({
             >
               <CornerUpLeft size={14} className="btn-icon" />
               <span>Reply</span>
+            </button>
+          )}
+
+          {onForward && (
+            <button
+              type="button"
+              className="msg-action-menu-btn"
+              onClick={() => {
+                onForward(message, msgMeta);
+                onClose();
+              }}
+            >
+              <CornerUpRight size={14} className="btn-icon" color="#00f0ff" />
+              <span>Forward</span>
             </button>
           )}
 

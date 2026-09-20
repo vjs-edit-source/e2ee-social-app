@@ -594,6 +594,10 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
       let replyTo = parsed.replyTo || null;
       let isVoice = !!parsed.isVoice;
       let voiceDuration = parsed.voiceDuration || 0;
+      let originalName = parsed.originalName || null;
+      let fileSize = parsed.fileSize || null;
+      let mimeType = parsed.mimeType || null;
+      let mediaIv = parsed.mediaIv || parsed.iv || null;
 
       try {
         const nestedParsed = JSON.parse(innerText);
@@ -602,6 +606,11 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
           if (nestedParsed.replyTo !== undefined) replyTo = nestedParsed.replyTo;
           if (nestedParsed.isVoice !== undefined) isVoice = !!nestedParsed.isVoice;
           if (nestedParsed.voiceDuration !== undefined) voiceDuration = nestedParsed.voiceDuration;
+          if (nestedParsed.originalName !== undefined) originalName = nestedParsed.originalName;
+          if (nestedParsed.fileSize !== undefined) fileSize = nestedParsed.fileSize;
+          if (nestedParsed.mimeType !== undefined) mimeType = nestedParsed.mimeType;
+          if (nestedParsed.mediaIv !== undefined) mediaIv = nestedParsed.mediaIv;
+          if (nestedParsed.iv !== undefined) mediaIv = nestedParsed.iv;
         }
       } catch (e) {}
 
@@ -611,6 +620,10 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
         replyTo,
         isVoice,
         voiceDuration,
+        originalName,
+        fileSize,
+        mimeType,
+        mediaIv,
         rawText: parsed.text || ''
       };
     }
@@ -622,6 +635,10 @@ export async function decryptPost(myUsername, ciphertext, iv, keyEnvelopes, myPr
     replyTo: null,
     isVoice: false,
     voiceDuration: 0,
+    originalName: null,
+    fileSize: null,
+    mimeType: null,
+    mediaIv: null,
     rawText: decryptedRaw
   };
 }

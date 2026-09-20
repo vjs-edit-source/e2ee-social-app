@@ -70,6 +70,7 @@ import { getDateKey, formatDateSeparator, formatMessageTime } from '../utils/dat
 import { decryptionCache } from '../utils/decryptionCache';
 import { mediaDownloadManager } from '../utils/mediaDownloadManager';
 import { soundEffects } from '../utils/soundEffects';
+import ForwardModal from './ForwardModal';
 
 function getFileFormatBadge(fileName, mimeType) {
   const ext = fileName && fileName.includes('.') ? fileName.split('.').pop().toUpperCase() : '';
@@ -123,6 +124,7 @@ export default function DirectMessages({
   const [peerUnreadMap, setPeerUnreadMap] = useState({});
   const [inputMessage, setInputMessage] = useState('');
   const [peerTypingMap, setPeerTypingMap] = useState({});
+  const [forwardingMsg, setForwardingMsg] = useState(null);
   const typingTimeoutRef = useRef(null);
   const peerTypingTimersRef = useRef({});
 
@@ -1261,6 +1263,7 @@ export default function DirectMessages({
 
     if (file.size > 100 * 1024 * 1024) {
       alert('File exceeds 100MB size limit.');
+      if (e.target) e.target.value = '';
       return;
     }
 
@@ -1311,6 +1314,7 @@ export default function DirectMessages({
     } finally {
       setMediaUploading(false);
       setUploadProgress(0);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -1322,6 +1326,9 @@ export default function DirectMessages({
     setAttachedMedia(null);
     setMediaUploading(false);
     setUploadProgress(0);
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (photosInputRef.current) photosInputRef.current.value = '';
+    if (filesInputRef.current) filesInputRef.current.value = '';
   };
 
   // Toggle emoji reaction
@@ -1502,6 +1509,7 @@ export default function DirectMessages({
         originalName: hasMedia ? attachedMedia.originalName : null,
         mimeType: hasMedia ? attachedMedia.mimeType : null,
         fileSize: hasMedia ? (attachedMedia.fileSize || attachedMedia.size || null) : null,
+        iv: hasMedia ? (attachedMedia.iv || null) : null,
         replyTo: sentReplyTo
       });
 
@@ -2880,6 +2888,7 @@ export default function DirectMessages({
                     className="attach-option-item"
                     onClick={() => {
                       setShowAttachMenu(false);
+                      if (cameraInputRef.current) cameraInputRef.current.value = '';
                       cameraInputRef.current?.click();
                     }}
                   >
@@ -2894,6 +2903,7 @@ export default function DirectMessages({
                     className="attach-option-item"
                     onClick={() => {
                       setShowAttachMenu(false);
+                      if (photosInputRef.current) photosInputRef.current.value = '';
                       photosInputRef.current?.click();
                     }}
                   >
@@ -2908,6 +2918,7 @@ export default function DirectMessages({
                     className="attach-option-item"
                     onClick={() => {
                       setShowAttachMenu(false);
+                      if (filesInputRef.current) filesInputRef.current.value = '';
                       filesInputRef.current?.click();
                     }}
                   >
@@ -3006,9 +3017,24 @@ export default function DirectMessages({
             });
             setTimeout(() => messageInputRef.current?.focus(), 60);
           }}
+          onForward={(msg, meta) => setForwardingMsg({ msg, msgMeta: meta })}
           onStar={() => toggleStar(activePopupMsg.msg)}
           isStarred={starredIds.has(activePopupMsg.msg.id)}
           onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
+        />
+      )}
+
+      {/* Forward Message Modal */}
+      {forwardingMsg && (
+        <ForwardModal
+          isOpen={Boolean(forwardingMsg)}
+          onClose={() => setForwardingMsg(null)}
+          message={forwardingMsg.msg}
+          msgMeta={forwardingMsg.msgMeta}
+          currentUser={currentUser}
+          allUsers={allUsers}
+          groups={userGroups}
+          serverUrl={serverUrl}
         />
       )}
 

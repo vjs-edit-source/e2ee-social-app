@@ -71,6 +71,7 @@ import { localSearchIndex } from '../search/searchIndex';
 import { decryptionCache } from '../utils/decryptionCache';
 import { mediaDownloadManager } from '../utils/mediaDownloadManager';
 import { soundEffects } from '../utils/soundEffects';
+import ForwardModal from './ForwardModal';
 
 export default function Groups({
   currentUser,
@@ -408,8 +409,27 @@ export default function Groups({
 
   // Message Action Popup state & touch/long-press tracking
   const [activePopupMsg, setActivePopupMsg] = useState(null);
+  const [forwardingMsg, setForwardingMsg] = useState(null);
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  const handleTogglePin = async (messageId) => {
+    if (!selectedGroup || !isModerator) return;
+    const newPinnedId = selectedGroup.pinnedMessageId === messageId ? null : messageId;
+    try {
+      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: newPinnedId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedGroup(data.group);
+      }
+    } catch (err) {
+      console.error('Failed to toggle pin:', err);
+    }
+  };
 
   const handleTouchStart = (msg, msgMeta, isMine, e) => {
     const el = e.currentTarget;
@@ -948,7 +968,7 @@ export default function Groups({
               serverUrl,
               mediaId,
               msgMeta.mediaKey,
-              m.iv,
+              msgMeta.mediaIv || msgMeta.iv || m.iv,
               msgMeta.mimeType || 'application/octet-stream',
               msgMeta.originalName || null,
               (progress) => {
@@ -995,6 +1015,7 @@ export default function Groups({
 
     if (file.size > 100 * 1024 * 1024) {
       alert('File exceeds 100MB limit.');
+      if (e.target) e.target.value = '';
       return;
     }
 
@@ -1033,7 +1054,8 @@ export default function Groups({
         mediaKeyB64,
         originalName: file.name,
         mimeType: fileMime,
-        fileSize: file.size
+        fileSize: file.size,
+        iv
       });
     } catch (err) {
       console.error('Group media upload error:', err);
@@ -1042,6 +1064,7 @@ export default function Groups({
     } finally {
       setMediaUploading(false);
       setUploadProgress(0);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -1051,6 +1074,9 @@ export default function Groups({
     setPreviewUrl(null);
     setMediaUploading(false);
     setUploadProgress(0);
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (photosInputRef.current) photosInputRef.current.value = '';
+    if (filesInputRef.current) filesInputRef.current.value = '';
   };
 
   // ── USER ROLES & GRANULAR PERMISSIONS ────────────────────────
@@ -1254,6 +1280,8 @@ export default function Groups({
         originalName: attachedMedia?.originalName || null,
         fileSize: attachedMedia?.fileSize || null,
         mimeType: attachedMedia?.mimeType || null,
+        iv: attachedMedia?.iv || null,
+        mediaIv: attachedMedia?.iv || null,
         isVoice: false,
         voiceDuration: 0,
         replyTo: sentReplyTo
@@ -1273,6 +1301,8 @@ export default function Groups({
         originalName: attachedMedia?.originalName || null,
         fileSize: attachedMedia?.fileSize || null,
         mimeType: attachedMedia?.mimeType || null,
+        iv: attachedMedia?.iv || null,
+        mediaIv: attachedMedia?.iv || null,
         replyTo: sentReplyTo
       });
 
@@ -1415,25 +1445,6 @@ export default function Groups({
       }
     } catch (err) {
       console.error('Failed to update group info:', err);
-    }
-  };
-
-  // Pin / Unpin Message
-  const handleTogglePin = async (messageId) => {
-    if (!selectedGroup || !isModerator) return;
-    const newPinId = selectedGroup.pinnedMessageId === messageId ? null : messageId;
-    try {
-      const res = await fetch(`${serverUrl}/api/groups/${selectedGroup.id}/pin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId: newPinId })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedGroup(data.group);
-      }
-    } catch (err) {
-      console.error('Failed to toggle pin:', err);
     }
   };
 
@@ -2705,6 +2716,7 @@ export default function Groups({
                         className="attach-option-item"
                         onClick={() => {
                           setShowAttachMenu(false);
+                          if (cameraInputRef.current) cameraInputRef.current.value = '';
                           cameraInputRef.current?.click();
                         }}
                       >
@@ -2719,6 +2731,7 @@ export default function Groups({
                         className="attach-option-item"
                         onClick={() => {
                           setShowAttachMenu(false);
+                          if (photosInputRef.current) photosInputRef.current.value = '';
                           photosInputRef.current?.click();
                         }}
                       >
@@ -2733,6 +2746,7 @@ export default function Groups({
                         className="attach-option-item"
                         onClick={() => {
                           setShowAttachMenu(false);
+                          if (filesInputRef.current) filesInputRef.current.value = '';
                           filesInputRef.current?.click();
                         }}
                       >
@@ -4227,6 +4241,46 @@ export default function Groups({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Group Message Long-press / Right-click Action Popup */}
+      {activePopupMsg && (
+        <MessageActionPopup
+          message={activePopupMsg.msg}
+          msgMeta={activePopupMsg.msgMeta}
+          isMine={activePopupMsg.isMine}
+          anchorRect={activePopupMsg.anchorRect}
+          allUsers={allUsers}
+          isModerator={isModerator}
+          isPinned={selectedGroup?.pinnedMessageId === activePopupMsg.msg.id}
+          onClose={() => setActivePopupMsg(null)}
+          onReact={(emoji) => toggleGroupReaction(activePopupMsg.msg.id, emoji)}
+          onReply={() => {
+            setReplyingTo({
+              id: activePopupMsg.msg.id,
+              sender: activePopupMsg.msg.sender,
+              text: activePopupMsg.msgMeta?.text || (activePopupMsg.msgMeta?.isVoice ? '🎤 Voice Note' : (activePopupMsg.msg?.mediaId ? '📷 Attachment' : 'Message'))
+            });
+            setTimeout(() => messageInputRef.current?.focus(), 60);
+          }}
+          onForward={(msg, meta) => setForwardingMsg({ msg, msgMeta: meta })}
+          onPin={isModerator ? () => handleTogglePin(activePopupMsg.msg.id) : null}
+          onDelete={() => handleDeleteMessage(activePopupMsg.msg)}
+        />
+      )}
+
+      {/* Forward Message Modal */}
+      {forwardingMsg && (
+        <ForwardModal
+          isOpen={Boolean(forwardingMsg)}
+          onClose={() => setForwardingMsg(null)}
+          message={forwardingMsg.msg}
+          msgMeta={forwardingMsg.msgMeta}
+          currentUser={currentUser}
+          allUsers={allUsers}
+          groups={groups}
+          serverUrl={serverUrl}
+        />
       )}
 
       {renderJoinModal()}
