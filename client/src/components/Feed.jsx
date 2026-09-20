@@ -50,6 +50,8 @@ import MediaUploader from './MediaUploader';
 import EncryptedAttachmentViewer from './EncryptedAttachmentViewer';
 import ForwardModal from './ForwardModal';
 import StatusTray from './StatusTray';
+import DecryptionProgressBar from './DecryptionProgressBar';
+import { mediaDownloadManager } from '../utils/mediaDownloadManager';
 import { decryptionCache } from '../utils/decryptionCache';
 import { soundEffects } from '../utils/soundEffects';
 
@@ -72,6 +74,7 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
   const [isPublicPost, setIsPublicPost] = useState(true);
   const [decryptedPostMap, setDecryptedPostMap] = useState(() => decryptionCache.getAllFeedPosts());
   const [decryptedMediaMap, setDecryptedMediaMap] = useState(() => decryptionCache.getAllMedia());
+  const [downloadProgressMap, setDownloadProgressMap] = useState({});
   const [publishing, setPublishing] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
 
@@ -273,69 +276,71 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
         }
 
         if (post.mediaId && cachedPost && cachedPost.success) {
-          const cachedMedia = decryptionCache.getMedia(post.mediaId);
-          if (cachedMedia) {
-            if (!decryptedMediaCache.current[post.mediaId]) {
-              decryptedMediaCache.current[post.mediaId] = cachedMedia;
+          const mediaId = post.mediaId;
+          const cachedMedia = decryptionCache.getMedia(mediaId);
+          if (cachedMedia && !cachedMedia.failed && !cachedMedia.error && cachedMedia.objectUrl) {
+            if (!decryptedMediaCache.current[mediaId]) {
+              decryptedMediaCache.current[mediaId] = cachedMedia;
             }
-            if (!decryptedMediaMap[post.mediaId]) {
-              setDecryptedMediaMap(prev => ({ ...prev, [post.mediaId]: cachedMedia }));
+            if (!decryptedMediaMap[mediaId]) {
+              setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: cachedMedia }));
             }
-          } else if (
-            !decryptedMediaCache.current[post.mediaId] &&
-            !pendingMediaFetches.current.has(post.mediaId) &&
-            !decryptionCache.isMediaPending(post.mediaId)
-          ) {
-            pendingMediaFetches.current.add(post.mediaId);
-            decryptionCache.setMediaPending(post.mediaId);
+          } else if (!decryptedMediaCache.current[mediaId] || decryptedMediaCache.current[mediaId].failed || decryptedMediaCache.current[mediaId].error) {
+            const existingProgress = mediaDownloadManager.getProgress(mediaId);
+            if (existingProgress && isMounted) {
+              setDownloadProgressMap(prev => ({ ...prev, [mediaId]: existingProgress }));
+            }
 
-            (async (mediaId, postMeta, postObj) => {
-              try {
-                const mediaKeyToUse = postMeta.mediaKeyB64 || postMeta.postKey;
-                const mediaIv = postMeta.mediaIv || postObj.iv;
-                const finalMime = postMeta.mimeType || 'image/jpeg';
-                const originalName = postMeta.originalName;
+            const mediaKeyToUse = cachedPost.mediaKeyB64 || cachedPost.postKey;
+            const mediaIv = cachedPost.mediaIv || post.iv;
+            const finalMime = cachedPost.mimeType || 'application/octet-stream';
+            const originalName = cachedPost.originalName || null;
+            const fileSize = cachedPost.fileSize || null;
 
-                const result = await fetchAndDecryptMediaBinary(
-                  serverUrl,
-                  mediaId,
-                  mediaKeyToUse,
-                  mediaIv,
-                  finalMime,
-                  originalName
-                );
-
-                const objectUrl = resolveMediaUrl(result.objectUrl);
-                if (objectUrl && !result.error && isMounted) {
-                  const mediaEntry = {
-                    objectUrl,
-                    mimeType: result.mimeType || finalMime,
-                    originalName: result.originalName || originalName,
-                    fileSize: postMeta.fileSize || null,
-                    iv: mediaIv
-                  };
-                  decryptedMediaCache.current[mediaId] = mediaEntry;
-                  decryptionCache.setMedia(mediaId, mediaEntry);
-                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: mediaEntry }));
-                } else if (isMounted) {
-                  const failedEntry = { failed: true, error: 'Attachment expired from previous session' };
-                  decryptedMediaCache.current[mediaId] = failedEntry;
-                  decryptionCache.setMedia(mediaId, failedEntry);
-                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
-                }
-              } catch (e) {
-                console.warn('Feed media fetch info:', e.message);
+            mediaDownloadManager.downloadAndDecrypt(
+              serverUrl,
+              mediaId,
+              mediaKeyToUse,
+              mediaIv,
+              finalMime,
+              originalName,
+              (progress) => {
                 if (isMounted) {
-                  const failedEntry = { failed: true, error: 'Attachment from previous session expired' };
+                  setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
+                }
+              },
+              fileSize
+            ).then((mediaEntry) => {
+              if (isMounted) {
+                setDownloadProgressMap(prev => {
+                  const next = { ...prev };
+                  delete next[mediaId];
+                  return next;
+                });
+                if (mediaEntry && !mediaEntry.error && !mediaEntry.failed && mediaEntry.objectUrl) {
+                  const resolvedUrl = resolveMediaUrl(mediaEntry.objectUrl);
+                  const entry = { ...mediaEntry, objectUrl: resolvedUrl };
+                  decryptedMediaCache.current[mediaId] = entry;
+                  setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: entry }));
+                } else {
+                  const failedEntry = { failed: true, error: true, originalName, mimeType: finalMime };
                   decryptedMediaCache.current[mediaId] = failedEntry;
-                  decryptionCache.setMedia(mediaId, failedEntry);
                   setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
                 }
-              } finally {
-                pendingMediaFetches.current.delete(mediaId);
-                decryptionCache.clearMediaPending(mediaId);
               }
-            })(post.mediaId, cachedPost, post);
+            }).catch((err) => {
+              console.warn('[Feed] media download error:', err);
+              if (isMounted) {
+                setDownloadProgressMap(prev => {
+                  const next = { ...prev };
+                  delete next[mediaId];
+                  return next;
+                });
+                const failedEntry = { failed: true, error: true, originalName, mimeType: finalMime };
+                decryptedMediaCache.current[mediaId] = failedEntry;
+                setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
+              }
+            });
           }
         }
       }
@@ -440,9 +445,10 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
           decryptionCache.setFeedPost(data.post.id, cachedPost);
           setDecryptedPostMap(prev => ({ ...prev, [data.post.id]: cachedPost }));
 
-          if (hasMedia && attachedMedia.mediaId && attachedMedia.objectUrl) {
+          const previewUrl = hasMedia ? (attachedMedia.objectUrl || attachedMedia.localPreviewUrl) : null;
+          if (hasMedia && attachedMedia.mediaId && previewUrl) {
             const mediaEntry = {
-              objectUrl: attachedMedia.objectUrl,
+              objectUrl: previewUrl,
               mimeType: attachedMedia.mimeType,
               originalName: attachedMedia.originalName,
               fileSize: attachedMedia.fileSize || null,
@@ -611,13 +617,61 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
     decryptedMediaCache.current[mediaId] = null;
     decryptionCache.clearMedia(mediaId);
     decryptionCache.clearMediaPending(mediaId);
-    pendingMediaFetches.current.delete(mediaId);
     setDecryptedMediaMap(prev => {
       const next = { ...prev };
       delete next[mediaId];
       return next;
     });
-    setPosts(prev => [...prev]);
+
+    const targetPost = posts.find(p => p.mediaId === mediaId);
+    const postMeta = targetPost ? (decryptedPostMap[targetPost.id] || decryptionCache.getFeedPost(targetPost.id)) : null;
+    if (targetPost && postMeta && postMeta.success) {
+      const mediaKeyToUse = postMeta.mediaKeyB64 || postMeta.postKey;
+      const mediaIv = postMeta.mediaIv || targetPost.iv;
+      const finalMime = postMeta.mimeType || 'application/octet-stream';
+      const originalName = postMeta.originalName || null;
+      const fileSize = postMeta.fileSize || null;
+
+      mediaDownloadManager.downloadAndDecrypt(
+        serverUrl,
+        mediaId,
+        mediaKeyToUse,
+        mediaIv,
+        finalMime,
+        originalName,
+        (progress) => {
+          setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
+        },
+        fileSize
+      ).then((mediaEntry) => {
+        setDownloadProgressMap(prev => {
+          const next = { ...prev };
+          delete next[mediaId];
+          return next;
+        });
+        if (mediaEntry && !mediaEntry.error && !mediaEntry.failed && mediaEntry.objectUrl) {
+          const resolvedUrl = resolveMediaUrl(mediaEntry.objectUrl);
+          const entry = { ...mediaEntry, objectUrl: resolvedUrl };
+          decryptedMediaCache.current[mediaId] = entry;
+          setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: entry }));
+        } else {
+          const failedEntry = { failed: true, error: true, originalName, mimeType: finalMime };
+          decryptedMediaCache.current[mediaId] = failedEntry;
+          setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
+        }
+      }).catch(() => {
+        setDownloadProgressMap(prev => {
+          const next = { ...prev };
+          delete next[mediaId];
+          return next;
+        });
+        const failedEntry = { failed: true, error: true, originalName, mimeType: finalMime };
+        decryptedMediaCache.current[mediaId] = failedEntry;
+        setDecryptedMediaMap(prev => ({ ...prev, [mediaId]: failedEntry }));
+      });
+    } else {
+      setPosts(prev => [...prev]);
+    }
   };
 
   const canPublish = !publishing && !mediaUploading && (Boolean(newPostText && newPostText.trim()) || Boolean(attachedMedia));
@@ -1097,14 +1151,14 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
 
                 {post.mediaId && (
                   <div className="post-media-container-wrapper">
-                    {decryptedMediaMap[post.mediaId] && !decryptedMediaMap[post.mediaId].failed ? (
+                    {decryptedMediaMap[post.mediaId] && !decryptedMediaMap[post.mediaId].failed && !decryptedMediaMap[post.mediaId].error && decryptedMediaMap[post.mediaId].objectUrl ? (
                       <EncryptedAttachmentViewer
                         objectUrl={decryptedMediaMap[post.mediaId].objectUrl}
                         originalName={decryptedMediaMap[post.mediaId].originalName || decState.originalName}
                         mimeType={decryptedMediaMap[post.mediaId].mimeType || decState.mimeType}
                         mediaId={post.mediaId}
                       />
-                    ) : decryptedMediaMap[post.mediaId]?.failed ? (
+                    ) : (decryptedMediaMap[post.mediaId]?.failed || decryptedMediaMap[post.mediaId]?.error) ? (
                       <div style={{
                         padding: '12px 16px',
                         borderRadius: '10px',
@@ -1142,13 +1196,12 @@ export default function Feed({ currentUser, allUsers, serverUrl, wsClient }) {
                         </button>
                       </div>
                     ) : (
-                      <div className="media-decrypting-placeholder">
-                        <div className="decrypting-spinner-row">
-                          <Loader2 size={18} className="animate-spin" color="#f59e0b" />
-                          <span className="decrypting-title">Decrypting attachment...</span>
-                        </div>
-                        <span className="decrypting-subtitle">It may take some time on your device</span>
-                      </div>
+                      <DecryptionProgressBar
+                        progressInfo={downloadProgressMap[post.mediaId]}
+                        originalName={decState?.originalName}
+                        fileSize={decState?.fileSize}
+                        mimeType={decState?.mimeType}
+                      />
                     )}
                   </div>
                 )}

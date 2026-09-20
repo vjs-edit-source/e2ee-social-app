@@ -50,15 +50,19 @@ class MediaDownloadManager {
   downloadAndDecrypt(serverUrl, mediaId, keyOrB64, fallbackIv, fallbackMime, fallbackName, onProgress, fallbackTotal = null) {
     if (!mediaId) return Promise.resolve({ objectUrl: null, error: true });
 
-    // 1. Check if already decrypted and cached
+    // 1. Check if already decrypted and cached (must be a valid, unfailed entry with an objectUrl)
     const cached = decryptionCache.getMedia(mediaId);
-    if (cached) {
+    if (cached && !cached.error && !cached.failed && cached.objectUrl) {
       if (onProgress) {
         try {
           onProgress({ percent: 100, loaded: fallbackTotal || 0, total: fallbackTotal || 0, status: 'decrypting' });
         } catch (e) {}
       }
       return Promise.resolve(cached);
+    }
+    // If the cached entry was marked as error or failed or has no objectUrl, evict it so clean fetch can succeed
+    if (cached && (cached.error || cached.failed || !cached.objectUrl)) {
+      decryptionCache.clearMedia(mediaId);
     }
 
     // 2. Check if already in-flight (DO NOT RESTART FROM 0%)

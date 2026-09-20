@@ -164,6 +164,7 @@ const MediaUploader = forwardRef(function MediaUploader(
         fileSize: file.size,
         mediaKeyB64,
         localPreviewUrl: resolvedPreviewUrl,
+        objectUrl: resolvedPreviewUrl,
         isImage: Boolean(file.type && file.type.startsWith('image/')),
         isVideo: Boolean(file.type && file.type.startsWith('video/'))
       });
