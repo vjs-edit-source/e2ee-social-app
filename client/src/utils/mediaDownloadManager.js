@@ -110,10 +110,11 @@ class MediaDownloadManager {
       if (result && !result.error && result.objectUrl) {
         const mediaEntry = {
           objectUrl: result.objectUrl,
+          blob: result.blob || null,
           originalName: result.originalName || fallbackName,
           mimeType: result.mimeType || fallbackMime
         };
-        decryptionCache.setMedia(mediaId, mediaEntry);
+        decryptionCache.setMedia(mediaId, mediaEntry, result.blob || null);
         return mediaEntry;
       } else {
         const failedEntry = {

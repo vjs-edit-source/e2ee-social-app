@@ -90,7 +90,7 @@ export async function testEngineHealth(url) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     let res;
     try {

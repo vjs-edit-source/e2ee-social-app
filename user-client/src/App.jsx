@@ -21,6 +21,7 @@ import {
 } from './utils/engineConfig';
 import { soundEffects } from './utils/soundEffects';
 import { useBackHandler } from './utils/backHandler';
+import { decryptionCache } from './utils/decryptionCache';
 
 function playNotificationChime() {
   soundEffects.playNotification();
@@ -222,10 +223,37 @@ export default function App() {
     }
   }, []);
 
-  // Periodic Engine Health Monitor
+  // Initialize Persistent Decryption Cache (IndexedDB)
+  useEffect(() => {
+    decryptionCache.init().catch(() => {});
+  }, []);
+
+  // Periodic Engine Health Monitor with 2-strike failure debouncing
+  const consecutiveHealthFailures = useRef(0);
   const checkEngine = async (url) => {
     const health = await testEngineHealth(url || serverUrl);
-    setEngineOnline(health.online);
+    if (health.online) {
+      consecutiveHealthFailures.current = 0;
+      setEngineOnline(true);
+    } else {
+      consecutiveHealthFailures.current += 1;
+      if (consecutiveHealthFailures.current >= 2) {
+        setEngineOnline(false);
+      } else {
+        // Quick retry after 2.5s before showing offline
+        setTimeout(() => {
+          testEngineHealth(url || serverUrl).then(retryHealth => {
+            if (retryHealth.online) {
+              consecutiveHealthFailures.current = 0;
+              setEngineOnline(true);
+            } else {
+              consecutiveHealthFailures.current += 1;
+              setEngineOnline(false);
+            }
+          }).catch(() => {});
+        }, 2500);
+      }
+    }
   };
 
   useEffect(() => {
@@ -252,6 +280,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setAllUsers(data);
+        consecutiveHealthFailures.current = 0;
         setEngineOnline(true);
         setCurrentUser(prev => {
           if (!prev) return prev;
@@ -265,22 +294,19 @@ export default function App() {
             avatarColor: me.avatarColor || prev.avatarColor
           };
         });
-      } else {
-        setEngineOnline(false);
       }
     } catch (err) {
-      console.error('Failed to load users from engine:', err);
-      setEngineOnline(false);
+      console.warn('Could not refresh users from engine:', err.message);
     }
   };
 
   useEffect(() => {
     loadUsersDirectory();
 
-    // Fast periodic presence refresh (every 10s) to keep online status & lastSeen in sync
+    // Periodic presence refresh (every 30s) to keep directory synchronized
     const interval = setInterval(() => {
       loadUsersDirectory();
-    }, 10000);
+    }, 30000);
 
     const handleSync = () => {
       if (document.visibilityState === 'visible') {
@@ -516,8 +542,8 @@ export default function App() {
           }
         };
 
-        ws.onerror = () => {
-          setEngineOnline(false);
+        ws.onerror = (err) => {
+          console.warn('[WS] Socket event error:', err);
         };
 
         ws.onclose = () => {
@@ -528,8 +554,7 @@ export default function App() {
           }
         };
       } catch (e) {
-        console.error('WebSocket connection error:', e);
-        setEngineOnline(false);
+        console.warn('WebSocket connection error:', e);
         if (!isCancelled) {
           reconnectTimer = setTimeout(connectWS, 3000);
         }

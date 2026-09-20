@@ -366,7 +366,11 @@ export async function decryptMediaBuffer(keyOrBlob, blobOrKey, ivB64, mimeType =
 
     const blob = new Blob([decryptedBuffer], { type: mimeType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    return url;
+    return {
+      objectUrl: url,
+      blob,
+      toString() { return url; }
+    };
   } catch (err) {
     console.error("Media decryption error:", err);
     return null;
@@ -713,11 +717,13 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
             try { originalName = decodeURIComponent(headerName); } catch { originalName = headerName; }
           }
 
-          const objectUrl = await decryptMediaBuffer(keyOrB64, arrayBuffer, iv, mimeType);
-          resolve({ objectUrl, mimeType, originalName, error: !objectUrl });
+          const decryptRes = await decryptMediaBuffer(keyOrB64, arrayBuffer, iv, mimeType);
+          const objectUrl = decryptRes?.objectUrl || (typeof decryptRes === 'string' ? decryptRes : null);
+          const blob = decryptRes?.blob || null;
+          resolve({ objectUrl, blob, mimeType, originalName, error: !objectUrl });
         } catch (err) {
           console.error('[BinaryMedia] Decryption error:', err);
-          resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+          resolve({ objectUrl: null, blob: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
         }
       } else if (xhr.status === 404 && (!fallbackTotal || fallbackTotal < 5 * 1024 * 1024)) {
         // Fallback to legacy JSON endpoint ONLY for small legacy attachments that returned 404
@@ -730,21 +736,23 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
               const mediaIv = mediaData.iv || fallbackIv;
               const finalMime = mediaData.mimeType || fallbackMime || 'application/octet-stream';
               const originalName = mediaData.originalName || fallbackName;
-              const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
-              resolve({ objectUrl, mimeType: finalMime, originalName, error: !objectUrl });
+              const decryptRes = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
+              const objectUrl = decryptRes?.objectUrl || (typeof decryptRes === 'string' ? decryptRes : null);
+              const blob = decryptRes?.blob || null;
+              resolve({ objectUrl, blob, mimeType: finalMime, originalName, error: !objectUrl });
               return;
             }
           }
         } catch (err) {}
-        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+        resolve({ objectUrl: null, blob: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
       } else {
-        resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+        resolve({ objectUrl: null, blob: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
       }
     };
 
     xhr.onerror = () => {
       console.warn(`[BinaryMedia] Network error during binary media download for ${mediaId}`);
-      resolve({ objectUrl: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
+      resolve({ objectUrl: null, blob: null, mimeType: fallbackMime, originalName: fallbackName, error: true });
     };
 
     xhr.send();
