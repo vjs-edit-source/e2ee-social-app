@@ -1178,7 +1178,7 @@ app.get('/api/media/binary/:mediaId', (req, res) => {
     return res.status(404).json({ error: 'Media blob not found' });
   }
 
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, x-media-iv, x-mime-type, x-original-name, x-uploader');
+  res.setHeader('Access-Control-Expose-Headers', 'x-media-iv, x-mime-type, x-original-name, x-uploader, Content-Length');
   res.setHeader('x-media-iv', media.iv || '');
   res.setHeader('x-mime-type', media.mimeType || 'application/octet-stream');
   res.setHeader('x-uploader', media.uploader || 'anonymous');

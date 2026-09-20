@@ -641,16 +641,8 @@ export function uploadEncryptedMediaBinary(serverUrl, mediaId, ciphertextBuffer,
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && e.total > 0) {
-          const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
-          const progressObj = {
-            percent,
-            loaded: e.loaded,
-            total: e.total,
-            stage: 'uploading',
-            valueOf() { return percent; },
-            toString() { return String(percent); }
-          };
-          onProgress(progressObj);
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
         }
       };
     }
@@ -674,12 +666,10 @@ export function uploadEncryptedMediaBinary(serverUrl, mediaId, ciphertextBuffer,
 
 /**
  * 21. Fetch and Decrypt Binary Media with Live Progress Reporting
- * Directly receives raw ciphertext ArrayBuffer and decrypts without Base64 conversions
+ * Directly receives raw ciphertext ArrayBuffer and decrypts without Base64 conversions.
+ * Reports rich progress { percent, loaded, total, status: 'downloading' | 'decrypting' }.
  */
-export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbackIv, fallbackMime, fallbackName, fallbackSizeOrProgress, onProgressCb) {
-  const fallbackSize = typeof fallbackSizeOrProgress === 'number' ? fallbackSizeOrProgress : null;
-  const onProgress = typeof fallbackSizeOrProgress === 'function' ? fallbackSizeOrProgress : onProgressCb;
-
+export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbackIv, fallbackMime, fallbackName, onProgress, fallbackTotal = null) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', `${serverUrl}/api/media/binary/${encodeURIComponent(mediaId)}`);
@@ -687,23 +677,17 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
 
     if (onProgress) {
       xhr.onprogress = (e) => {
-        let total = 0;
-        if (e.lengthComputable && e.total > 0) {
-          total = e.total;
-        } else if (fallbackSize && fallbackSize > 0) {
-          total = fallbackSize;
+        const total = (e.lengthComputable && e.total > 0) ? e.total : (fallbackTotal || null);
+        let percent = null;
+        if (total && total > 0) {
+          percent = Math.min(99, Math.round((e.loaded / total) * 100));
         }
-
-        const percent = total > 0 ? Math.min(99, Math.round((e.loaded / total) * 100)) : null;
-        const progressObj = {
+        onProgress({
           percent,
           loaded: e.loaded,
-          total: total || null,
-          stage: 'downloading',
-          valueOf() { return percent !== null ? percent : 0; },
-          toString() { return percent !== null ? String(percent) : ''; }
-        };
-        onProgress(progressObj);
+          total,
+          status: 'downloading'
+        });
       };
     }
 
@@ -711,24 +695,22 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const arrayBuffer = xhr.response;
+          const totalBytes = arrayBuffer ? arrayBuffer.byteLength : (fallbackTotal || 0);
+          if (onProgress) {
+            onProgress({
+              percent: 100,
+              loaded: totalBytes,
+              total: totalBytes,
+              status: 'decrypting'
+            });
+          }
+
           const iv = xhr.getResponseHeader('x-media-iv') || fallbackIv;
           const mimeType = xhr.getResponseHeader('x-mime-type') || fallbackMime || 'application/octet-stream';
           let originalName = fallbackName;
           const headerName = xhr.getResponseHeader('x-original-name');
           if (headerName) {
             try { originalName = decodeURIComponent(headerName); } catch { originalName = headerName; }
-          }
-
-          if (onProgress) {
-            const decObj = {
-              percent: 100,
-              loaded: arrayBuffer.byteLength,
-              total: arrayBuffer.byteLength,
-              stage: 'decrypting',
-              valueOf() { return 100; },
-              toString() { return '100'; }
-            };
-            onProgress(decObj);
           }
 
           const objectUrl = await decryptMediaBuffer(keyOrB64, arrayBuffer, iv, mimeType);
@@ -741,32 +723,18 @@ export function fetchAndDecryptMediaBinary(serverUrl, mediaId, keyOrB64, fallbac
         // Fallback to legacy JSON endpoint if binary endpoint returns 404
         try {
           if (onProgress) {
-            onProgress({
-              percent: null,
-              loaded: 0,
-              total: fallbackSize || null,
-              stage: 'downloading',
-              valueOf() { return 0; },
-              toString() { return ''; }
-            });
+            onProgress({ percent: null, loaded: 0, total: fallbackTotal, status: 'downloading' });
           }
           const legacyRes = await fetch(`${serverUrl}/api/media/${encodeURIComponent(mediaId)}`);
           if (legacyRes.ok) {
             const mediaData = await legacyRes.json();
+            if (onProgress) {
+              onProgress({ percent: 100, loaded: fallbackTotal || 0, total: fallbackTotal, status: 'decrypting' });
+            }
             const keyToUse = keyOrB64;
             const mediaIv = mediaData.iv || fallbackIv;
             const finalMime = mediaData.mimeType || fallbackMime || 'application/octet-stream';
             const originalName = mediaData.originalName || fallbackName;
-            if (onProgress) {
-              onProgress({
-                percent: 100,
-                loaded: fallbackSize || 0,
-                total: fallbackSize || 0,
-                stage: 'decrypting',
-                valueOf() { return 100; },
-                toString() { return '100'; }
-              });
-            }
             const objectUrl = await decryptMediaBuffer(keyToUse, mediaData.ciphertextBlob, mediaIv, finalMime);
             resolve({ objectUrl, mimeType: finalMime, originalName, error: !objectUrl });
           } else {
