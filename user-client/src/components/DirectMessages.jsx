@@ -42,7 +42,8 @@ import {
   Bell,
   BellOff,
   MoreVertical,
-  KeyRound
+  KeyRound,
+  FileDown
 } from 'lucide-react';
 import { useBackHandler } from '../utils/backHandler';
 import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
@@ -917,6 +918,8 @@ export default function DirectMessages({
                 textContent = parsed.text || '';
                 mediaId = parsed.mediaId || null;
                 mediaKeyB64 = parsed.mediaKeyB64 || null;
+                mediaIv = parsed.iv || null;
+                fileSize = parsed.fileSize || parsed.size || null;
                 originalName = parsed.originalName || null;
                 mimeType = parsed.mimeType || null;
                 isVoice = !!parsed.isVoice;
@@ -932,6 +935,8 @@ export default function DirectMessages({
             text: textContent,
             mediaId,
             mediaKeyB64,
+            iv: mediaIv,
+            fileSize,
             originalName,
             mimeType,
             isVoice,
@@ -992,9 +997,10 @@ export default function DirectMessages({
                   mediaIv,
                   finalMime,
                   originalName,
-                  (percent) => {
+                  meta.fileSize,
+                  (progress) => {
                     if (isMounted) {
-                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: percent }));
+                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
                     }
                   }
                 );
@@ -1451,6 +1457,8 @@ export default function DirectMessages({
         text: hasText ? inputMessage.trim() : '',
         mediaId: hasMedia ? attachedMedia.mediaId : null,
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
+        iv: hasMedia ? attachedMedia.iv : null,
+        fileSize: hasMedia ? (attachedMedia.fileSize || attachedMedia.size) : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
         mimeType: hasMedia ? attachedMedia.mimeType : null,
         isVoice: false,
@@ -1475,6 +1483,8 @@ export default function DirectMessages({
         text: hasText ? inputMessage.trim() : '',
         mediaId: hasMedia ? attachedMedia.mediaId : null,
         mediaKeyB64: hasMedia ? attachedMedia.mediaKeyB64 : null,
+        iv: hasMedia ? attachedMedia.iv : null,
+        fileSize: hasMedia ? (attachedMedia.fileSize || attachedMedia.size) : null,
         originalName: hasMedia ? attachedMedia.originalName : null,
         mimeType: hasMedia ? attachedMedia.mimeType : null,
         replyTo: sentReplyTo
@@ -2649,10 +2659,59 @@ export default function DirectMessages({
                                 />
                               )
                             ) : (
-                              <div className="dm-media-decrypting">
-                                <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                                <span>{downloadProgressMap[msgMeta.mediaId] !== undefined ? `Downloading ${downloadProgressMap[msgMeta.mediaId]}%...` : 'Decrypting attachment...'}</span>
-                              </div>
+                              (() => {
+                                const progressInfo = downloadProgressMap[msgMeta.mediaId];
+                                const isDecryptingStage = progressInfo && (progressInfo.stage === 'decrypting' || progressInfo.percent === 100);
+                                const percentVal = progressInfo?.percent !== null && progressInfo?.percent !== undefined 
+                                  ? Number(progressInfo.percent) 
+                                  : (isDecryptingStage ? 100 : null);
+                                const loadedBytes = progressInfo?.loaded;
+                                const totalBytes = progressInfo?.total || msgMeta.fileSize;
+                                const fileName = msgMeta.originalName || 'Attachment';
+
+                                return (
+                                  <div className="dm-media-decrypt-card">
+                                    <div className="dm-media-decrypt-header">
+                                      <div className="dm-media-decrypt-icon">
+                                        {isDecryptingStage ? (
+                                          <Lock size={16} className="text-emerald-400 animate-pulse" />
+                                        ) : (
+                                          <FileDown size={16} className="text-sky-400" />
+                                        )}
+                                      </div>
+                                      <div className="dm-media-decrypt-details">
+                                        <span className="dm-media-decrypt-filename" title={fileName}>
+                                          {fileName}
+                                        </span>
+                                        <span className="dm-media-decrypt-size">
+                                          {totalBytes ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB` : 'Encrypted File'}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="dm-media-decrypt-progress-container">
+                                      <div className="dm-media-decrypt-progress-bar">
+                                        <div 
+                                          className={`dm-media-decrypt-progress-fill ${isDecryptingStage ? 'is-decrypting' : ''}`}
+                                          style={{ width: `${percentVal !== null ? Math.max(6, percentVal) : 100}%` }}
+                                        />
+                                      </div>
+                                      <div className="dm-media-decrypt-status-row">
+                                        <span className="dm-media-decrypt-status-text">
+                                          {isDecryptingStage
+                                            ? '🔐 Decrypting (Web Crypto AES-256)...'
+                                            : (percentVal !== null ? `Downloading ${percentVal}%...` : 'Connecting securely...')}
+                                        </span>
+                                        {loadedBytes && totalBytes ? (
+                                          <span className="dm-media-decrypt-bytes-text">
+                                            {(loadedBytes / (1024 * 1024)).toFixed(1)} / {(totalBytes / (1024 * 1024)).toFixed(1)} MB
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             )}
                           </div>
                         )}
@@ -2824,6 +2883,47 @@ export default function DirectMessages({
           </button>
         </div>
       )}
+
+      {/* Active Decryption / Download Status Banner above the message bar */}
+      {(() => {
+        const activeMediaId = Object.keys(downloadProgressMap)[0];
+        if (!activeMediaId) return null;
+        const p = downloadProgressMap[activeMediaId];
+        const isDec = p && (p.stage === 'decrypting' || p.percent === 100);
+        const pct = p?.percent !== null && p?.percent !== undefined ? Number(p.percent) : (isDec ? 100 : null);
+        const activeLoaded = p?.loaded;
+        const activeTotal = p?.total;
+
+        return (
+          <div className="chat-decrypting-floating-banner animate-fade-in">
+            <div className="decrypting-banner-left">
+              <div className="decrypting-banner-icon-box">
+                {isDec ? (
+                  <Lock size={15} className="text-emerald-400 animate-pulse" />
+                ) : (
+                  <Loader2 size={15} className="text-sky-400 animate-spin" />
+                )}
+              </div>
+              <div className="decrypting-banner-info">
+                <span className="decrypting-banner-title">
+                  {isDec ? '🔐 Decrypting attachment with Web Crypto...' : `📥 Downloading attachment${pct !== null ? ` (${pct}%)` : '...'}`}
+                </span>
+                {activeLoaded && activeTotal ? (
+                  <span className="decrypting-banner-bytes">
+                    {(activeLoaded / (1024 * 1024)).toFixed(1)} MB of {(activeTotal / (1024 * 1024)).toFixed(1)} MB
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="decrypting-banner-track">
+              <div 
+                className={`decrypting-banner-fill ${isDec ? 'is-decrypting' : ''}`}
+                style={{ width: `${pct !== null ? Math.max(6, pct) : 100}%` }}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── SLEEK FLOATING MESSAGE BAR ── */}
       <div className="group-chat-bottom-bar dm-bottom-bar">

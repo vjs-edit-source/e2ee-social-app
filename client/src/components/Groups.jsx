@@ -47,7 +47,8 @@ import {
   ArchiveRestore,
   Bell,
   BellOff,
-  KeyRound
+  KeyRound,
+  FileDown
 } from 'lucide-react';
 import { useBackHandler } from '../utils/backHandler';
 import { formatTruncatedFileName, resolveMediaUrl } from '../utils/fileUtils';
@@ -854,13 +855,22 @@ export default function Groups({
             let voiceDuration = dec.voiceDuration || 0;
             let replyTo = dec.replyTo || null;
 
+            let originalName = null;
+            let mimeType = null;
+            let fileSize = null;
+            let mediaIv = null;
+
             try {
               const parsed = JSON.parse(dec.rawText || dec.text);
-              if (parsed && typeof parsed === 'object' && (parsed.text !== undefined || parsed.isVoice !== undefined || parsed.replyTo !== undefined)) {
+              if (parsed && typeof parsed === 'object') {
                 if (parsed.text !== undefined) text = parsed.text || '';
                 if (parsed.isVoice !== undefined) isVoice = !!parsed.isVoice;
                 if (parsed.voiceDuration !== undefined) voiceDuration = parsed.voiceDuration || 0;
                 if (parsed.replyTo !== undefined) replyTo = parsed.replyTo || null;
+                if (parsed.originalName) originalName = parsed.originalName;
+                if (parsed.mimeType) mimeType = parsed.mimeType;
+                if (parsed.fileSize || parsed.size) fileSize = parsed.fileSize || parsed.size;
+                if (parsed.iv) mediaIv = parsed.iv;
               }
             } catch (e) {}
 
@@ -870,7 +880,11 @@ export default function Groups({
               mediaId: m.mediaId,
               isVoice,
               voiceDuration,
-              replyTo
+              replyTo,
+              originalName,
+              mimeType,
+              fileSize,
+              iv: mediaIv
             };
 
             localSearchIndex.indexGroupMessage(
@@ -922,18 +936,24 @@ export default function Groups({
             !decryptionCache.isMediaPending(m.mediaId)
           ) {
             decryptionCache.setMediaPending(m.mediaId);
-            (async (mediaId, metaKey, mObj) => {
+            (async (mediaId, metaKey, mObj, meta) => {
               try {
+                const ivToUse = meta?.iv || mObj.iv;
+                const mimeToUse = meta?.mimeType || 'application/octet-stream';
+                const nameToUse = meta?.originalName || null;
+                const sizeToUse = meta?.fileSize || null;
+
                 const result = await fetchAndDecryptMediaBinary(
                   serverUrl,
                   mediaId,
                   metaKey,
-                  mObj.iv,
-                  'application/octet-stream',
-                  null,
-                  (percent) => {
+                  ivToUse,
+                  mimeToUse,
+                  nameToUse,
+                  sizeToUse,
+                  (progress) => {
                     if (isMounted) {
-                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: percent }));
+                      setDownloadProgressMap(prev => ({ ...prev, [mediaId]: progress }));
                     }
                   }
                 );
@@ -941,7 +961,7 @@ export default function Groups({
                 const objectUrl = resolveMediaUrl(result.objectUrl);
 
                 if (objectUrl && !result.error && isMounted) {
-                  const mediaEntry = { objectUrl, mimeType: result.mimeType || 'application/octet-stream', originalName: result.originalName };
+                  const mediaEntry = { objectUrl, mimeType: result.mimeType || mimeToUse, originalName: result.originalName || nameToUse };
                   decryptedMediaCache.current[mediaId] = mediaEntry;
                   decryptionCache.setMedia(mediaId, mediaEntry);
                   setDecryptedMediaMap(prev => ({
@@ -961,7 +981,7 @@ export default function Groups({
                   });
                 }
               }
-            })(m.mediaId, msgMeta.mediaKey, m);
+            })(m.mediaId, msgMeta.mediaKey, m, msgMeta);
           }
         }
       }
@@ -1020,7 +1040,8 @@ export default function Groups({
         mediaKeyB64,
         originalName: file.name,
         mimeType: fileMime,
-        fileSize: file.size
+        fileSize: file.size,
+        iv
       });
     } catch (err) {
       console.error('Group media upload error:', err);
@@ -1252,7 +1273,13 @@ export default function Groups({
 
       const payloadString = JSON.stringify({
         text: optimisticMsg ? decryptedMsgCache.current[tempId]?.text : inputMessage.trim(),
-        replyTo: sentReplyTo
+        replyTo: sentReplyTo,
+        mediaId: attachedMedia?.mediaId || null,
+        mediaKeyB64: attachedMedia?.mediaKeyB64 || null,
+        iv: attachedMedia?.iv || null,
+        originalName: attachedMedia?.originalName || null,
+        mimeType: attachedMedia?.mimeType || null,
+        fileSize: attachedMedia?.fileSize || null
       });
 
       const { ciphertext, iv, keyEnvelopes } = await encryptPost(
@@ -2458,10 +2485,59 @@ export default function Groups({
                                   mediaId={msg.mediaId}
                                 />
                               ) : (
-                                <div className="dm-media-decrypting">
-                                  <Loader2 size={14} className="animate-spin" color="#f59e0b" />
-                                  <span>{downloadProgressMap[msg.mediaId] !== undefined ? `Downloading ${downloadProgressMap[msg.mediaId]}%...` : 'Decrypting attachment...'}</span>
-                                </div>
+                                (() => {
+                                  const progressInfo = downloadProgressMap[msg.mediaId];
+                                  const isDecryptingStage = progressInfo && (progressInfo.stage === 'decrypting' || progressInfo.percent === 100);
+                                  const percentVal = progressInfo?.percent !== null && progressInfo?.percent !== undefined 
+                                    ? Number(progressInfo.percent) 
+                                    : (isDecryptingStage ? 100 : null);
+                                  const loadedBytes = progressInfo?.loaded;
+                                  const totalBytes = progressInfo?.total || msgMeta?.fileSize;
+                                  const fileName = msgMeta?.originalName || 'Attachment';
+
+                                  return (
+                                    <div className="dm-media-decrypt-card">
+                                      <div className="dm-media-decrypt-header">
+                                        <div className="dm-media-decrypt-icon">
+                                          {isDecryptingStage ? (
+                                            <Lock size={16} className="text-emerald-400 animate-pulse" />
+                                          ) : (
+                                            <FileDown size={16} className="text-sky-400" />
+                                          )}
+                                        </div>
+                                        <div className="dm-media-decrypt-details">
+                                          <span className="dm-media-decrypt-filename" title={fileName}>
+                                            {fileName}
+                                          </span>
+                                          <span className="dm-media-decrypt-size">
+                                            {totalBytes ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB` : 'Encrypted File'}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="dm-media-decrypt-progress-container">
+                                        <div className="dm-media-decrypt-progress-bar">
+                                          <div 
+                                            className={`dm-media-decrypt-progress-fill ${isDecryptingStage ? 'is-decrypting' : ''}`}
+                                            style={{ width: `${percentVal !== null ? Math.max(6, percentVal) : 100}%` }}
+                                          />
+                                        </div>
+                                        <div className="dm-media-decrypt-status-row">
+                                          <span className="dm-media-decrypt-status-text">
+                                            {isDecryptingStage
+                                              ? '🔐 Decrypting (Web Crypto AES-256)...'
+                                              : (percentVal !== null ? `Downloading ${percentVal}%...` : 'Connecting securely...')}
+                                          </span>
+                                          {loadedBytes && totalBytes ? (
+                                            <span className="dm-media-decrypt-bytes-text">
+                                              {(loadedBytes / (1024 * 1024)).toFixed(1)} / {(totalBytes / (1024 * 1024)).toFixed(1)} MB
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })()
                               )}
                             </div>
                           )}
@@ -2617,6 +2693,47 @@ export default function Groups({
             </button>
           </div>
         )}
+
+        {/* Active Decryption / Download Status Banner above the message bar */}
+        {(() => {
+          const activeMediaId = Object.keys(downloadProgressMap)[0];
+          if (!activeMediaId) return null;
+          const p = downloadProgressMap[activeMediaId];
+          const isDec = p && (p.stage === 'decrypting' || p.percent === 100);
+          const pct = p?.percent !== null && p?.percent !== undefined ? Number(p.percent) : (isDec ? 100 : null);
+          const activeLoaded = p?.loaded;
+          const activeTotal = p?.total;
+
+          return (
+            <div className="chat-decrypting-floating-banner animate-fade-in">
+              <div className="decrypting-banner-left">
+                <div className="decrypting-banner-icon-box">
+                  {isDec ? (
+                    <Lock size={15} className="text-emerald-400 animate-pulse" />
+                  ) : (
+                    <Loader2 size={15} className="text-sky-400 animate-spin" />
+                  )}
+                </div>
+                <div className="decrypting-banner-info">
+                  <span className="decrypting-banner-title">
+                    {isDec ? '🔐 Decrypting attachment with Web Crypto...' : `📥 Downloading attachment${pct !== null ? ` (${pct}%)` : '...'}`}
+                  </span>
+                  {activeLoaded && activeTotal ? (
+                    <span className="decrypting-banner-bytes">
+                      {(activeLoaded / (1024 * 1024)).toFixed(1)} MB of {(activeTotal / (1024 * 1024)).toFixed(1)} MB
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="decrypting-banner-track">
+                <div 
+                  className={`decrypting-banner-fill ${isDec ? 'is-decrypting' : ''}`}
+                  style={{ width: `${pct !== null ? Math.max(6, pct) : 100}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── SLEEK FLOATING MESSAGE BAR ── */}
         <div className="group-chat-bottom-bar">

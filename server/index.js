@@ -1178,7 +1178,7 @@ app.get('/api/media/binary/:mediaId', (req, res) => {
     return res.status(404).json({ error: 'Media blob not found' });
   }
 
-  res.setHeader('Access-Control-Expose-Headers', 'x-media-iv, x-mime-type, x-original-name, x-uploader');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, x-media-iv, x-mime-type, x-original-name, x-uploader');
   res.setHeader('x-media-iv', media.iv || '');
   res.setHeader('x-mime-type', media.mimeType || 'application/octet-stream');
   res.setHeader('x-uploader', media.uploader || 'anonymous');
@@ -1189,11 +1189,14 @@ app.get('/api/media/binary/:mediaId', (req, res) => {
 
   const filePath = db.getMediaFilePath(media.id);
   if (fs.existsSync(filePath)) {
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
     const readStream = fs.createReadStream(filePath);
     readStream.pipe(res);
   } else if (media.ciphertextBlob) {
     // Legacy Base64 fallback
     const buf = Buffer.from(media.ciphertextBlob, 'base64');
+    res.setHeader('Content-Length', buf.length);
     res.end(buf);
   } else {
     res.status(404).json({ error: 'Media file not found on disk' });

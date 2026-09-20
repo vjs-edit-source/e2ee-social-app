@@ -2330,6 +2330,197 @@ textarea:focus {
   border-radius: var(--radius-md);
 }
 
+/* Modern Decryption / Download Progress Card in message bubble */
+.dm-media-decrypt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.dm-media-decrypt-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dm-media-decrypt-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dm-media-decrypt-details {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.dm-media-decrypt-filename {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-media-decrypt-size {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.dm-media-decrypt-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dm-media-decrypt-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.dm-media-decrypt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.dm-media-decrypt-progress-fill.is-decrypting {
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  animation: decrypt-pulse 1.2s infinite ease-in-out;
+}
+
+.dm-media-decrypt-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.dm-media-decrypt-status-text {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.dm-media-decrypt-bytes-text {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Floating Decryption & Download Banner above the bottom message bar */
+.chat-decrypting-floating-banner {
+  margin: 0 12px 8px 12px;
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 30;
+  animation: slideUpFade 0.25s ease-out;
+}
+
+.decrypting-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.decrypting-banner-icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.decrypting-banner-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  font-size: 0.74rem;
+}
+
+.decrypting-banner-title {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.decrypting-banner-bytes {
+  color: #38bdf8;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+}
+
+.decrypting-banner-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.decrypting-banner-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+
+.decrypting-banner-fill.is-decrypting {
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  animation: decrypt-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes decrypt-pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; filter: brightness(1.2); }
+  100% { opacity: 0.7; }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
 .chat-input-form input {
   flex: 1;
   background-color: var(--bg-main);
