@@ -1424,3 +1424,25 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   WebSocket: ws://0.0.0.0:${PORT}`);
   console.log(`===================================================`);
 });
+
+// Dual-port listening for cloud environments (Railway, Render) where PORT and Public Networking may differ
+const primaryPortNum = Number(PORT);
+if (primaryPortNum !== 4000) {
+  try {
+    const fallbackServer = createServer(app);
+    fallbackServer.on('upgrade', (request, socket, head) => {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    });
+    fallbackServer.listen(4000, '0.0.0.0', () => {
+      console.log(`🔒 Secondary listener active on 0.0.0.0:4000 (Railway Public Port)`);
+    });
+    fallbackServer.on('error', (err) => {
+      console.log(`[Port 4000 Listener] ${err.message}`);
+    });
+  } catch (err) {
+    console.warn(`Could not start secondary listener on port 4000:`, err.message);
+  }
+}
+

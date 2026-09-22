@@ -15,9 +15,8 @@ RUN mkdir -p /app/data && chown -R node:node /app
 
 USER node
 
-EXPOSE 4000
+EXPOSE 4000 8080
 
-ENV PORT=4000
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
 
