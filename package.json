@@ -4,7 +4,9 @@
   "description": "End-to-End Encrypted Social Networking App",
   "type": "module",
   "scripts": {
-    "start": "node start.js",
+    "build": "cd server && npm install --omit=dev",
+    "start": "cd server && node index.js",
+    "start:dev": "node start.js",
     "start:user": "node start-user.js",
     "start:all": "node -e \"const {spawn}=require('child_process');const s=spawn('node',['start.js'],{stdio:'inherit',shell:true});const u=spawn('node',['start-user.js'],{stdio:'inherit',shell:true});process.on('SIGINT',()=>{s.kill();u.kill();process.exit();})\""
   }

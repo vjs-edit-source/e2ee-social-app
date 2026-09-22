@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy application source
 COPY . .
@@ -21,7 +21,5 @@ ENV PORT=4000
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
-
 CMD ["node", "index.js"]
+
