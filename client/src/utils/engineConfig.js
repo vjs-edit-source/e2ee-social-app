@@ -4,7 +4,7 @@
  */
 
 const STORAGE_KEY = 'ciphersocial_engine_url';
-export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://e2ee-social-app-production.up.railway.app';
+export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://sadisocial-engine.onrender.com';
 export const DEFAULT_USB_ENGINE_URL = 'http://localhost:4000';
 export const DEFAULT_LAN_ENGINE_URL = 'http://192.168.31.232:4000';
 
@@ -22,7 +22,7 @@ export function getEngineUrl() {
   const savedUrl = localStorage.getItem(STORAGE_KEY);
   if (savedUrl && savedUrl.trim()) {
     const clean = savedUrl.trim().replace(/\/+$/, '');
-    if (clean.includes('sadisocial-engine.onrender.com')) {
+    if (clean.includes('railway.app')) {
       localStorage.setItem(STORAGE_KEY, DEFAULT_PRODUCTION_CLOUD_URL);
       return DEFAULT_PRODUCTION_CLOUD_URL;
     }

@@ -68,7 +68,7 @@ Traditional social networks process your data in plaintext. SadiSocial uses **Ze
 
 ### Using in Web Browser (PC & Mobile)
 - **Supported Browsers**: Google Chrome, Brave, Mozilla Firefox, Microsoft Edge, and Apple Safari (iOS & macOS).
-- **Access URL**: Open your SadiSocial URL (e.g., `https://e2ee-social-app-production.up.railway.app` or your custom server address).
+- **Access URL**: Open your SadiSocial URL (e.g., `https://sadisocial-engine.onrender.com` or your custom server address).
 - **Add to Home Screen (Mobile Web / PWA)**:
   - On Safari (iOS): Tap the **Share** button → Tap **"Add to Home Screen"**.
   - On Chrome (Android): Tap the **Three Dots Menu** → Tap **"Install App"** or **"Add to Home Screen"**.
